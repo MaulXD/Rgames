@@ -1,0 +1,668 @@
+{
+  "continentes": [
+    {
+      "id": "aurelia",
+      "nome": "Aurélia",
+      "bonus": 5,
+      "cor": "#FFC42E",
+      "carater": "Grande e difícil de segurar. Três fronteiras externas."
+    },
+    {
+      "id": "meridiana",
+      "nome": "Meridiana",
+      "bonus": 2,
+      "cor": "#5FD13A",
+      "carater": "Fortaleza. Um gargalo só — a melhor abertura."
+    },
+    {
+      "id": "velaria",
+      "nome": "Velária",
+      "bonus": 5,
+      "cor": "#2E8CFF",
+      "carater": "O centro. Todo mundo passa por aqui, e é indefensável."
+    },
+    {
+      "id": "sarnath",
+      "nome": "Sarnath",
+      "bonus": 3,
+      "cor": "#FF8A2B",
+      "carater": "Bônus modesto, posição excelente."
+    },
+    {
+      "id": "khadar",
+      "nome": "Khadar",
+      "bonus": 7,
+      "cor": "#FF4D5E",
+      "carater": "Vastidão. Quem segura ganha; quase ninguém segura."
+    },
+    {
+      "id": "nauria",
+      "nome": "Nauria",
+      "bonus": 2,
+      "cor": "#B25CFF",
+      "carater": "Arquipélago isolado e barato."
+    }
+  ],
+  "territorios": [
+    {
+      "id": "boreal",
+      "nome": "Boreal",
+      "continente": "aurelia",
+      "col": 0,
+      "row": 0,
+      "vizinhos": [
+        "tarn",
+        "vask",
+        "oriental"
+      ]
+    },
+    {
+      "id": "tarn",
+      "nome": "Ermo de Tarn",
+      "continente": "aurelia",
+      "col": 1,
+      "row": 0,
+      "vizinhos": [
+        "boreal",
+        "vask",
+        "ilm",
+        "fiorde"
+      ]
+    },
+    {
+      "id": "fiorde",
+      "nome": "Fiorde Branco",
+      "continente": "aurelia",
+      "col": 3,
+      "row": 0,
+      "vizinhos": [
+        "tarn",
+        "ilm",
+        "ambar",
+        "isel"
+      ]
+    },
+    {
+      "id": "vask",
+      "nome": "Planalto de Vask",
+      "continente": "aurelia",
+      "col": 1,
+      "row": 1,
+      "vizinhos": [
+        "boreal",
+        "tarn",
+        "ilm",
+        "ruivo"
+      ]
+    },
+    {
+      "id": "ilm",
+      "nome": "Lagos de Ilm",
+      "continente": "aurelia",
+      "col": 2,
+      "row": 1,
+      "vizinhos": [
+        "tarn",
+        "vask",
+        "fiorde",
+        "ambar",
+        "ruivo",
+        "cabonorte"
+      ]
+    },
+    {
+      "id": "ambar",
+      "nome": "Costa de Âmbar",
+      "continente": "aurelia",
+      "col": 3,
+      "row": 1,
+      "vizinhos": [
+        "fiorde",
+        "ilm",
+        "cabonorte"
+      ]
+    },
+    {
+      "id": "ruivo",
+      "nome": "Vale Ruivo",
+      "continente": "aurelia",
+      "col": 1,
+      "row": 2,
+      "vizinhos": [
+        "vask",
+        "ilm",
+        "cabonorte",
+        "zora"
+      ]
+    },
+    {
+      "id": "cabonorte",
+      "nome": "Cabo Norte",
+      "continente": "aurelia",
+      "col": 2,
+      "row": 2,
+      "vizinhos": [
+        "ilm",
+        "ambar",
+        "ruivo",
+        "zora"
+      ]
+    },
+    {
+      "id": "zora",
+      "nome": "Istmo de Zora",
+      "continente": "aurelia",
+      "col": 1,
+      "row": 3,
+      "vizinhos": [
+        "ruivo",
+        "cabonorte",
+        "yaraq"
+      ]
+    },
+    {
+      "id": "yaraq",
+      "nome": "Selva de Yaraq",
+      "continente": "meridiana",
+      "col": 2,
+      "row": 4,
+      "vizinhos": [
+        "zora",
+        "pampa",
+        "sal"
+      ]
+    },
+    {
+      "id": "sal",
+      "nome": "Serra do Sal",
+      "continente": "meridiana",
+      "col": 2,
+      "row": 5,
+      "vizinhos": [
+        "yaraq",
+        "pampa",
+        "austral"
+      ]
+    },
+    {
+      "id": "pampa",
+      "nome": "Pampa Vermelho",
+      "continente": "meridiana",
+      "col": 3,
+      "row": 5,
+      "vizinhos": [
+        "yaraq",
+        "sal",
+        "austral",
+        "khem"
+      ]
+    },
+    {
+      "id": "austral",
+      "nome": "Ponta Austral",
+      "continente": "meridiana",
+      "col": 2,
+      "row": 6,
+      "vizinhos": [
+        "sal",
+        "pampa"
+      ]
+    },
+    {
+      "id": "isel",
+      "nome": "Passo de Ísel",
+      "continente": "velaria",
+      "col": 5,
+      "row": 0,
+      "vizinhos": [
+        "fiorde",
+        "cinzento",
+        "brann"
+      ]
+    },
+    {
+      "id": "cinzento",
+      "nome": "Bosque Cinzento",
+      "continente": "velaria",
+      "col": 6,
+      "row": 0,
+      "vizinhos": [
+        "isel",
+        "brann",
+        "selm",
+        "var"
+      ]
+    },
+    {
+      "id": "brann",
+      "nome": "Colinas de Brann",
+      "continente": "velaria",
+      "col": 5,
+      "row": 1,
+      "vizinhos": [
+        "isel",
+        "cinzento",
+        "selm",
+        "oeste"
+      ]
+    },
+    {
+      "id": "selm",
+      "nome": "Ducado de Selm",
+      "continente": "velaria",
+      "col": 6,
+      "row": 1,
+      "vizinhos": [
+        "cinzento",
+        "var",
+        "brann",
+        "oeste",
+        "calen"
+      ]
+    },
+    {
+      "id": "var",
+      "nome": "Estepe de Var",
+      "continente": "velaria",
+      "col": 7,
+      "row": 1,
+      "vizinhos": [
+        "cinzento",
+        "selm",
+        "calen",
+        "guran",
+        "sarn",
+        "kel"
+      ]
+    },
+    {
+      "id": "oeste",
+      "nome": "Marca do Oeste",
+      "continente": "velaria",
+      "col": 5,
+      "row": 2,
+      "vizinhos": [
+        "brann",
+        "selm",
+        "calen",
+        "khem"
+      ]
+    },
+    {
+      "id": "calen",
+      "nome": "Porto de Calen",
+      "continente": "velaria",
+      "col": 6,
+      "row": 2,
+      "vizinhos": [
+        "selm",
+        "var",
+        "oeste",
+        "khem",
+        "zubar",
+        "guran"
+      ]
+    },
+    {
+      "id": "khem",
+      "nome": "Deserto de Khem",
+      "continente": "sarnath",
+      "col": 5,
+      "row": 3,
+      "vizinhos": [
+        "pampa",
+        "oeste",
+        "calen",
+        "zubar",
+        "nilar",
+        "marfim"
+      ]
+    },
+    {
+      "id": "zubar",
+      "nome": "Oásis de Zubar",
+      "continente": "sarnath",
+      "col": 6,
+      "row": 3,
+      "vizinhos": [
+        "calen",
+        "khem",
+        "nilar",
+        "guran"
+      ]
+    },
+    {
+      "id": "marfim",
+      "nome": "Costa de Marfim",
+      "continente": "sarnath",
+      "col": 5,
+      "row": 4,
+      "vizinhos": [
+        "khem",
+        "nilar",
+        "tempestades"
+      ]
+    },
+    {
+      "id": "nilar",
+      "nome": "Vale do Nilar",
+      "continente": "sarnath",
+      "col": 6,
+      "row": 4,
+      "vizinhos": [
+        "khem",
+        "zubar",
+        "marfim",
+        "tempestades",
+        "uruk",
+        "guran"
+      ]
+    },
+    {
+      "id": "tempestades",
+      "nome": "Cabo das Tempestades",
+      "continente": "sarnath",
+      "col": 5,
+      "row": 5,
+      "vizinhos": [
+        "marfim",
+        "nilar",
+        "uruk"
+      ]
+    },
+    {
+      "id": "uruk",
+      "nome": "Ilha de Uruk",
+      "continente": "sarnath",
+      "col": 6,
+      "row": 5,
+      "vizinhos": [
+        "nilar",
+        "tempestades"
+      ]
+    },
+    {
+      "id": "kel",
+      "nome": "Montes Kel",
+      "continente": "khadar",
+      "col": 8,
+      "row": 0,
+      "vizinhos": [
+        "var",
+        "ossir",
+        "jade",
+        "sarn"
+      ]
+    },
+    {
+      "id": "ossir",
+      "nome": "Tundra de Ossir",
+      "continente": "khadar",
+      "col": 9,
+      "row": 0,
+      "vizinhos": [
+        "kel",
+        "kesh",
+        "tan",
+        "dourada",
+        "jade"
+      ]
+    },
+    {
+      "id": "kesh",
+      "nome": "Ermos de Kesh",
+      "continente": "khadar",
+      "col": 10,
+      "row": 0,
+      "vizinhos": [
+        "ossir",
+        "oriental",
+        "tan"
+      ]
+    },
+    {
+      "id": "oriental",
+      "nome": "Cabo Oriental",
+      "continente": "khadar",
+      "col": 11,
+      "row": 0,
+      "vizinhos": [
+        "kesh",
+        "tan",
+        "dourada",
+        "zhen",
+        "boreal"
+      ]
+    },
+    {
+      "id": "tan",
+      "nome": "Bacia de Tán",
+      "continente": "khadar",
+      "col": 10,
+      "row": 1,
+      "vizinhos": [
+        "ossir",
+        "kesh",
+        "oriental",
+        "dourada"
+      ]
+    },
+    {
+      "id": "sarn",
+      "nome": "Vale de Sarn",
+      "continente": "khadar",
+      "col": 8,
+      "row": 1,
+      "vizinhos": [
+        "var",
+        "kel",
+        "jade",
+        "ryn",
+        "guran"
+      ]
+    },
+    {
+      "id": "dourada",
+      "nome": "Estepe Dourada",
+      "continente": "khadar",
+      "col": 10,
+      "row": 2,
+      "vizinhos": [
+        "ossir",
+        "tan",
+        "oriental",
+        "zhen",
+        "jade"
+      ]
+    },
+    {
+      "id": "jade",
+      "nome": "Terras de Jade",
+      "continente": "khadar",
+      "col": 9,
+      "row": 2,
+      "vizinhos": [
+        "kel",
+        "ossir",
+        "dourada",
+        "sarn",
+        "ryn",
+        "amur"
+      ]
+    },
+    {
+      "id": "zhen",
+      "nome": "Ilhas de Zhen",
+      "continente": "khadar",
+      "col": 11,
+      "row": 2,
+      "vizinhos": [
+        "oriental",
+        "dourada"
+      ]
+    },
+    {
+      "id": "guran",
+      "nome": "Deserto de Guran",
+      "continente": "khadar",
+      "col": 7,
+      "row": 3,
+      "vizinhos": [
+        "var",
+        "calen",
+        "zubar",
+        "nilar",
+        "sarn",
+        "ryn"
+      ]
+    },
+    {
+      "id": "ryn",
+      "nome": "Planície de Ryn",
+      "continente": "khadar",
+      "col": 8,
+      "row": 3,
+      "vizinhos": [
+        "guran",
+        "sarn",
+        "jade",
+        "amur"
+      ]
+    },
+    {
+      "id": "amur",
+      "nome": "Península de Amur",
+      "continente": "khadar",
+      "col": 9,
+      "row": 3,
+      "vizinhos": [
+        "ryn",
+        "jade",
+        "corais"
+      ]
+    },
+    {
+      "id": "corais",
+      "nome": "Ilhas Corais",
+      "continente": "nauria",
+      "col": 9,
+      "row": 5,
+      "vizinhos": [
+        "amur",
+        "sund",
+        "marrek"
+      ]
+    },
+    {
+      "id": "sund",
+      "nome": "Arquipélago de Sund",
+      "continente": "nauria",
+      "col": 10,
+      "row": 5,
+      "vizinhos": [
+        "corais",
+        "marrek",
+        "palmas"
+      ]
+    },
+    {
+      "id": "marrek",
+      "nome": "Terra de Marrek",
+      "continente": "nauria",
+      "col": 9,
+      "row": 6,
+      "vizinhos": [
+        "corais",
+        "sund",
+        "palmas"
+      ]
+    },
+    {
+      "id": "palmas",
+      "nome": "Costa de Palmas",
+      "continente": "nauria",
+      "col": 10,
+      "row": 6,
+      "vizinhos": [
+        "sund",
+        "marrek"
+      ]
+    }
+  ],
+  "objetivos": [
+    {
+      "id": "aurelia-sarnath",
+      "texto": "Conquistar Aurélia e Sarnath",
+      "tipo": "continentes",
+      "continentes": [
+        "aurelia",
+        "sarnath"
+      ]
+    },
+    {
+      "id": "velaria-nauria",
+      "texto": "Conquistar Velária e Nauria",
+      "tipo": "continentes",
+      "continentes": [
+        "velaria",
+        "nauria"
+      ]
+    },
+    {
+      "id": "khadar-mais-tres",
+      "texto": "Conquistar Khadar e mais 3 territórios em qualquer lugar",
+      "tipo": "continentes",
+      "continentes": [
+        "khadar"
+      ],
+      "extras": 3
+    },
+    {
+      "id": "meridiana-sarnath-mais",
+      "texto": "Conquistar Meridiana, Sarnath e mais um continente à sua escolha",
+      "tipo": "continentes",
+      "continentes": [
+        "meridiana",
+        "sarnath"
+      ],
+      "extras": 0,
+      "alvo": 1
+    },
+    {
+      "id": "vinte-e-quatro",
+      "texto": "Conquistar 24 territórios",
+      "tipo": "territorios",
+      "alvo": 24
+    },
+    {
+      "id": "dezoito-com-dois",
+      "texto": "Conquistar 18 territórios com pelo menos 2 exércitos em cada",
+      "tipo": "territorios-com-dois",
+      "alvo": 18
+    },
+    {
+      "id": "portos",
+      "texto": "Conquistar todos os territórios com porto",
+      "tipo": "portos"
+    },
+    {
+      "id": "dois-jogadores",
+      "texto": "Eliminar 2 jogadores quaisquer",
+      "tipo": "eliminar",
+      "alvo": 2
+    }
+  ],
+  "portos": [
+    "fiorde",
+    "ambar",
+    "zora",
+    "isel",
+    "brann",
+    "calen",
+    "uruk",
+    "zhen",
+    "amur",
+    "corais",
+    "palmas"
+  ]
+}

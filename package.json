@@ -14,7 +14,8 @@
     "dict": "node scripts/build-dict.mjs",
     "boards": "node scripts/build-boards.mjs",
     "smoke:letreiro": "node scripts/smoke-letreiro.mjs",
-    "smoke:dossie": "node scripts/smoke-dossie.mjs"
+    "smoke:dossie": "node scripts/smoke-dossie.mjs",
+    "mapa": "node scripts/seed-dominio.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

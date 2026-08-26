@@ -335,6 +335,26 @@ create policy "membros da sala leem a partida"
   ));
 ```
 
+**Duas armadilhas que já custaram caro neste projeto** — as duas foram encontradas pelo teste de
+fumaça (`npm run smoke`), não em revisão de código:
+
+**1. RLS é filtro, não permissão.** Ligar RLS e escrever policies não dá acesso a nada: sem
+`GRANT SELECT` para `anon` e `authenticated`, toda leitura falha — inclusive o Realtime, porque
+Postgres Changes só entrega linha que o assinante consegue ler. Migração `0003_grants.sql`.
+
+**2. Policy que consulta a própria tabela recorre infinitamente.** A policy de `room_members`
+perguntava "sou membro desta sala?" consultando `room_members`, e a consulta dispara a mesma policy:
+
+```
+42P17  infinite recursion detected in policy for relation "room_members"
+```
+
+Como `rooms` e `profiles` também passavam por `room_members`, as três tabelas ficaram ilegíveis — o
+lobby inteiro estava morto e o build passava. **Conserto:** a pergunta de pertencimento sai da policy
+e vai para uma função `SECURITY DEFINER` (`is_room_member`, `shares_room_with`), que roda como dona
+e não reentra no RLS. Migração `0004_fix_rls_recursion.sql`. Vale para qualquer policy que precise
+olhar a própria tabela — e vai valer de novo em `match_players`.
+
 Regras absolutas:
 - **Nenhuma tabela de jogo tem policy de escrita para o cliente.** Zero. Toda mutação é RPC.
 - **O `public_state` já nasce redigido.** O baralho embaralhado, a solução do Dossiê, a distribuição
@@ -342,7 +362,9 @@ Regras absolutas:
   policy de leitura, acessíveis só dentro das funções.
 - **`seed` não é exposto** até `status = 'finished'`.
 - Testes automatizados de RLS rodam no CI: para cada tabela, um teste tenta ler o dado de outro
-  usuário e **deve** falhar.
+  usuário e **deve** falhar. Hoje isso vive em `scripts/smoke.mjs` (25 verificações contra o
+  Supabase real, com usuários criados e removidos pela Admin API). Ele não depende de
+  "Anonymous sign-ins" estar ligado, então dá para validar o servidor antes do cliente.
 
 ### 8.5 Canais de tempo real
 

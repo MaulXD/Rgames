@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Inter_Tight, JetBrains_Mono } from "next/font/google";
+import { Archivo, Fraunces, Inter_Tight, JetBrains_Mono } from "next/font/google";
 import { SessionProvider } from "@/components/session";
 import "./globals.css";
 
@@ -13,6 +13,15 @@ const fraunces = Fraunces({
 const interTight = Inter_Tight({
   variable: "--font-inter-tight",
   subsets: ["latin"],
+  display: "swap",
+});
+
+// Archivo condensada para os móveis de interface: rótulos, botões, selos.
+// É o registro de placa estampada, e contrasta com a Fraunces dos títulos.
+const archivo = Archivo({
+  variable: "--font-archivo",
+  subsets: ["latin"],
+  axes: ["wdth"],
   display: "swap",
 });
 
@@ -31,8 +40,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#F7F2E7" },
-    { media: "(prefers-color-scheme: dark)", color: "#14352B" },
+    { color: "#103128" },
   ],
   width: "device-width",
   initialScale: 1,
@@ -43,7 +51,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="pt-BR"
-      className={`${fraunces.variable} ${interTight.variable} ${jetbrains.variable} h-full antialiased`}
+      className={`${fraunces.variable} ${interTight.variable} ${jetbrains.variable} ${archivo.variable} h-full antialiased`}
     >
       <body className="relative flex min-h-full flex-col">
         <SessionProvider>{children}</SessionProvider>

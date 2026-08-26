@@ -1,19 +1,30 @@
 "use client";
 
-import { useRef, type CSSProperties, type PointerEvent } from "react";
+import { useRouter } from "next/navigation";
+import { useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { Emblem } from "@/components/emblems";
+import { Corner } from "@/components/ornament";
+import { useSession } from "@/components/session";
+import { supabaseBrowser } from "@/lib/supabase/client";
+import type { Room } from "@/lib/supabase/types";
 import type { Game } from "@/lib/games";
 
 /**
- * O brilho é de verniz e foil — luz especular refletindo num material,
- * não glow. Ver docs/01-DIRECAO-DE-ARTE.md §2 e §4.2.
+ * Carta de jogo. Antes ela tinha aparência de clicável e não fazia nada —
+ * era a reclamação certa. Agora o botão cria a sala de verdade via RPC e
+ * leva para o lobby.
  *
- * A inclinação só existe onde há ponteiro de verdade (@media hover em CSS).
- * No celular a carta fica com o foil estático e o toque abre o jogo.
+ * O brilho é verniz e foil pegando luz, não glow: reflexo especular segue o
+ * ponteiro, a moldura de latão acende, a carta inclina de leve. Onde não há
+ * ponteiro (celular) o foil fica estático — o toque abre a sala.
  */
 export function GameCard({ game }: { game: Game }) {
+  const router = useRouter();
+  const { status } = useSession();
   const ref = useRef<HTMLElement>(null);
   const frame = useRef(0);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   function onMove(e: PointerEvent<HTMLElement>) {
     if (e.pointerType !== "mouse") return;
@@ -26,8 +37,8 @@ export function GameCard({ game }: { game: Game }) {
     frame.current = requestAnimationFrame(() => {
       el.style.setProperty("--mx", `${(px * 100).toFixed(1)}%`);
       el.style.setProperty("--my", `${(py * 100).toFixed(1)}%`);
-      el.style.setProperty("--tilt-y", `${((px - 0.5) * 7).toFixed(2)}deg`);
-      el.style.setProperty("--tilt-x", `${((0.5 - py) * 5).toFixed(2)}deg`);
+      el.style.setProperty("--tilt-y", `${((px - 0.5) * 6).toFixed(2)}deg`);
+      el.style.setProperty("--tilt-x", `${((0.5 - py) * 4.5).toFixed(2)}deg`);
     });
   }
 
@@ -41,52 +52,100 @@ export function GameCard({ game }: { game: Game }) {
     el.style.setProperty("--my", "0%");
   }
 
+  async function criarSala() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const sb = supabaseBrowser();
+      const { data, error } = await sb.rpc("create_room", { p_game: game.key });
+      if (error) throw error;
+      const room = data as unknown as Room;
+      router.push(`/j/${room.code}`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
   const skin = {
     "--c-bg": game.skin.bg,
+    "--c-lit": game.skin.lit,
     "--c-ink": game.skin.ink,
     "--c-dim": game.skin.dim,
     "--c-glow": game.skin.glow,
     "--c-sheen": game.skin.sheen,
   } as CSSProperties;
 
+  const isMvp = game.seal === "MVP";
+
   return (
-    <article
-      ref={ref}
-      className="card"
-      style={skin}
-      onPointerMove={onMove}
-      onPointerLeave={onLeave}
-      tabIndex={0}
-      aria-label={`${game.name}, ${game.ref}`}
-    >
+    <article ref={ref} className="card" style={skin} onPointerMove={onMove} onPointerLeave={onLeave}>
       <div className="card-foil" aria-hidden />
       <div className="card-gloss" aria-hidden />
-      <div className="card-edge" aria-hidden />
-      <span className="card-status">{game.status}</span>
+      <div className="card-frame" aria-hidden />
+      <span className="card-seal" data-kind={isMvp ? "mvp" : "soon"}>
+        {game.seal}
+      </span>
+
+      {/* cantoneiras de guilhoché */}
+      <span
+        aria-hidden
+        style={{ position: "absolute", top: 13, left: 13, zIndex: 5, color: "var(--c-glow)", opacity: 0.5 }}
+      >
+        <Corner />
+      </span>
+      <span
+        aria-hidden
+        style={{
+          position: "absolute",
+          bottom: 13,
+          right: 13,
+          zIndex: 5,
+          color: "var(--c-glow)",
+          opacity: 0.5,
+          transform: "rotate(180deg)",
+        }}
+      >
+        <Corner />
+      </span>
 
       <div className="card-body">
-        <div className="card-top">
-          <span className="card-ord">{game.ord}</span>
-          <span className="card-ref">{game.ref}</span>
-        </div>
+        <p className="card-ref">
+          {game.ord} · {game.ref}
+        </p>
 
         <div className="card-emblem">
-          <Emblem game={game.key} />
+          <Emblem game={game.key} size={112} />
         </div>
 
         <h3 className="card-name">{game.name}</h3>
         <p className="card-pitch">{game.pitch}</p>
 
-        <dl className="card-facts">
-          <div>
-            <dt>Jogadores</dt>
-            <dd>{game.players}</dd>
-          </div>
-          <div>
-            <dt>Duração</dt>
-            <dd>{game.duration}</dd>
-          </div>
-        </dl>
+        <div className="card-meta">
+          <span className="pill">{game.players} jogadores</span>
+          <span className="pill">{game.duration}</span>
+        </div>
+
+        <div className="card-action">
+          <button
+            type="button"
+            className={isMvp ? "btn btn-brass w-full" : "btn btn-ghost w-full"}
+            onClick={criarSala}
+            disabled={busy || status !== "ready"}
+          >
+            {busy ? "Abrindo…" : "Criar sala"}
+          </button>
+          {err && (
+            <p className="mt-2 text-xs" style={{ color: "#ffb3a7" }}>
+              {err}
+            </p>
+          )}
+          {!err && status !== "ready" && (
+            <p className="mt-2 text-xs" style={{ color: "var(--c-dim)" }}>
+              {status === "loading" ? "Abrindo a mesa…" : "Sessão indisponível"}
+            </p>
+          )}
+        </div>
       </div>
     </article>
   );

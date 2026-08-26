@@ -1,55 +1,60 @@
 @import "tailwindcss";
 
 /* ══════════════════════════════════════════════════════════════════════════
-   MESA — sistema de design
+   MESA — sistema visual
    Ver docs/01-DIRECAO-DE-ARTE.md
-   Não há "light/dark mode". Há luz de dia (papel) e luz de luminária (feltro).
+
+   Um mundo só, escolhido de propósito: uma mesa de feltro sob luz de
+   luminária, à noite. Papel claro fazia o site parecer documento — e o
+   assunto aqui é brincadeira, não catálogo de museu.
+
+   Riqueza vem de material e ornamento, não de glow: feltro com relevo,
+   guilhoché de carta de baralho, latão que pega luz, selo de cera.
    ══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* tinta */
-  --ink-900: #14100e;
-  --ink-700: #2b231e;
-  --ink-500: #5a4c42;
-  --ink-300: #8a7b6e;
-
-  /* papel */
-  --paper-50: #f7f2e7;
-  --paper-100: #ede4d3;
-  --paper-200: #ded2bc;
-  --paper-300: #cdbfa4;
-
   /* feltro */
-  --felt-900: #0e241d;
-  --felt-800: #14352b;
-  --felt-600: #1f4e3d;
+  --felt-950: #061713;
+  --felt-900: #0a231d;
+  --felt-800: #103128;
+  --felt-700: #164034;
+  --felt-600: #1d5343;
+  --felt-500: #2a6b57;
 
-  /* latão */
-  --brass-600: #8e6b2c;
-  --brass-500: #b08a3e;
-  --brass-300: #d9b863;
+  /* latão — mais quente e mais claro que antes; é o metal do jogo */
+  --brass-700: #8a6524;
+  --brass-600: #b58a35;
+  --brass-500: #d8ac52;
+  --brass-400: #e8c77e;
+  --brass-300: #f4e0ac;
 
-  /* sinais */
-  --lacquer: #b23a2e;
-  --jade: #2e7d5b;
+  /* marfim e papel de carta */
+  --ivory-100: #f6efdd;
+  --ivory-200: #e6d9bd;
+  --ivory-400: #b9a887;
+  --ivory-600: #8a7c62;
 
-  /* papéis semânticos — luz de dia */
-  --bg: var(--paper-50);
-  --bg-sunk: var(--paper-100);
-  --line: var(--paper-200);
-  --line-strong: var(--paper-300);
-  --fg: var(--ink-900);
-  --fg-mid: var(--ink-700);
-  --fg-dim: var(--ink-500);
-  --fg-faint: var(--ink-300);
-  --accent: var(--brass-600);
-  --grain-op: 0.055;
-  --grain-blend: multiply;
-  --emboss: 0 1px 0 rgb(255 255 255 / 0.55);
-  --halo: transparent;
+  /* laca e sinais */
+  --lacquer: #c8402f;
+  --lacquer-dark: #8d2a1e;
+  --jade: #3aa677;
 
-  --shadow-rest: 0 1px 1px rgb(20 16 14 / 0.22), 0 10px 24px -10px rgb(20 16 14 / 0.2);
-  --shadow-lift: 0 3px 4px rgb(20 16 14 / 0.18), 0 30px 60px -14px rgb(20 16 14 / 0.4);
+  /* papéis semânticos */
+  --bg: var(--felt-800);
+  --bg-sunk: var(--felt-900);
+  --bg-raise: var(--felt-700);
+  --line: #1c4a3c;
+  --line-strong: #2b6350;
+  --fg: var(--ivory-100);
+  --fg-mid: #d8ccb0;
+  --fg-dim: #9fb3a4;
+  --fg-faint: #74907f;
+  --accent: var(--brass-400);
+
+  /* sombras: contato curto + ambiente longo, na cor da tinta */
+  --shadow-rest: 0 1px 2px rgb(3 12 9 / 0.5), 0 14px 30px -12px rgb(3 12 9 / 0.7);
+  --shadow-lift: 0 4px 6px rgb(3 12 9 / 0.45), 0 40px 70px -18px rgb(3 12 9 / 0.85);
+  --shadow-inset: inset 0 2px 8px -3px rgb(3 12 9 / 0.75);
 
   /* movimento */
   --dur-instant: 80ms;
@@ -58,93 +63,68 @@
   --dur-slow: 420ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+
+  color-scheme: dark;
 }
 
-/* luz de luminária */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: var(--felt-800);
-    --bg-sunk: var(--felt-900);
-    --line: #1e4436;
-    --line-strong: #2c5a48;
-    --fg: #f2eada;
-    --fg-mid: #dcd0ba;
-    --fg-dim: #a9b7ac;
-    --fg-faint: #7b8e82;
-    --accent: var(--brass-300);
-    --grain-op: 0.07;
-    --grain-blend: overlay;
-    --emboss: 0 1px 0 rgb(0 0 0 / 0.35);
-    --halo: rgb(217 184 99 / 0.07);
-    --shadow-rest: 0 1px 1px rgb(0 0 0 / 0.4), 0 12px 28px -12px rgb(0 0 0 / 0.6);
-    --shadow-lift: 0 3px 6px rgb(0 0 0 / 0.35), 0 34px 64px -16px rgb(0 0 0 / 0.75);
-  }
-}
-:root[data-theme="dark"] {
-  --bg: var(--felt-800);
-  --bg-sunk: var(--felt-900);
-  --line: #1e4436;
-  --line-strong: #2c5a48;
-  --fg: #f2eada;
-  --fg-mid: #dcd0ba;
-  --fg-dim: #a9b7ac;
-  --fg-faint: #7b8e82;
-  --accent: var(--brass-300);
-  --grain-op: 0.07;
-  --grain-blend: overlay;
-  --emboss: 0 1px 0 rgb(0 0 0 / 0.35);
-  --halo: rgb(217 184 99 / 0.07);
-  --shadow-rest: 0 1px 1px rgb(0 0 0 / 0.4), 0 12px 28px -12px rgb(0 0 0 / 0.6);
-  --shadow-lift: 0 3px 6px rgb(0 0 0 / 0.35), 0 34px 64px -16px rgb(0 0 0 / 0.75);
-}
-
-@theme inline {
-  --color-bg: var(--bg);
-  --color-sunk: var(--bg-sunk);
-  --color-line: var(--line);
-  --color-fg: var(--fg);
-  --color-dim: var(--fg-dim);
-  --color-accent: var(--accent);
-  --font-display: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
-  --font-sans: var(--font-inter-tight), "Helvetica Neue", Arial, sans-serif;
-  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
-}
-
-/* ── base ─────────────────────────────────────────────────────────────── */
+/* ── base ─────────────────────────────────────────────────────────────────
+   O fundo é uma mesa: feltro com grão, um foco de luz quente em cima e
+   vinheta funda nas bordas. Isso é o que dá profundidade sem gradiente
+   de marca. */
 
 html {
   scroll-behavior: smooth;
 }
 
 body {
-  background: var(--bg);
-  background-image: radial-gradient(120% 80% at 50% -10%, var(--halo), transparent 70%);
+  margin: 0;
   color: var(--fg);
   font-family: var(--font-inter-tight), "Helvetica Neue", Arial, sans-serif;
   font-size: 16.5px;
   line-height: 1.6;
+  background-color: var(--felt-800);
+  background-image:
+    /* foco da luminária */
+    radial-gradient(130% 70% at 50% -12%, rgb(232 199 126 / 0.16), transparent 62%),
+    /* vinheta */
+    radial-gradient(120% 100% at 50% 40%, transparent 42%, rgb(4 14 11 / 0.72) 100%);
+  background-attachment: fixed;
 }
 
-/* grão de papel — 2,5%. Ver §4.3 da direção de arte. */
+/* trama do feltro + guilhoché de carta de baralho, os dois muito baixos */
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: var(--grain-op);
-  mix-blend-mode: var(--grain-blend);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.5;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Cg fill='none' stroke='%23e8c77e' stroke-width='0.7' opacity='0.13'%3E%3Cpath d='M22 4 L40 22 L22 40 L4 22 Z'/%3E%3Ccircle cx='22' cy='22' r='4.5'/%3E%3Cpath d='M0 0 L4 4 M44 0 L40 4 M0 44 L4 40 M44 44 L40 40'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.09'/%3E%3C/svg%3E");
 }
+
+/* ── tipografia ───────────────────────────────────────────────────────────
+   Fraunces com o eixo WONK aberto e peso cheio. Antes eu usei educado
+   demais; título de jogo tem atitude. */
 
 h1,
 h2,
 h3 {
   font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
-  font-variation-settings: "SOFT" 6, "WONK" 1, "opsz" 60;
-  font-weight: 600;
-  letter-spacing: -0.014em;
+  font-variation-settings: "SOFT" 4, "WONK" 1, "opsz" 96;
+  font-weight: 700;
+  letter-spacing: -0.026em;
+  line-height: 0.98;
   text-wrap: balance;
+  margin: 0;
+}
+
+p {
+  margin: 0;
+}
+a {
+  color: inherit;
 }
 
 .mono {
@@ -152,32 +132,58 @@ h3 {
   font-variant-numeric: tabular-nums;
 }
 
+/* rótulo de latão gravado */
 .eyebrow {
-  font-family: var(--font-jetbrains), ui-monospace, monospace;
-  font-size: 0.68rem;
-  letter-spacing: 0.19em;
+  font-family: var(--font-archivo), var(--font-inter-tight), sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--fg-faint);
+  color: var(--brass-400);
+}
+
+.dim {
+  color: var(--fg-dim);
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--brass-400);
   outline-offset: 3px;
   border-radius: 2px;
 }
 
-/* ── latão: a única exceção à proibição de gradiente (metal é gradiente) ── */
+::selection {
+  background: rgb(232 199 126 / 0.28);
+}
+
+/* ── latão ────────────────────────────────────────────────────────────────
+   Metal é literalmente gradiente — a única exceção da lista de proibições. */
+
+.brass-text {
+  background: linear-gradient(172deg, var(--brass-300) 0%, var(--brass-500) 48%, var(--brass-700) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 
 .brass-rule {
-  height: 2px;
+  height: 3px;
   background: linear-gradient(
     100deg,
-    var(--brass-600) 0%,
-    var(--brass-300) 22%,
-    var(--brass-600) 46%,
-    var(--brass-300) 70%,
-    var(--brass-600) 100%
+    transparent 0%,
+    var(--brass-700) 6%,
+    var(--brass-300) 26%,
+    var(--brass-600) 50%,
+    var(--brass-300) 74%,
+    var(--brass-700) 94%,
+    transparent 100%
   );
+}
+
+/* filete duplo, como moldura de carta impressa */
+.rule-double {
+  border-top: 1px solid var(--line-strong);
+  box-shadow: 0 3px 0 -2px var(--line);
 }
 
 /* ── botões ───────────────────────────────────────────────────────────── */
@@ -186,61 +192,137 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  min-height: 46px;
-  padding: 0 1.35rem;
-  border-radius: 2px;
-  font-weight: 550;
-  font-size: 0.95rem;
+  gap: 0.55rem;
+  min-height: 48px;
+  padding: 0 1.5rem;
+  border-radius: 3px;
   border: 1px solid transparent;
   cursor: pointer;
+  font-family: var(--font-archivo), var(--font-inter-tight), sans-serif;
+  font-weight: 650;
+  font-size: 0.88rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   transition:
     transform var(--dur-instant) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out),
-    background-color var(--dur-fast) var(--ease-out);
+    filter var(--dur-fast) var(--ease-out);
 }
 .btn:active {
-  transform: translateY(1px);
+  transform: translateY(1.5px);
+}
+.btn:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.6) brightness(0.7);
 }
 
-.btn-primary {
-  color: #100d0a;
-  background: linear-gradient(
-    170deg,
-    var(--brass-300) 0%,
-    var(--brass-500) 52%,
-    var(--brass-600) 100%
-  );
+/* placa de latão estampada */
+.btn-brass {
+  color: #23180a;
+  background: linear-gradient(172deg, var(--brass-300) 0%, var(--brass-400) 34%, var(--brass-600) 100%);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.4),
+    inset 0 1px 0 rgb(255 250 230 / 0.75),
+    inset 0 -2px 0 rgb(90 62 15 / 0.5),
     var(--shadow-rest);
+  text-shadow: 0 1px 0 rgb(255 250 230 / 0.4);
 }
-.btn-primary:hover {
+.btn-brass:hover:not(:disabled) {
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.55),
+    inset 0 1px 0 rgb(255 252 240 / 0.9),
+    inset 0 -2px 0 rgb(90 62 15 / 0.5),
+    0 0 0 1px rgb(232 199 126 / 0.35),
     var(--shadow-lift);
+  filter: brightness(1.05);
+}
+
+.btn-lacquer {
+  color: #fff3ef;
+  background: linear-gradient(172deg, #d9503d 0%, var(--lacquer) 40%, var(--lacquer-dark) 100%);
+  box-shadow: inset 0 1px 0 rgb(255 220 210 / 0.4), var(--shadow-rest);
 }
 
 .btn-ghost {
-  color: var(--fg);
+  color: var(--fg-mid);
   border-color: var(--line-strong);
-  background: transparent;
+  background: rgb(6 23 19 / 0.4);
 }
-.btn-ghost:hover {
-  background: color-mix(in srgb, var(--fg) 6%, transparent);
+.btn-ghost:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--brass-600);
+  background: rgb(6 23 19 / 0.7);
 }
 
-/* ── campo de código de sala ──────────────────────────────────────────── */
+/* ── plaquetas e selos ────────────────────────────────────────────────── */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: rgb(6 23 19 / 0.5);
+  font-family: var(--font-jetbrains), monospace;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-mid);
+}
+
+/* selo de cera com o número da seção */
+.seal {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: 50%;
+  color: #23180a;
+  font-family: var(--font-archivo), sans-serif;
+  font-weight: 700;
+  font-size: 0.95rem;
+  background: radial-gradient(circle at 34% 28%, var(--brass-300), var(--brass-500) 52%, var(--brass-700) 100%);
+  box-shadow:
+    inset 0 2px 3px rgb(255 250 230 / 0.6),
+    inset 0 -3px 5px rgb(70 46 8 / 0.6),
+    var(--shadow-rest);
+}
+
+/* ── painel: superfície de madeira/feltro elevada ─────────────────────── */
+
+.panel {
+  position: relative;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background:
+    radial-gradient(120% 90% at 30% 0%, rgb(232 199 126 / 0.07), transparent 60%),
+    var(--felt-700);
+  box-shadow: var(--shadow-rest);
+}
+
+/* moldura interna de filete duplo, como carta impressa */
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgb(232 199 126 / 0.18);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+/* ── campo de código ──────────────────────────────────────────────────── */
 
 .code-field {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0.4rem 0.4rem 1rem;
+  padding: 0.4rem 0.4rem 0.4rem 1.1rem;
   border: 1px solid var(--line-strong);
-  border-radius: 2px;
-  background: var(--bg-sunk);
-  box-shadow: inset 0 2px 6px -3px rgb(0 0 0 / 0.35);
+  border-radius: 3px;
+  background: var(--felt-950);
+  box-shadow: var(--shadow-inset);
+}
+.code-field:focus-within {
+  border-color: var(--brass-600);
 }
 .code-field input {
   flex: 1;
@@ -248,22 +330,24 @@ h3 {
   background: none;
   border: 0;
   outline: none;
-  color: var(--fg);
+  color: var(--brass-300);
   font-family: var(--font-jetbrains), monospace;
-  font-size: 1.15rem;
+  font-size: 1.3rem;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.32em;
+  letter-spacing: 0.34em;
   text-transform: uppercase;
 }
 .code-field input::placeholder {
-  color: var(--fg-faint);
-  letter-spacing: 0.32em;
+  color: #3f6a5a;
+  letter-spacing: 0.34em;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
    CARTA DE JOGO
-   Brilho de verniz e foil, não glow. A luz especular segue o ponteiro,
-   a aresta de latão pega reflexo e o verniz varre a superfície.
+   Uma caixa de jogo vista de frente: campo saturado, moldura de filete
+   duplo, ornamento nos cantos, emblema grande, selo de latão.
+   O brilho é verniz e foil pegando luz — nunca glow.
    ══════════════════════════════════════════════════════════════════════════ */
 
 .card {
@@ -274,15 +358,17 @@ h3 {
   --lift: 0px;
 
   position: relative;
-  display: block;
   isolation: isolate;
-  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  border-radius: 5px;
   overflow: hidden;
   color: var(--c-ink);
   background-color: var(--c-bg);
-  border: 1px solid rgb(0 0 0 / 0.35);
+  background-image: radial-gradient(120% 88% at 26% 0%, var(--c-lit), transparent 66%);
+  border: 1px solid rgb(0 0 0 / 0.5);
   box-shadow: var(--shadow-rest);
-  transform: perspective(1100px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y))
+  transform: perspective(1200px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y))
     translate3d(0, var(--lift), 0);
   transform-style: preserve-3d;
   transition:
@@ -291,24 +377,24 @@ h3 {
   will-change: transform;
 }
 
-.card:where(:hover, :focus-visible) {
-  --lift: -6px;
-  box-shadow: var(--shadow-lift);
+.card:where(:hover, :focus-within) {
+  --lift: -8px;
+  box-shadow: var(--shadow-lift), 0 0 0 1px color-mix(in srgb, var(--c-glow) 45%, transparent);
 }
 
-/* textura do material da carta */
+/* trama do papel da carta */
 .card::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 1;
   pointer-events: none;
-  opacity: 0.5;
+  opacity: 0.42;
   mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23c)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23c)'/%3E%3C/svg%3E");
 }
 
-/* verniz: reflexo especular que segue o ponteiro */
+/* verniz: reflexo especular seguindo o ponteiro */
 .card-gloss {
   position: absolute;
   inset: 0;
@@ -316,176 +402,243 @@ h3 {
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--dur-base) var(--ease-out);
-  background:
-    radial-gradient(
-      42% 34% at var(--mx) var(--my),
-      color-mix(in srgb, var(--c-sheen) 62%, transparent) 0%,
-      color-mix(in srgb, var(--c-sheen) 16%, transparent) 42%,
-      transparent 72%
-    );
+  background: radial-gradient(
+    46% 36% at var(--mx) var(--my),
+    color-mix(in srgb, var(--c-sheen) 72%, transparent) 0%,
+    color-mix(in srgb, var(--c-sheen) 20%, transparent) 44%,
+    transparent 74%
+  );
   mix-blend-mode: soft-light;
 }
-.card:where(:hover, :focus-visible) .card-gloss {
+.card:where(:hover, :focus-within) .card-gloss {
   opacity: 1;
 }
 
-/* foil: varredura holográfica ao atravessar a carta */
+/* foil: varredura holográfica */
 .card-foil {
   position: absolute;
-  inset: -40%;
+  inset: -45%;
   z-index: 2;
   pointer-events: none;
-  opacity: 0;
+  opacity: 0.14;
   transition: opacity var(--dur-slow) var(--ease-out);
   background: linear-gradient(
-    115deg,
-    transparent 34%,
-    color-mix(in srgb, var(--c-glow) 26%, transparent) 44%,
-    color-mix(in srgb, var(--c-sheen) 42%, transparent) 50%,
-    color-mix(in srgb, var(--c-glow) 26%, transparent) 56%,
-    transparent 66%
+    112deg,
+    transparent 32%,
+    color-mix(in srgb, var(--c-glow) 30%, transparent) 43%,
+    color-mix(in srgb, var(--c-sheen) 55%, transparent) 50%,
+    color-mix(in srgb, var(--c-glow) 30%, transparent) 57%,
+    transparent 68%
   );
-  transform: translateX(calc((var(--mx) - 50%) * 0.9));
+  transform: translateX(calc((var(--mx) - 50%) * 0.95));
   mix-blend-mode: color-dodge;
-  filter: blur(6px);
+  filter: blur(7px);
 }
-.card:where(:hover, :focus-visible) .card-foil {
-  opacity: 0.85;
+.card:where(:hover, :focus-within) .card-foil {
+  opacity: 0.9;
 }
 
-/* aresta de latão gravada */
-.card-edge {
+/* moldura de filete duplo, como fundo de carta de baralho */
+.card-frame {
   position: absolute;
-  inset: 7px;
+  inset: 9px;
   z-index: 4;
   pointer-events: none;
-  border: 1px solid color-mix(in srgb, var(--c-glow) 42%, transparent);
-  border-radius: 2px;
-}
-.card-edge::after {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: 2px;
-  border: 1px solid transparent;
-  background: linear-gradient(
-      140deg,
-      color-mix(in srgb, var(--c-glow) 85%, white) 0%,
-      transparent 30%,
-      transparent 66%,
-      color-mix(in srgb, var(--c-glow) 70%, white) 100%
-    )
-    border-box;
-  -webkit-mask:
-    linear-gradient(#000 0 0) padding-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 0;
-  transition: opacity var(--dur-base) var(--ease-out);
-}
-.card:where(:hover, :focus-visible) .card-edge::after {
-  opacity: 1;
+  border: 1px solid color-mix(in srgb, var(--c-glow) 46%, transparent);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 0.22),
+    0 0 0 3px color-mix(in srgb, var(--c-glow) 14%, transparent);
 }
 
 .card-body {
   position: relative;
   z-index: 5;
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 0.85rem;
-  padding: clamp(1.35rem, 3vw, 1.9rem);
-  min-height: 24rem;
+  gap: 0.7rem;
+  padding: clamp(1.5rem, 3.4vw, 2.1rem);
 }
 
-.card-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
-}
-.card-ord {
-  font-family: var(--font-jetbrains), monospace;
-  font-size: 0.66rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--c-glow);
-}
 .card-ref {
-  font-family: var(--font-jetbrains), monospace;
-  font-size: 0.62rem;
-  letter-spacing: 0.12em;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.64rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: var(--c-dim);
+  color: color-mix(in srgb, var(--c-glow) 78%, var(--c-ink));
 }
 
 .card-emblem {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.6rem 0;
+  display: grid;
+  place-items: center;
+  padding: 0.4rem 0 0.7rem;
   color: var(--c-glow);
-  transform: translateZ(24px);
+  transform: translateZ(30px);
   transition: transform var(--dur-slow) var(--ease-out);
+  filter: drop-shadow(0 8px 14px rgb(0 0 0 / 0.4));
 }
-.card:where(:hover, :focus-visible) .card-emblem {
-  transform: translateZ(24px) scale(1.045);
+.card:where(:hover, :focus-within) .card-emblem {
+  transform: translateZ(30px) scale(1.06) rotate(-1.5deg);
 }
 
 .card-name {
-  font-size: clamp(1.9rem, 4vw, 2.5rem);
-  line-height: 0.98;
-  font-variation-settings: "SOFT" 10, "WONK" 1, "opsz" 96;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 12, "WONK" 1, "opsz" 144;
   font-weight: 700;
+  font-size: clamp(2.2rem, 5.2vw, 3rem);
+  line-height: 0.92;
+  letter-spacing: -0.03em;
   color: var(--c-ink);
-  /* verniz localizado sobre o título */
-  text-shadow: 0 1px 0 color-mix(in srgb, var(--c-glow) 30%, transparent);
+  text-shadow:
+    0 1px 0 color-mix(in srgb, var(--c-glow) 34%, transparent),
+    0 2px 12px rgb(0 0 0 / 0.35);
 }
 
 .card-pitch {
   color: var(--c-dim);
-  font-size: 0.95rem;
+  font-size: 0.94rem;
   line-height: 1.5;
 }
 
-.card-facts {
-  margin-top: auto;
-  padding-top: 1rem;
-  border-top: 1px solid color-mix(in srgb, var(--c-ink) 18%, transparent);
+.card-meta {
   display: flex;
-  gap: 1.4rem;
   flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
 }
-.card-facts dt {
-  font-family: var(--font-jetbrains), monospace;
-  font-size: 0.58rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+.card-meta .pill {
+  border-color: color-mix(in srgb, var(--c-ink) 26%, transparent);
+  background: color-mix(in srgb, #000 22%, transparent);
   color: var(--c-dim);
 }
-.card-facts dd {
-  margin: 0.15rem 0 0;
-  font-size: 0.94rem;
-  font-weight: 550;
-  font-variant-numeric: tabular-nums;
+
+.card-action {
+  margin-top: auto;
+  padding-top: 1.1rem;
 }
 
-.card-status {
+/* selo de estado, canto superior direito */
+.card-seal {
   position: absolute;
   z-index: 6;
-  top: 0;
-  right: 0;
-  padding: 0.35rem 0.7rem;
-  font-family: var(--font-jetbrains), monospace;
-  font-size: 0.58rem;
-  letter-spacing: 0.14em;
+  top: 18px;
+  right: 18px;
+  padding: 0.34rem 0.7rem;
+  border-radius: 2px;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #14100e;
-  background: linear-gradient(170deg, var(--brass-300), var(--brass-600));
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45);
+  transform: rotate(2.5deg);
+}
+.card-seal[data-kind="mvp"] {
+  color: #23180a;
+  background: linear-gradient(170deg, var(--brass-300), var(--brass-500) 55%, var(--brass-700));
+  box-shadow: inset 0 1px 0 rgb(255 250 230 / 0.7), 0 4px 10px -3px rgb(0 0 0 / 0.6);
+}
+.card-seal[data-kind="soon"] {
+  color: var(--c-dim);
+  border: 1px dashed color-mix(in srgb, var(--c-ink) 40%, transparent);
+  background: color-mix(in srgb, #000 30%, transparent);
 }
 
-/* ── movimento reduzido: sem inclinação nem varredura, o conteúdo é igual ── */
+/* ── lobby ────────────────────────────────────────────────────────────── */
+
+.seat {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: rgb(6 23 19 / 0.45);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.seat[data-me="true"] {
+  border-color: var(--brass-600);
+  background: rgb(232 199 126 / 0.07);
+}
+.seat[data-away="true"] {
+  opacity: 0.48;
+}
+.seat-empty {
+  border-style: dashed;
+  color: var(--fg-faint);
+  justify-content: center;
+  font-family: var(--font-jetbrains), monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgb(6 23 19 / 0.8);
+}
+.dot[data-on="true"] {
+  background: var(--jade);
+}
+.dot[data-on="false"] {
+  background: #4b6a5c;
+}
+
+/* código grande, gravado em placa */
+.code-plate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.1em;
+  padding: 0.55rem 1.1rem;
+  border-radius: 3px;
+  background: var(--felt-950);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-inset);
+  font-family: var(--font-jetbrains), monospace;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2em;
+  color: var(--brass-300);
+}
+
+/* ── celular ──────────────────────────────────────────────────────────── */
+
+@media (hover: none) {
+  .card-foil {
+    opacity: 0.4;
+    transform: none;
+  }
+  .card-gloss {
+    opacity: 0.75;
+    --mx: 26%;
+    --my: 6%;
+  }
+  .card:active {
+    --lift: -3px;
+  }
+}
+
+@media (max-width: 640px) {
+  .btn {
+    width: 100%;
+  }
+  .code-field .btn {
+    width: auto;
+    padding: 0 1.15rem;
+  }
+}
+
+html,
+body {
+  overflow-x: clip;
+}
+
+/* ── movimento reduzido ───────────────────────────────────────────────── */
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -497,52 +650,11 @@ h3 {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-  .card {
+  .card,
+  .card-emblem {
     transform: none !important;
   }
   .card-foil {
     display: none;
   }
-  .card-emblem {
-    transform: none !important;
-  }
-}
-
-/* ── toque: sem ponteiro, o brilho fica presente e estático ───────────── */
-@media (hover: none) {
-  .card-foil {
-    opacity: 0.32;
-    transform: none;
-  }
-  .card-gloss {
-    opacity: 0.7;
-    --mx: 28%;
-    --my: 8%;
-  }
-  .card-edge::after {
-    opacity: 0.6;
-  }
-  .card:active {
-    --lift: -2px;
-  }
-}
-
-/* alvos de toque de 44px e nada de scroll horizontal — §9.2 */
-@media (max-width: 640px) {
-  .btn {
-    min-height: 48px;
-    width: 100%;
-  }
-  .code-field .btn {
-    width: auto;
-    padding: 0 1.1rem;
-  }
-  .card-body {
-    min-height: 21rem;
-  }
-}
-
-html,
-body {
-  overflow-x: clip;
 }

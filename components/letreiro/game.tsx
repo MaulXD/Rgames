@@ -1,19 +1,27 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Board } from "@/components/letreiro/board";
 import { Reveal } from "@/components/letreiro/reveal";
 import { Avatar } from "@/components/avatar";
 import { useSession } from "@/components/session";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { parseAvatar } from "@/lib/avatar";
+import * as sfx from "@/lib/sfx";
 import {
   REJECTION,
   findPath,
   normalize,
   pathToString,
   pathWord,
-  score,
+  wordScore,
   type PlayerWord,
 } from "@/lib/letreiro";
 
@@ -65,6 +73,12 @@ export function LetreiroGame({
   const [left, setLeft] = useState<number>(0);
   const offset = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const antes = useRef(0);
+  const acabou = useRef(false);
+
+  // useSyncExternalStore: le o mudo de fora do React sem descompasso de
+  // hidratacao (no servidor a resposta e sempre 'ligado').
+  const mudo = useSyncExternalStore(sfx.subscribe, sfx.getSnapshot, sfx.getServerSnapshot);
 
   const revealing = match.public_state.phase === "reveal" || match.status === "finished";
 
@@ -106,6 +120,20 @@ export function LetreiroGame({
     return () => clearInterval(id);
   }, [match.ends_at, revealing]);
 
+  // metronomo dos ultimos dez segundos, um toque por segundo cheio
+  useEffect(() => {
+    if (revealing || left <= 0 || left > 10) return;
+    if (antes.current === left) return;
+    antes.current = left;
+    sfx.tique(left <= 3);
+  }, [left, revealing]);
+
+  useEffect(() => {
+    if (!revealing || acabou.current) return;
+    acabou.current = true;
+    sfx.fim();
+  }, [revealing]);
+
   /* ── minha lista, ao entrar ou reconectar ──────────────────────────────── */
   useEffect(() => {
     let alive = true;
@@ -137,8 +165,17 @@ export function LetreiroGame({
     [typed, pathForTyped, tapPath],
   );
   const current = typed ? normalize(typed) : pathWord(grid, path);
-  const trailState: "idle" | "ok" | "bad" =
-    !current || current.length < 3 ? "idle" : typed && !pathForTyped ? "bad" : "ok";
+  /**
+   * O estado da trilha diz UMA coisa só: o caminho fecha na grade?
+   *
+   * Antes ele pintava de verde quando o caminho existia, e verde lê-se como
+   * "vale ponto". A pessoa montava, ficava verde, enviava e o servidor
+   * recusava — dando a impressão de dicionário furado. Agora âmbar é
+   * "montado, dá para enviar" e verde só aparece DEPOIS que o servidor
+   * aceita, na ficha da palavra e no aviso.
+   */
+  const trailState: "idle" | "path" | "bad" =
+    !current || current.length < 3 ? "idle" : typed && !pathForTyped ? "bad" : "path";
 
   const limpar = useCallback(() => {
     setTapPath([]);
@@ -156,7 +193,7 @@ export function LetreiroGame({
         return;
       }
 
-      const pts = score(w.length);
+      const pts = wordScore(w);
       const p = pathToString(caminho);
 
       // otimista: a palavra sobe para a lista antes do servidor responder
@@ -175,10 +212,12 @@ export function LetreiroGame({
         const motivo = error ? "TIME_OVER" : (res?.reason ?? "NOT_A_WORD");
         setWords((prev) => prev.filter((x) => !(x.w === w && !x.confirmed)));
         setFlash({ kind: "bad", text: `${w} — ${REJECTION[motivo] ?? motivo}` });
+        sfx.errada();
         return;
       }
       setWords((prev) => prev.map((x) => (x.w === w ? { ...x, confirmed: true } : x)));
       setFlash({ kind: "ok", text: `${w} · +${pts}` });
+      sfx.certa(w.length);
     },
     [match.id, words, limpar],
   );
@@ -243,7 +282,7 @@ export function LetreiroGame({
   const urgente = left <= 10;
 
   return (
-    <div className="game">
+    <div className="game" onPointerDown={() => sfx.arm()}>
       {/* ── cronômetro e conta ─────────────────────────────────────────── */}
       <div className="game-head">
         <div className="clock" data-urgent={urgente}>
@@ -252,6 +291,20 @@ export function LetreiroGame({
             {String(left % 60).padStart(2, "0")}
           </span>
         </div>
+        <button
+          type="button"
+          className="som"
+          aria-pressed={mudo}
+          aria-label={mudo ? "Ligar som" : "Desligar som"}
+          title={mudo ? "Ligar som" : "Desligar som"}
+          onClick={() => {
+            sfx.arm();
+            sfx.toggleMuted();
+          }}
+        >
+          {mudo ? "\u2715" : "\u266a"}
+        </button>
+
         <div className="game-mine">
           <p className="eyebrow">Suas palavras</p>
           <p className="mono game-mine-num">
@@ -265,6 +318,9 @@ export function LetreiroGame({
         path={path}
         state={trailState}
         onPathChange={(p) => {
+          sfx.arm();
+          if (p.length > tapPath.length) sfx.letra(p.length);
+          else if (p.length < tapPath.length) sfx.apaga();
           setTyped("");
           setTapPath(p);
         }}
@@ -301,8 +357,8 @@ export function LetreiroGame({
           aria-label="Palavra"
           disabled={left === 0}
         />
-        {current.length >= 3 && trailState === "ok" && (
-          <span className="compose-pts">+{score(current.length)}</span>
+        {current.length >= 3 && trailState === "path" && (
+          <span className="compose-pts">+{wordScore(current)}</span>
         )}
       </label>
 
@@ -310,7 +366,7 @@ export function LetreiroGame({
         <button
           type="button"
           className="btn btn-brass"
-          disabled={trailState !== "ok" || current.length < 3}
+          disabled={trailState !== "path" || current.length < 3}
           onClick={() => {
             const alvo = typed ? pathForTyped : path;
             if (alvo) void submit(pathWord(grid, alvo), alvo);

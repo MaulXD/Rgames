@@ -176,18 +176,46 @@ export function bodyPath(body: Body): string {
   }
 }
 
+/**
+ * Onde a cara cabe, por silhueta.
+ *
+ * A cara era desenhada em coordenadas fixas (olhos em y=52, bochecha em x=26)
+ * e isso quebrava a estrela e a nuvem: os tracos caiam FORA do corpo, virando
+ * riscos soltos na tela. Agora cada silhueta declara o deslocamento e a
+ * escala da cara, e o grupo inteiro entra transformado.
+ */
+export function faceBox(body: Body): { dx: number; dy: number; s: number } {
+  switch (body) {
+    case "bolha":
+      return { dx: 0, dy: 0, s: 1 };
+    case "gota":
+      return { dx: 0, dy: 5, s: 0.94 };
+    case "ovo":
+      return { dx: 0, dy: 1, s: 0.94 };
+    case "estrela":
+      // o miolo solido da estrela e pequeno: a cara encolhe e sobe
+      return { dx: 0, dy: -3, s: 0.6 };
+    case "nuvem":
+      return { dx: 2, dy: 6, s: 0.78 };
+    case "bicho":
+      return { dx: 0, dy: 3, s: 0.96 };
+  }
+}
+
 /** Ponto onde o chapéu assenta, por silhueta. */
 export function hatAnchor(body: Body): { x: number; y: number } {
   switch (body) {
+    // os chapeus sobem ate 24 unidades acima da ancora; abaixo de y=24 eles
+    // escapavam da moldura de 100x100 e ficavam cortados dentro dos chips.
     case "gota":
-      return { x: 50, y: 20 };
+      return { x: 50, y: 26 };
     case "estrela":
-      return { x: 50, y: 21 };
+      return { x: 50, y: 27 };
     case "nuvem":
-      return { x: 52, y: 32 };
+      return { x: 52, y: 38 };
     case "bicho":
-      return { x: 50, y: 24 };
+      return { x: 50, y: 30 };
     default:
-      return { x: 50, y: 21 };
+      return { x: 50, y: 26 };
   }
 }

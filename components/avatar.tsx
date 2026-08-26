@@ -2,6 +2,7 @@ import {
   COLORS,
   avatarKey,
   bodyPath,
+  faceBox,
   hatAnchor,
   type AvatarSpec,
   type Eyes,
@@ -12,12 +13,16 @@ import {
 const OUTLINE = "#1D1526";
 const WHITE = "#FFFFFF";
 
+/** Centro nominal da cara. O grupo inteiro é escalado em torno dele. */
+const FACE_CX = 50;
+const FACE_CY = 58;
+
 /** Olhos — dois de cada, em x 39 e 61. */
-function Olhos({ kind, ink }: { kind: Eyes; ink: string }) {
-  const par = (node: (x: number, sinal: number) => React.ReactNode) => (
+function Olhos({ kind }: { kind: Eyes }) {
+  const par = (node: (x: number) => React.ReactNode) => (
     <>
-      {node(39, 1)}
-      {node(61, -1)}
+      {node(39)}
+      {node(61)}
     </>
   );
 
@@ -42,15 +47,14 @@ function Olhos({ kind, ink }: { kind: Eyes; ink: string }) {
       ));
     case "sono":
       return par((x) => (
-        <g key={x}>
-          <path
-            d={`M${x - 7} 52 Q${x} 58 ${x + 7} 52`}
-            stroke={OUTLINE}
-            strokeWidth={4}
-            fill="none"
-            strokeLinecap="round"
-          />
-        </g>
+        <path
+          key={x}
+          d={`M${x - 7} 51 Q${x} 58 ${x + 7} 51`}
+          stroke={OUTLINE}
+          strokeWidth={4}
+          fill="none"
+          strokeLinecap="round"
+        />
       ));
     case "uau":
       return par((x) => (
@@ -65,7 +69,7 @@ function Olhos({ kind, ink }: { kind: Eyes; ink: string }) {
           <circle cx={39} cy={52} r={6.4} fill={OUTLINE} />
           <circle cx={41} cy={50} r={2.1} fill={WHITE} />
           <path
-            d="M54 52 Q61 58 68 52"
+            d="M54 51 Q61 58 68 51"
             stroke={OUTLINE}
             strokeWidth={4}
             fill="none"
@@ -77,12 +81,8 @@ function Olhos({ kind, ink }: { kind: Eyes; ink: string }) {
       return par((x) => (
         <g key={x}>
           <circle cx={x} cy={52} r={7.4} fill={OUTLINE} />
-          <circle cx={x + 2.4} cy={49.4} r={2.8} fill={WHITE} />
+          <circle cx={x + 2.4} cy={49.4} r={2.9} fill={WHITE} />
           <circle cx={x - 2.6} cy={54.6} r={1.4} fill={WHITE} opacity={0.85} />
-          <path
-            d={`M${x + 8} 43 l1.5 3.2 3.2 1.5 -3.2 1.5 -1.5 3.2 -1.5 -3.2 -3.2 -1.5 3.2 -1.5Z`}
-            fill={ink === "#FFFFFF" ? WHITE : "#FFF6B0"}
-          />
         </g>
       ));
   }
@@ -124,29 +124,27 @@ function Boca({ kind }: { kind: Mouth }) {
         </g>
       );
     case "serio":
-      return (
-        <path d="M41 70 H59" stroke={OUTLINE} strokeWidth={4} strokeLinecap="round" />
-      );
+      return <path d="M41 70 H59" stroke={OUTLINE} strokeWidth={4} strokeLinecap="round" />;
     case "assobio":
-      return (
-        <ellipse cx={50} cy={69} rx={4} ry={5.6} fill={OUTLINE} />
-      );
+      return <ellipse cx={50} cy={69} rx={4} ry={5.6} fill={OUTLINE} />;
   }
 }
 
-/** Chapéu e acessório, apoiados no topo da silhueta. */
+/** Óculos: acompanham a cara, não o topo do corpo. */
+function Oculos() {
+  return (
+    <g stroke={OUTLINE} strokeWidth={3.4} fill="none">
+      <circle cx={39} cy={52} r={11.5} fill={WHITE} fillOpacity={0.3} />
+      <circle cx={61} cy={52} r={11.5} fill={WHITE} fillOpacity={0.3} />
+      <path d="M50.5 52 h-0.5" />
+      <path d="M27.5 49 l-6 -3M72.5 49 l6 -3" strokeLinecap="round" />
+    </g>
+  );
+}
+
+/** Chapéu, apoiado no topo da silhueta. */
 function Chapeu({ kind, x, y }: { kind: Hat; x: number; y: number }) {
-  if (kind === "nenhum") return null;
-  if (kind === "oculos") {
-    return (
-      <g stroke={OUTLINE} strokeWidth={3.4} fill="none">
-        <circle cx={39} cy={52} r={11} fill="#FFFFFF" fillOpacity={0.34} />
-        <circle cx={61} cy={52} r={11} fill="#FFFFFF" fillOpacity={0.34} />
-        <path d="M50 52 h0" />
-        <path d="M28 50 l-6 -3M72 50 l6 -3" strokeLinecap="round" />
-      </g>
-    );
-  }
+  if (kind === "nenhum" || kind === "oculos") return null;
   return (
     <g transform={`translate(${x} ${y})`}>
       {kind === "coroa" && (
@@ -183,7 +181,7 @@ function Chapeu({ kind, x, y }: { kind: Hat; x: number; y: number }) {
       {kind === "antena" && (
         <g stroke={OUTLINE} strokeWidth={3.4} strokeLinecap="round">
           <path d="M0 2 L0 -14" />
-          <circle cx={0} cy={-19} r={5} fill="#5FD13A" />
+          <circle cx={0} cy={-19} r={5} fill="#A8E827" />
         </g>
       )}
       {kind === "pena" && (
@@ -197,8 +195,11 @@ function Chapeu({ kind, x, y }: { kind: Hat; x: number; y: number }) {
 }
 
 /**
- * O bichinho. Contorno grosso, barriga clara, bochecha rosada — a receita de
- * brinquedo. Ver docs/01-DIRECAO-DE-ARTE.md §3.
+ * O bichinho. Contorno grosso, barriga clara, bochecha rosada.
+ *
+ * A cara entra num grupo transformado pelo `faceBox` da silhueta — sem isso a
+ * estrela e a nuvem ficavam com olhos e bochechas do lado de fora do corpo,
+ * que era exatamente o "elemento quebrado" da tela de perfil.
  */
 export function Avatar({
   spec,
@@ -213,6 +214,11 @@ export function Avatar({
   const uid = `av-${avatarKey(spec)}`;
   const path = bodyPath(spec.body);
   const anchor = hatAnchor(spec.body);
+  const fb = faceBox(spec.body);
+
+  const faceTransform =
+    `translate(${fb.dx} ${fb.dy}) ` +
+    `translate(${FACE_CX} ${FACE_CY}) scale(${fb.s}) translate(${-FACE_CX} ${-FACE_CY})`;
 
   return (
     <svg
@@ -222,7 +228,7 @@ export function Avatar({
       role={title ? "img" : "presentation"}
       aria-label={title}
       aria-hidden={title ? undefined : true}
-      style={{ display: "block", flex: "none", overflow: "visible" }}
+      style={{ display: "block", flex: "none" }}
     >
       <defs>
         <clipPath id={`${uid}-clip`}>
@@ -230,22 +236,32 @@ export function Avatar({
         </clipPath>
       </defs>
 
-      {/* corpo com contorno grosso */}
+      {/* corpo */}
       <path d={path} fill={c.enamel} stroke={OUTLINE} strokeWidth={4.2} strokeLinejoin="round" />
 
-      {/* barriga clara e brilho, recortados no corpo */}
+      {/* barriga e brilho, recortados no corpo */}
       <g clipPath={`url(#${uid}-clip)`}>
-        <ellipse cx={50} cy={82} rx={30} ry={20} fill={c.light} opacity={0.55} />
-        <ellipse cx={34} cy={32} rx={16} ry={10} fill="#FFFFFF" opacity={0.3} transform="rotate(-20 34 32)" />
-        <ellipse cx={26} cy={26} rx={7} ry={13} fill={c.light} opacity={0.5} />
+        <ellipse cx={50} cy={84} rx={30} ry={20} fill={c.light} opacity={0.5} />
+        <ellipse
+          cx={34}
+          cy={32}
+          rx={15}
+          ry={9}
+          fill={WHITE}
+          opacity={0.26}
+          transform="rotate(-20 34 32)"
+        />
       </g>
 
-      {/* bochechas */}
-      <circle cx={26} cy={63} r={5.4} fill="#FF7C93" opacity={0.5} />
-      <circle cx={74} cy={63} r={5.4} fill="#FF7C93" opacity={0.5} />
+      {/* a cara, ajustada à silhueta */}
+      <g transform={faceTransform}>
+        <circle cx={26} cy={63} r={5.4} fill="#FF7C93" opacity={0.5} />
+        <circle cx={74} cy={63} r={5.4} fill="#FF7C93" opacity={0.5} />
+        <Olhos kind={spec.eyes} />
+        <Boca kind={spec.mouth} />
+        {spec.hat === "oculos" && <Oculos />}
+      </g>
 
-      <Olhos kind={spec.eyes} ink={c.ink} />
-      <Boca kind={spec.mouth} />
       <Chapeu kind={spec.hat} x={anchor.x} y={anchor.y} />
     </svg>
   );

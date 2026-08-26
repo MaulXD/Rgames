@@ -139,7 +139,7 @@ function Editor({ profile }: { profile: Profile }) {
         <Row label="Corpo">
           {BODIES.map((b) => (
             <Chip key={b} active={spec.body === b} onClick={() => set("body", b)} label={BODY_NAMES[b]}>
-              <Avatar spec={{ ...spec, body: b }} size={44} />
+              <Avatar spec={{ ...spec, body: b, hat: "nenhum" }} size={46} />
             </Chip>
           ))}
         </Row>
@@ -147,7 +147,7 @@ function Editor({ profile }: { profile: Profile }) {
         <Row label="Olhos">
           {EYES.map((e) => (
             <Chip key={e} active={spec.eyes === e} onClick={() => set("eyes", e)} label={EYES_NAMES[e]}>
-              <Avatar spec={{ ...spec, eyes: e }} size={44} />
+              <Avatar spec={{ ...spec, eyes: e, hat: "nenhum" }} size={46} />
             </Chip>
           ))}
         </Row>
@@ -155,7 +155,7 @@ function Editor({ profile }: { profile: Profile }) {
         <Row label="Boca">
           {MOUTHS.map((m) => (
             <Chip key={m} active={spec.mouth === m} onClick={() => set("mouth", m)} label={MOUTH_NAMES[m]}>
-              <Avatar spec={{ ...spec, mouth: m }} size={44} />
+              <Avatar spec={{ ...spec, mouth: m, hat: "nenhum" }} size={46} />
             </Chip>
           ))}
         </Row>
@@ -163,7 +163,7 @@ function Editor({ profile }: { profile: Profile }) {
         <Row label="Enfeite">
           {HATS.map((h) => (
             <Chip key={h} active={spec.hat === h} onClick={() => set("hat", h)} label={HAT_NAMES[h]}>
-              <Avatar spec={{ ...spec, hat: h }} size={44} />
+              <Avatar spec={{ ...spec, hat: h }} size={46} />
             </Chip>
           ))}
         </Row>

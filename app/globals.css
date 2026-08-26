@@ -187,7 +187,10 @@ a {
   font-family: var(--font-archivo), var(--font-inter-tight), sans-serif;
   font-weight: 800;
   font-size: 0.94rem;
+  line-height: 1;
   letter-spacing: 0.02em;
+  text-align: center;
+  white-space: nowrap;
   transition:
     transform var(--dur-instant) var(--ease-out),
     box-shadow var(--dur-instant) var(--ease-out),
@@ -413,6 +416,7 @@ a {
   border-radius: var(--r-md);
   background: rgb(7 28 26 / 0.5);
   cursor: pointer;
+  overflow: hidden;
   scroll-snap-align: start;
   transition:
     transform var(--dur-fast) var(--ease-pop),
@@ -646,7 +650,6 @@ a {
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  transform: rotate(4deg);
   color: var(--ink);
 }
 .card-seal[data-kind="mvp"] {
@@ -707,5 +710,59 @@ body {
   }
   .card-foil {
     display: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FUNDO ANIMADO
+   Confete que desce devagar em duas camadas de velocidade diferente, e dois
+   borrões de cor que passeiam. Tudo em CSS, sem canvas e sem JS: custa uma
+   composição de GPU e nada de trabalho no thread principal.
+   Movimento reduzido desliga tudo — o fundo volta a ser parado.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes desce {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 720px, 0 1152px; }
+}
+
+@keyframes passeia-a {
+  0%   { transform: translate3d(-12vw, -6vh, 0) scale(1); }
+  50%  { transform: translate3d(10vw, 8vh, 0) scale(1.18); }
+  100% { transform: translate3d(-12vw, -6vh, 0) scale(1); }
+}
+
+@keyframes passeia-b {
+  0%   { transform: translate3d(14vw, 10vh, 0) scale(1.1); }
+  50%  { transform: translate3d(-8vw, -8vh, 0) scale(0.9); }
+  100% { transform: translate3d(14vw, 10vh, 0) scale(1.1); }
+}
+
+/* camada de confete: duas trames, uma mais lenta que a outra */
+body::before {
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Cg opacity='0.11'%3E%3Cpath d='M18 6 l6 6 -6 6 -6 -6z' fill='%23ffc42e'/%3E%3Cpath d='M54 30 l5 5 -5 5 -5 -5z' fill='%232fd8c4'/%3E%3Cpath d='M36 54 l5 5 -5 5 -5 -5z' fill='%23ff6fa5'/%3E%3Ccircle cx='62' cy='62' r='3' fill='%23a8e827'/%3E%3Ccircle cx='8' cy='44' r='2.6' fill='%23ff8a2b'/%3E%3C/g%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cg opacity='0.08'%3E%3Ccircle cx='24' cy='28' r='4' fill='%23b25cff'/%3E%3Cpath d='M96 20 l7 7 -7 7 -7 -7z' fill='%232e8cff'/%3E%3Ccircle cx='70' cy='96' r='3.4' fill='%23ff4d5e'/%3E%3Cpath d='M20 100 l6 6 -6 6 -6 -6z' fill='%23a8e827'/%3E%3C/g%3E%3C/svg%3E");
+  animation: desce 90s linear infinite;
+}
+
+/* borrões de cor passeando atrás de tudo */
+body::after {
+  content: "";
+  position: fixed;
+  inset: -20%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side, rgb(255 196 46 / 0.16), transparent 70%) -10% 10% / 46vw 46vw no-repeat,
+    radial-gradient(closest-side, rgb(47 216 196 / 0.14), transparent 70%) 100% 70% / 52vw 52vw no-repeat;
+  animation: passeia-a 46s ease-in-out infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  body::after {
+    animation: none;
   }
 }

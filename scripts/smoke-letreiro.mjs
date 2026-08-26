@@ -190,8 +190,11 @@ const regraDurante = await rpc(A.token, "set_room_settings", {
 ok(regraDurante.status >= 400 && /MATCH_IN_PROGRESS/.test(JSON.stringify(regraDurante.body)),
    "não muda as regras com partida rolando");
 
-const { rows: varridas } = await db.query("select public.letreiro_sweep() n");
-ok(varridas[0].n >= 1, "a varredura encerrou a rodada");
+// o pg_cron tambem varre a cada 10s: se ele chegou primeiro, o contador volta
+// 0 e esta tudo certo. O que importa e o ESTADO, nao quem varreu.
+await db.query("select public.letreiro_sweep()");
+const { rows: st } = await db.query("select status from matches where id = $1", [partida.id]);
+ok(st[0].status === "finished", `a rodada foi encerrada pelo servidor (${st[0].status})`);
 
 // apuração
 const fim = (await get(A.token, `matches?select=status,public_state&id=eq.${partida.id}`)).body?.[0];
@@ -201,7 +204,14 @@ ok(fim?.public_state?.phase === "reveal", "fase virou revelação");
 const placar = fim?.public_state?.scores ?? {};
 const ptsA = placar[A.id];
 const ptsB = placar[B.id];
-const val = (w) => (w.length <= 4 ? 1 : w.length === 5 ? 2 : w.length === 6 ? 3 : w.length === 7 ? 5 : 11);
+// mesma conta do servidor (letreiro_pontos_palavra) e do cliente
+const VALOR = { A:1,E:1,I:1,O:1,U:1,S:1,M:1,R:1,T:1, D:2,L:2,C:2,P:2, N:3,B:3, F:4,G:4,H:4,V:4, J:5,Q:5, X:6,Z:6 };
+const val = (w) => {
+  let s = 0;
+  for (const ch of w) s += VALOR[ch] ?? 1;
+  const n = w.length;
+  return s + (n <= 3 ? 0 : n === 4 ? 1 : n === 5 ? 3 : n === 6 ? 5 : n === 7 ? 8 : 14);
+};
 // anulação clássica: w3 valeu zero para os dois
 ok(ptsA === val(w1) + val(w2), `anulação clássica: A ficou com ${ptsA} (esperado ${val(w1) + val(w2)})`);
 ok(ptsB === 0, `anulação clássica: B ficou com ${ptsB} (esperado 0)`);

@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useMemo, useRef } from "react";
-import { CELLS, SIZE, areNeighbors, faceLabel } from "@/lib/letreiro";
+import { useCallback, useRef } from "react";
+import { CELLS, SIZE, areNeighbors, faceLabel, letterValue } from "@/lib/letreiro";
 
 /**
  * A bandeja: 16 dados sobre feltro.
@@ -33,15 +33,14 @@ export function Board({
 }: {
   grid: string[];
   path: number[];
-  /** idle | ok | bad — pinta o dado e a trilha */
-  state: "idle" | "ok" | "bad";
+  /** idle | path | bad — pinta o dado e a trilha */
+  state: "idle" | "path" | "bad";
   onPathChange: (path: number[]) => void;
   onCommit: () => void;
   disabled?: boolean;
 }) {
   const pressing = useRef(false);
   const entered = useRef(0);
-  const inPath = useMemo(() => new Set(path), [path]);
 
   /** Tenta acrescentar (ou desfazer) uma célula. Diz se mudou algo. */
   const touch = useCallback(
@@ -50,17 +49,25 @@ export function Board({
       const last = path[path.length - 1];
       if (last === cell) return false;
 
-      // voltar uma casa: clicar/passar pela penúltima desfaz a última
-      if (path.length >= 2 && path[path.length - 2] === cell) {
-        onPathChange(path.slice(0, -1));
+      // clicar numa célula que já está no caminho: corta ali. Serve para
+      // desfazer uma letra (a penúltima) e para voltar várias de uma vez.
+      const jaEm = path.indexOf(cell);
+      if (jaEm >= 0) {
+        onPathChange(path.slice(0, jaEm + 1));
         return true;
       }
-      if (inPath.has(cell)) return false;
-      if (path.length && !areNeighbors(last, cell)) return false;
+
+      // clicar longe do fim NÃO é mais ignorado em silêncio: recomeça dali.
+      // Ignorar era o que dava a sensação de que o jogo não respondia.
+      if (path.length && !areNeighbors(last, cell)) {
+        onPathChange([cell]);
+        return true;
+      }
+
       onPathChange([...path, cell]);
       return true;
     },
-    [disabled, path, inPath, onPathChange],
+    [disabled, path, onPathChange],
   );
 
   const endPress = useCallback(() => {
@@ -115,6 +122,7 @@ export function Board({
               }}
             >
               <span className="die-face">{faceLabel(grid[i])}</span>
+              <span className="die-val">{letterValue(grid[i])}</span>
               {ordem >= 0 && <span className="die-order">{ordem + 1}</span>}
             </button>
           );

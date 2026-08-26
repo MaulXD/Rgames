@@ -623,3 +623,89 @@
     animation: none;
   }
 }
+
+/* ── ajustes de encaixe ────────────────────────────────────────────────── */
+
+/* o cronometro estava com a linha alta demais e o numero descia da placa */
+.clock {
+  display: grid;
+  place-items: center;
+  padding: 0.5rem 1.2rem;
+  min-height: 54px;
+}
+.clock-num {
+  line-height: 1;
+}
+
+.game-head {
+  gap: 0.7rem;
+}
+
+/* botao de som: redondo, do mesmo tamanho da placa */
+.som {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--felt-950);
+  color: var(--vivo-amarelo);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform var(--dur-instant) var(--ease-out);
+}
+.som[aria-pressed="true"] {
+  color: var(--fg-faint);
+  background: var(--felt-900);
+}
+.som:active {
+  transform: translateY(2px);
+}
+
+/* valor da letra, no canto de baixo do dado */
+.die-val {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.56rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ink);
+  opacity: 0.42;
+}
+
+/* a ordem volta para DENTRO do dado: fora dela invadia o vao da grade */
+.die-order {
+  top: 3px;
+  right: 3px;
+  width: 17px;
+  height: 17px;
+  border-width: 2px;
+  font-size: 0.58rem;
+}
+
+/* ambar = caminho montado, da para enviar. Verde so depois que o servidor
+   aceita — antes o verde prometia ponto e o servidor recusava. */
+.die[data-on="true"][data-state="path"] {
+  background: var(--vivo-amarelo);
+  box-shadow: 0 7px 0 var(--sob-amarelo);
+}
+.tray-trail polyline[data-state="path"] {
+  stroke: var(--ink);
+}
+.tray-trail polyline[data-state="bad"] {
+  stroke: #7a1220;
+}
+.compose[data-state="path"] {
+  border-color: var(--vivo-amarelo);
+}
+.compose[data-state="path"] .compose-input {
+  color: var(--vivo-amarelo);
+}
+.compose[data-state="path"] .compose-pts {
+  color: var(--vivo-amarelo);
+}

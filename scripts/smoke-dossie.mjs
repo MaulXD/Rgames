@@ -286,8 +286,9 @@ const antes = (await get(eu.token, `matches?select=public_state&id=eq.${partida.
 const atAntes = antes.pending?.at ?? null;
 
 await db.query("update matches set turn_deadline = now() - interval '1 second' where id = $1", [partida.id]);
-const { rows: sweep } = await db.query("select public.dossie_sweep() n");
-ok(sweep[0].n >= 1, "a varredura agiu na partida vencida");
+// idem: o pg_cron pode ter varrido antes. Mede o efeito, nao o contador.
+await db.query("select public.dossie_sweep()");
+ok(true, "a varredura rodou sem erro");
 
 est = (await get(eu.token, `matches?select=public_state&id=eq.${partida.id}`)).body[0].public_state;
 // uma varredura resolve UM jogador da fila: ou fecha a refutação, ou avança a vez

@@ -6,6 +6,7 @@ import { Avatar } from "@/components/avatar";
 import { Fleuron } from "@/components/ornament";
 import { parseAvatar } from "@/lib/avatar";
 import { pathFromString } from "@/lib/letreiro";
+import * as sfx from "@/lib/sfx";
 import type { MatchRow, Seat } from "@/components/letreiro/game";
 
 /**
@@ -48,6 +49,7 @@ export function Reveal({
         const id = setTimeout(() => setAto(3), 900);
         return () => clearTimeout(id);
       }
+      sfx.revela(qual);
       const id = setTimeout(() => setQual((q) => q + 1), 2200);
       return () => clearTimeout(id);
     }
@@ -111,7 +113,7 @@ export function Reveal({
           <Board
             grid={grid}
             path={pathFromString(atual.p)}
-            state="ok"
+            state="path"
             onPathChange={() => {}}
             onCommit={() => {}}
             disabled

@@ -45,14 +45,14 @@ function Letreiro() {
           {letter && (
             <text
               x={x + 8}
-              y={y + 12.2}
+              y={y + 8}
               textAnchor="middle"
-              fill="var(--c-bg, #000)"
+              dominantBaseline="central"
+              fill="var(--c-bg, #0B2723)"
               stroke="none"
-              style={{
-                font: "700 11.5px var(--font-archivo), system-ui, sans-serif",
-                letterSpacing: "0.02em",
-              }}
+              fontFamily="var(--font-archivo), system-ui, sans-serif"
+              fontSize={11}
+              fontWeight={800}
             >
               {letter}
             </text>

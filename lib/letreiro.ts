@@ -44,12 +44,47 @@ export function normalize(s: string): string {
     .replace(/[^A-Z]/g, "");
 }
 
-export function score(letters: number): number {
-  if (letters <= 4) return 1;
-  if (letters === 5) return 2;
-  if (letters === 6) return 3;
-  if (letters === 7) return 5;
-  return 11;
+/**
+ * Valor de cada letra, na distribuicao oficial do Scrabble brasileiro - ela ja
+ * e calibrada pela frequencia do portugues. Ver a migracao 0014 para o porque.
+ */
+const VALOR: Record<string, number> = {
+  A: 1, E: 1, I: 1, O: 1, U: 1, S: 1, M: 1, R: 1, T: 1,
+  D: 2, L: 2, C: 2, P: 2,
+  N: 3, B: 3,
+  F: 4, G: 4, H: 4, V: 4,
+  J: 5, Q: 5,
+  X: 6, Z: 6,
+};
+
+/** Bonus por comprimento, somado ao valor das letras. */
+function bonus(n: number): number {
+  if (n <= 3) return 0;
+  if (n === 4) return 1;
+  if (n === 5) return 3;
+  if (n === 6) return 5;
+  if (n === 7) return 8;
+  return 14;
+}
+
+/**
+ * Pontos de uma palavra: soma do valor das letras + bonus de comprimento.
+ * A mesma conta roda no servidor (`letreiro_pontos_palavra`) - se as duas
+ * divergirem, o placar do fim nao bate com o que apareceu durante a rodada.
+ */
+export function wordScore(word: string): number {
+  const w = normalize(word);
+  if (!w) return 0;
+  let soma = 0;
+  for (const ch of w) soma += VALOR[ch] ?? 1;
+  return soma + bonus(w.length);
+}
+
+/** Quanto vale cada letra, para mostrar no dado. */
+export function letterValue(face: string): number {
+  let soma = 0;
+  for (const ch of normalize(face)) soma += VALOR[ch] ?? 1;
+  return soma;
 }
 
 export function pathToString(path: number[]): string {

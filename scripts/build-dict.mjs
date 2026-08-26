@@ -26,9 +26,36 @@ import pg from "pg";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 config({ path: join(root, ".env.local"), quiet: true });
 
+/**
+ * Duas fontes, unidas.
+ *
+ * A lista do pythonprobr ja vem flexionada (320 mil formas) e e a base. O
+ * `.dic` do Hunspell pt_BR (o que o LibreOffice usa) entra por cima: ele traz
+ * lemas que a primeira nao tem. Cada linha do `.dic` vem como
+ * `palavra/FLAGS` — as flags de afixo sao descartadas, entao dele aproveitamos
+ * so a forma base. Ainda assim fecha buracos reais.
+ */
 const FONTES = [
-  "https://raw.githubusercontent.com/pythonprobr/palavras/master/palavras.txt",
+  { url: "https://raw.githubusercontent.com/pythonprobr/palavras/master/palavras.txt", dic: false },
+  { url: "https://raw.githubusercontent.com/LibreOffice/dictionaries/master/pt_BR/pt_BR.dic", dic: true },
 ];
+
+/**
+ * Lista curada: emprestimos e uso moderno que a fonte (derivada do VOLP) nao
+ * tem. Medido, nao chutado — um teste com 117 palavras do dia a dia achou 115;
+ * as que faltavam eram todas desta familia. Sem marca registrada.
+ */
+const EXTRAS = `
+suco internet pizza lanche sorvete chiclete biscoito salgado refrigerante
+mouse teclado email site notebook tablet online offline video foto selfie
+bicicleta skate tenis shorts blusa jeans spray xampu sabonete escova toalha
+sofa cadeira panela garfo faca colher caneca balde vassoura tesoura caderno
+caneta lapis borracha regua mochila lousa recreio colega chefe salario boleto
+cartao senha onibus metro taxi farol multa posto pneu radio televisao geladeira
+fogao micro liquidificador tomada carregador fone teia nuvem arquivo pasta
+janela botao clique rolagem aplicativo jogo partida placar rodada empate
+treino torcedor camisa chuteira apito juiz falta penalti golaco
+`.trim().split(/\s+/);
 
 const norm = (s) =>
   s
@@ -39,21 +66,37 @@ const norm = (s) =>
 const diacriticos = (s) => s.normalize("NFD").replace(/[^̀-ͯ]/g, "").length;
 
 async function baixar() {
-  for (const url of FONTES) {
-    process.stdout.write(`  baixando ${url}\n`);
-    const r = await fetch(url);
-    if (!r.ok) {
-      console.error(`  falhou (${r.status}), tentando a próxima`);
+  const linhas = [];
+  let vivas = 0;
+  for (const f of FONTES) {
+    process.stdout.write(`  baixando ${f.url}\n`);
+    let texto;
+    try {
+      const r = await fetch(f.url);
+      if (!r.ok) {
+        console.error(`  falhou (${r.status}), seguindo sem esta`);
+        continue;
+      }
+      texto = await r.text();
+    } catch (e) {
+      console.error(`  falhou (${e.message}), seguindo sem esta`);
       continue;
     }
-    return await r.text();
+    vivas++;
+    const cru = texto.split(/\r?\n/);
+    // a primeira linha do .dic e a contagem de entradas
+    const corpo = f.dic ? cru.slice(1) : cru;
+    const limpas = f.dic ? corpo.map((l) => l.split("/")[0]) : corpo;
+    console.log(`  ${limpas.length.toLocaleString("pt-BR")} linhas`);
+    // push(...arr) com 320 mil itens estoura a pilha de chamadas
+    for (const l of limpas) linhas.push(l);
   }
-  throw new Error("nenhuma fonte de dicionário respondeu");
+  if (!vivas) throw new Error("nenhuma fonte de dicionário respondeu");
+  return linhas;
 }
 
-const bruto = await baixar();
-const linhas = bruto.split(/\r?\n/);
-console.log(`  ${linhas.length.toLocaleString("pt-BR")} linhas na origem`);
+const linhas = await baixar();
+console.log(`  ${linhas.length.toLocaleString("pt-BR")} linhas somadas`);
 
 /** @type {Map<string, string>} norm -> grafia escolhida */
 const dic = new Map();
@@ -88,6 +131,18 @@ for (const linha of linhas) {
     dic.set(n, palavra);
   }
 }
+
+// os extras entram por ultimo e nao sobrescrevem grafia ja escolhida
+let novos = 0;
+for (const extra of EXTRAS) {
+  const n = norm(extra);
+  if (!/^[A-Z]+$/.test(n) || /[KWY]/.test(n) || n.length < 3 || n.length > 16) continue;
+  if (!dic.has(n)) {
+    dic.set(n, extra);
+    novos++;
+  }
+}
+console.log(`  ${novos} palavra(s) da lista curada acrescentada(s)`);
 
 console.log(`  ${dic.size.toLocaleString("pt-BR")} palavras aproveitadas`);
 console.log(`  ${descartadas.toLocaleString("pt-BR")} descartadas pelo filtro`);

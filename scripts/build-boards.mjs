@@ -57,12 +57,23 @@ function mulberry32(a) {
   };
 }
 
-function pontos(n) {
-  if (n <= 4) return 1;
-  if (n === 5) return 2;
-  if (n === 6) return 3;
-  if (n === 7) return 5;
-  return 11;
+/** Valor por letra (Scrabble brasileiro) + bonus de comprimento.
+ *  Tem de bater com public.letreiro_pontos_palavra e com lib/letreiro.ts. */
+const VALOR = {
+  A: 1, E: 1, I: 1, O: 1, U: 1, S: 1, M: 1, R: 1, T: 1,
+  D: 2, L: 2, C: 2, P: 2,
+  N: 3, B: 3,
+  F: 4, G: 4, H: 4, V: 4,
+  J: 5, Q: 5,
+  X: 6, Z: 6,
+};
+
+function pontos(palavra) {
+  let soma = 0;
+  for (const ch of palavra) soma += VALOR[ch] ?? 1;
+  const n = palavra.length;
+  const b = n <= 3 ? 0 : n === 4 ? 1 : n === 5 ? 3 : n === 6 ? 5 : n === 7 ? 8 : 14;
+  return soma + b;
 }
 
 /** Vizinhos nas 8 direções, numa grade 4×4. */
@@ -152,7 +163,7 @@ function avaliar(grid, achadas) {
 
   for (const [palavra, caminho] of achadas) {
     const n = palavra.length;
-    maxScore += pontos(n);
+    maxScore += pontos(palavra);
     if (n >= 7) sete++;
     if (n >= 8) oito++;
     if (n >= 6) for (const d of caminho) participam.add(d);

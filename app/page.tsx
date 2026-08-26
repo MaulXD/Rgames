@@ -66,7 +66,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 md:gap-5 xl:gap-6">
+          <div className="cascata grid gap-4 md:grid-cols-2 md:gap-5 xl:gap-6">
             {GAMES.map((g) => (
               <GameCard key={g.key} game={g} />
             ))}
@@ -80,7 +80,7 @@ export default function Home() {
           </div>
           <h2 className="mt-8 text-center text-[clamp(1.9rem,5vw,2.8rem)]">Em quinze segundos</h2>
 
-          <ol className="mt-10 grid gap-4 sm:grid-cols-3">
+          <ol className="cascata mt-10 grid gap-4 sm:grid-cols-3">
             {PASSOS.map((p) => (
               <li key={p.n} className="panel p-6">
                 <span className="seal">{p.n}</span>

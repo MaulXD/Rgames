@@ -201,20 +201,41 @@ function Chapeu({ kind, x, y }: { kind: Hat; x: number; y: number }) {
  * estrela e a nuvem ficavam com olhos e bochechas do lado de fora do corpo,
  * que era exatamente o "elemento quebrado" da tela de perfil.
  */
+/**
+ * Cada bicho tem uma cadência própria: se todos balançassem no mesmo compasso,
+ * uma fileira de avatares pareceria uma engrenagem, não um grupo de gente. O
+ * desvio sai da própria chave do avatar, então é estável entre recargas.
+ */
+function compasso(chave: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < chave.length; i++) {
+    h ^= chave.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % 2400;
+}
+
+/** Só quem tem olho de bolinha pisca — olho fechado não fecha mais. */
+const PISCA: Eyes[] = ["normal", "brilho"];
+
 export function Avatar({
   spec,
   size = 64,
   title,
+  /** desliga a vida — serve para pódio impresso, print, teste */
+  still,
 }: {
   spec: AvatarSpec;
   size?: number;
   title?: string;
+  still?: boolean;
 }) {
   const c = COLORS[spec.color];
   const uid = `av-${avatarKey(spec)}`;
   const path = bodyPath(spec.body);
   const anchor = hatAnchor(spec.body);
   const fb = faceBox(spec.body);
+  const atraso = still ? undefined : `${compasso(uid)}ms`;
 
   const faceTransform =
     `translate(${fb.dx} ${fb.dy}) ` +
@@ -236,6 +257,10 @@ export function Avatar({
         </clipPath>
       </defs>
 
+      {/* Tudo que é o bicho fica dentro deste grupo: ele é que respira. O
+          balanço é de ±1,6 unidade do viewBox, então vale igual num avatar de
+          28px numa lista e num de 120px no estúdio. */}
+      <g className={still ? undefined : "av-vida"} style={{ animationDelay: atraso }}>
       {/* corpo */}
       <path d={path} fill={c.enamel} stroke={OUTLINE} strokeWidth={4.2} strokeLinejoin="round" />
 
@@ -258,11 +283,34 @@ export function Avatar({
         <circle cx={26} cy={63} r={5.4} fill="#FF7C93" opacity={0.5} />
         <circle cx={74} cy={63} r={5.4} fill="#FF7C93" opacity={0.5} />
         <Olhos kind={spec.eyes} />
+
+        {/* A PISCADA. Duas pálpebras da cor do corpo que descem sobre o olho e
+            voltam — nada mais que isso, e é o que separa um desenho parado de
+            um bicho olhando para você. O grupo fica achatado (scaleY 0) quase
+            todo o tempo; a animação abre por um instante e fecha de novo. */}
+        {!still && PISCA.includes(spec.eyes) && (
+          <g className="av-pisca" style={{ animationDelay: atraso }}>
+            {[39, 61].map((x) => (
+              <g key={x}>
+                <rect x={x - 8} y={42} width={16} height={19} fill={c.enamel} />
+                <path
+                  d={`M${x - 7} 55 Q${x} 60 ${x + 7} 55`}
+                  stroke={OUTLINE}
+                  strokeWidth={3.6}
+                  fill="none"
+                  strokeLinecap="round"
+                />
+              </g>
+            ))}
+          </g>
+        )}
+
         <Boca kind={spec.mouth} />
         {spec.hat === "oculos" && <Oculos />}
       </g>
 
       <Chapeu kind={spec.hat} x={anchor.x} y={anchor.y} />
+      </g>
     </svg>
   );
 }

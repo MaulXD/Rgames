@@ -766,3 +766,174 @@ body::after {
     animation: none;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   VIDA NOS AVATARES
+
+   O pedido era avatar "mais animado, igual o Boggle With Friends". A diferenca
+   entre um desenho parado e um bicho que parece te olhar sao dois movimentos
+   pequenos: um balanco de respiracao e uma piscada de vez em quando.
+
+   Os dois valores estao em unidade do viewBox (0-100), entao valem igual num
+   avatar de 28px numa lista e num de 120px no estudio. O compasso de cada um
+   sai da chave do avatar (ver components/avatar.tsx), senao uma fileira de
+   avatares balancaria em uniao e pareceria engrenagem.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes av-respira {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-1.6px) rotate(1.3deg);
+  }
+}
+
+.av-vida {
+  /* o giro sai dos pes, nao do centro: e assim que um boneco de brinquedo
+     tomba. Do centro pareceria que ele esta flutuando e rodando. */
+  transform-origin: 50px 92px;
+  animation: av-respira 3.4s ease-in-out infinite alternate;
+}
+
+@keyframes av-piscada {
+  0%,
+  90%,
+  100% {
+    transform: translateY(42px) scaleY(0) translateY(-42px);
+  }
+  93%,
+  94% {
+    transform: translateY(42px) scaleY(1) translateY(-42px);
+  }
+  97% {
+    transform: translateY(42px) scaleY(0) translateY(-42px);
+  }
+}
+
+.av-pisca {
+  /* a palpebra desce de y=42 (a testa) — o translate faz o papel do
+     transform-origin sem depender de transform-box, que ainda varia */
+  animation: av-piscada 5.2s ease-in-out infinite;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CHEGADA DA PAGINA
+
+   As secoes sobem em cascata em vez de aparecerem todas juntas. Nao e enfeite:
+   a cascata desenha a ordem de leitura, e a pagina passa a sensacao de ter
+   sido montada para voce em vez de ter sido despejada.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@keyframes sobe-entra {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.cascata > * {
+  animation: sobe-entra 0.5s var(--ease-out) both;
+}
+.cascata > *:nth-child(1) { animation-delay: 0.02s; }
+.cascata > *:nth-child(2) { animation-delay: 0.09s; }
+.cascata > *:nth-child(3) { animation-delay: 0.16s; }
+.cascata > *:nth-child(4) { animation-delay: 0.23s; }
+.cascata > *:nth-child(5) { animation-delay: 0.3s; }
+.cascata > *:nth-child(n + 6) { animation-delay: 0.36s; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BOTAO PRINCIPAL: um lustro atravessa quando o ponteiro entra
+
+   O botao ja afundava ao ser apertado. Faltava o convite ANTES do clique.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.btn-brass,
+.btn-vivo,
+.btn-lacquer {
+  position: relative;
+  overflow: hidden;
+}
+.btn-brass::after,
+.btn-vivo::after,
+.btn-lacquer::after {
+  content: "";
+  position: absolute;
+  inset: 0 -60%;
+  pointer-events: none;
+  transform: translateX(-130%);
+  background: linear-gradient(
+    72deg,
+    transparent 42%,
+    rgb(255 255 255 / 0.42) 50%,
+    transparent 58%
+  );
+}
+.btn-brass:hover:not(:disabled)::after,
+.btn-vivo:hover:not(:disabled)::after,
+.btn-lacquer:hover:not(:disabled)::after,
+.btn-brass:focus-visible::after,
+.btn-vivo:focus-visible::after,
+.btn-lacquer:focus-visible::after {
+  animation: lustro-botao 0.62s var(--ease-out) 1 forwards;
+}
+@keyframes lustro-botao {
+  to {
+    transform: translateX(130%);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   O CARD DO JOGO CONVIDA
+
+   O emblema ja crescia no hover. Agora ele tomba de leve, como um brinquedo
+   que alguem encostou, e o selo do canto gira ao entrar.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.card-emblem {
+  transition:
+    transform var(--dur-base) var(--ease-pop),
+    filter var(--dur-base) var(--ease-out);
+}
+.card:where(:hover, :focus-within) .card-emblem {
+  filter: drop-shadow(0 6px 0 rgb(0 0 0 / 0.22));
+}
+
+@keyframes selo-gira {
+  from {
+    opacity: 0;
+    transform: scale(0.4) rotate(-70deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.card-seal {
+  animation: selo-gira 0.44s var(--ease-pop) both;
+  animation-delay: 0.34s;
+}
+
+/* MOVIMENTO REDUZIDO. A regra global no topo do arquivo encurta a duracao de
+   toda animacao para 0,01ms, e isso e um problema para as animacoes com
+   `both`: o estado inicial e opacidade zero, o atraso NAO e encurtado, e o
+   elemento fica invisivel durante o atraso. Aqui a animacao e desligada de
+   verdade, nao acelerada. A palpebra e caso especial: sem animacao ela para
+   no estado natural, que e ABERTA cobrindo o olho — some. */
+@media (prefers-reduced-motion: reduce) {
+  .cascata > *,
+  .card-seal,
+  .av-vida {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
+  .av-pisca {
+    display: none;
+  }
+}

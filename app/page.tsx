@@ -18,13 +18,13 @@ export default function Home() {
       <main className="relative z-10 mx-auto w-full max-w-6xl px-5 sm:px-8">
         {/* ── hero ────────────────────────────────────────────────────── */}
         <section className="relative pt-8 pb-16 sm:pt-16 sm:pb-24">
-          {/* rosácea de guilhoché atrás do título */}
+          {/* explosão de confete atrás do título */}
           <div
             aria-hidden
             className="pointer-events-none absolute -top-24 right-[-6rem] hidden sm:block"
             style={{ zIndex: -1 }}
           >
-            <Rosette size={520} opacity={0.12} />
+            <Rosette size={540} opacity={0.4} />
           </div>
 
           <p className="eyebrow">Tabuleiro com os amigos, pelo navegador</p>
@@ -62,7 +62,7 @@ export default function Home() {
             <h2 className="text-[clamp(1.9rem,5vw,2.8rem)]">Os quatro jogos</h2>
             <p className="max-w-[42ch] text-sm dim">
               Nomes, elenco, mapas e arte 100% autorais. O selo diz em que fase do roadmap cada um
-              fica jogável — a sala já funciona hoje.
+              fica jogável. O Letreiro já dá para jogar agora.
             </p>
           </div>
 
@@ -97,7 +97,7 @@ export default function Home() {
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-sm dim">
           <span>Mesa · em construção</span>
           <a
-            className="underline decoration-1 underline-offset-4 hover:text-[var(--brass-300)]"
+            className="underline decoration-1 underline-offset-4 hover:text-[var(--vivo-amarelo)]"
             href="https://github.com/MaulXD/Rgames"
             target="_blank"
             rel="noreferrer"

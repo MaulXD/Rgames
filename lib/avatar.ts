@@ -1,37 +1,31 @@
 /**
- * Avatares da Mesa — fichas de esmalte e metal.
+ * Avatares da Mesa — bichinhos.
  *
- * Não há upload de foto e não há gerador aleatório de rosto. O avatar é uma
- * peça de jogo: silhueta, esmalte colorido, hachura e um brasão gravado.
+ * A primeira versão eram fichas de esmalte e latão, heráldicas. Bonito de
+ * catálogo e sem graça na mesa: ninguém se reconhece num brasão. Agora são
+ * personagens — corpo, olhos, boca e chapéu — em cor viva e contorno grosso.
  *
- * A hachura não é decoração — é o identificador redundante que o daltonismo
- * exige (ver docs/01-DIRECAO-DE-ARTE.md §3.4). Duas pessoas podem escolher a
- * mesma cor em salas diferentes, mas cor + hachura + brasão sempre distinguem.
+ * A redundância que o daltonismo exige continua existindo, só mudou de forma:
+ * antes era hachura, agora é **silhueta + chapéu + cara**. Dois jogadores na
+ * mesma cor continuam distinguíveis de relance, e é mais divertido.
  */
 
-export const SHAPES = ["circulo", "escudo", "hexagono", "losango", "octogono", "selo"] as const;
-export const PATTERNS = ["liso", "diagonal", "pontos", "grade", "vertical", "raios"] as const;
-export const METALS = ["latao", "prata", "cobre"] as const;
-export const MARKS = [
-  "coroa",
-  "chave",
-  "raio",
-  "lua",
-  "estrela",
-  "bussola",
-  "folha",
-  "chama",
-  "torre",
-  "olho",
-  "ampulheta",
-  "losangos",
-] as const;
+/** Corpo. A silhueta é o identificador mais forte depois da cor. */
+export const BODIES = ["bolha", "gota", "ovo", "estrela", "nuvem", "bicho"] as const;
+export const EYES = ["normal", "feliz", "sono", "uau", "esperto", "brilho"] as const;
+export const MOUTHS = ["sorriso", "riso", "bico", "lingua", "serio", "assobio"] as const;
+export const HATS = ["nenhum", "coroa", "boina", "laco", "antena", "pena", "oculos"] as const;
 
-export type Shape = (typeof SHAPES)[number];
-export type Pattern = (typeof PATTERNS)[number];
-export type Metal = (typeof METALS)[number];
-export type Mark = (typeof MARKS)[number];
+export type Body = (typeof BODIES)[number];
+export type Eyes = (typeof EYES)[number];
+export type Mouth = (typeof MOUTHS)[number];
+export type Hat = (typeof HATS)[number];
 
+/**
+ * As CHAVES de cor não podem mudar: existe um CHECK no banco
+ * (migração 0002) que valida a cor do assento contra esta lista. Os nomes
+ * visíveis e os valores mudaram para o registro vivo; as chaves ficam.
+ */
 export type ColorKey =
   | "carmim"
   | "prussia"
@@ -42,73 +36,74 @@ export type ColorKey =
   | "jade"
   | "terracota";
 
-export const COLORS: Record<ColorKey, { name: string; enamel: string; deep: string; ink: string }> = {
-  carmim: { name: "Carmim", enamel: "#A63D40", deep: "#7A2A2D", ink: "#FBEFE6" },
-  prussia: { name: "Prússia", enamel: "#3B6E8F", deep: "#274C64", ink: "#F0F6FA" },
-  ocre: { name: "Ocre", enamel: "#D9A02F", deep: "#A2731C", ink: "#2A1F0C" },
-  oliva: { name: "Oliva", enamel: "#5B8C5A", deep: "#3E6640", ink: "#F2F7EF" },
-  vinho: { name: "Vinho", enamel: "#6B4E71", deep: "#4B3550", ink: "#F6EFF7" },
-  grafite: { name: "Grafite", enamel: "#3A464C", deep: "#242D31", ink: "#EDF1F2" },
-  jade: { name: "Jade", enamel: "#2E7D5B", deep: "#1E5A40", ink: "#EFF8F2" },
-  terracota: { name: "Terracota", enamel: "#C06A45", deep: "#8E4A2E", ink: "#FDF1E8" },
+export const COLORS: Record<
+  ColorKey,
+  { name: string; enamel: string; light: string; deep: string; ink: string }
+> = {
+  carmim:    { name: "Vermelho", enamel: "#FF4D5E", light: "#FF8A95", deep: "#C22436", ink: "#2A0B10" },
+  terracota: { name: "Laranja",  enamel: "#FF8A2B", light: "#FFB772", deep: "#C55A00", ink: "#2E1400" },
+  ocre:      { name: "Amarelo",  enamel: "#FFC42E", light: "#FFDC7C", deep: "#C58F00", ink: "#2E2000" },
+  oliva:     { name: "Verde",    enamel: "#5FD13A", light: "#9BE87F", deep: "#3A9420", ink: "#0E2606" },
+  jade:      { name: "Menta",    enamel: "#25C08B", light: "#74E0BB", deep: "#12855D", ink: "#052319" },
+  grafite:   { name: "Turquesa", enamel: "#2FD8C4", light: "#84EDE1", deep: "#159384", ink: "#04251F" },
+  prussia:   { name: "Azul",     enamel: "#2E8CFF", light: "#7FBAFF", deep: "#1157BC", ink: "#04142E" },
+  vinho:     { name: "Roxo",     enamel: "#B25CFF", light: "#D29FFF", deep: "#7A24C4", ink: "#1B0630" },
 };
 
-export const METAL_TONES: Record<Metal, { name: string; lo: string; mid: string; hi: string }> = {
-  latao: { name: "Latão", lo: "#7C5C22", mid: "#B08A3E", hi: "#EBD293" },
-  prata: { name: "Prata", lo: "#6E757A", mid: "#A7AFB4", hi: "#E6EAEC" },
-  cobre: { name: "Cobre", lo: "#7A3C22", mid: "#B4653C", hi: "#E7A97F" },
-};
-
-export const SHAPE_NAMES: Record<Shape, string> = {
-  circulo: "Círculo",
-  escudo: "Escudo",
-  hexagono: "Hexágono",
-  losango: "Losango",
-  octogono: "Octógono",
-  selo: "Selo",
-};
-
-export const PATTERN_NAMES: Record<Pattern, string> = {
-  liso: "Liso",
-  diagonal: "Diagonal",
-  pontos: "Pontos",
-  grade: "Grade",
-  vertical: "Vertical",
-  raios: "Raios",
-};
-
-export const MARK_NAMES: Record<Mark, string> = {
-  coroa: "Coroa",
-  chave: "Chave",
-  raio: "Raio",
-  lua: "Lua",
+export const BODY_NAMES: Record<Body, string> = {
+  bolha: "Bolha",
+  gota: "Gota",
+  ovo: "Ovo",
   estrela: "Estrela",
-  bussola: "Bússola",
-  folha: "Folha",
-  chama: "Chama",
-  torre: "Torre",
-  olho: "Olho",
-  ampulheta: "Ampulheta",
-  losangos: "Losangos",
+  nuvem: "Nuvem",
+  bicho: "Bichinho",
+};
+
+export const EYES_NAMES: Record<Eyes, string> = {
+  normal: "Normal",
+  feliz: "Feliz",
+  sono: "Sonolento",
+  uau: "Espantado",
+  esperto: "Esperto",
+  brilho: "Brilhando",
+};
+
+export const MOUTH_NAMES: Record<Mouth, string> = {
+  sorriso: "Sorriso",
+  riso: "Risada",
+  bico: "Bico",
+  lingua: "Língua",
+  serio: "Sério",
+  assobio: "Assobio",
+};
+
+export const HAT_NAMES: Record<Hat, string> = {
+  nenhum: "Nada",
+  coroa: "Coroa",
+  boina: "Boina",
+  laco: "Laço",
+  antena: "Antena",
+  pena: "Pena",
+  oculos: "Óculos",
 };
 
 export type AvatarSpec = {
-  shape: Shape;
   color: ColorKey;
-  pattern: Pattern;
-  metal: Metal;
-  mark: Mark;
+  body: Body;
+  eyes: Eyes;
+  mouth: Mouth;
+  hat: Hat;
 };
 
 export const DEFAULT_AVATAR: AvatarSpec = {
-  shape: "selo",
-  color: "carmim",
-  pattern: "diagonal",
-  metal: "latao",
-  mark: "coroa",
+  color: "ocre",
+  body: "bolha",
+  eyes: "feliz",
+  mouth: "sorriso",
+  hat: "nenhum",
 };
 
-const COLOR_KEYS = Object.keys(COLORS) as ColorKey[];
+export const COLOR_KEYS = Object.keys(COLORS) as ColorKey[];
 
 function pick<T>(list: readonly T[], rnd: () => number): T {
   return list[Math.floor(rnd() * list.length)];
@@ -116,117 +111,83 @@ function pick<T>(list: readonly T[], rnd: () => number): T {
 
 export function randomAvatar(rnd: () => number = Math.random): AvatarSpec {
   return {
-    shape: pick(SHAPES, rnd),
     color: pick(COLOR_KEYS, rnd),
-    pattern: pick(PATTERNS, rnd),
-    metal: pick(METALS, rnd),
-    mark: pick(MARKS, rnd),
+    body: pick(BODIES, rnd),
+    eyes: pick(EYES, rnd),
+    mouth: pick(MOUTHS, rnd),
+    hat: pick(HATS, rnd),
   };
 }
 
-/** Nunca confie no jsonb. Qualquer coisa fora do vocabulário cai no padrão. */
+/**
+ * Nunca confie no jsonb. Aceita também o formato antigo (fichas de esmalte),
+ * caindo no padrão em vez de quebrar a tela de quem já tinha avatar salvo.
+ */
 export function parseAvatar(raw: unknown): AvatarSpec {
   const o = (raw ?? {}) as Partial<AvatarSpec>;
   const ok = <T extends string>(v: unknown, list: readonly T[], fb: T): T =>
     list.includes(v as T) ? (v as T) : fb;
   return {
-    shape: ok(o.shape, SHAPES, DEFAULT_AVATAR.shape),
     color: ok(o.color, COLOR_KEYS, DEFAULT_AVATAR.color),
-    pattern: ok(o.pattern, PATTERNS, DEFAULT_AVATAR.pattern),
-    metal: ok(o.metal, METALS, DEFAULT_AVATAR.metal),
-    mark: ok(o.mark, MARKS, DEFAULT_AVATAR.mark),
+    body: ok(o.body, BODIES, DEFAULT_AVATAR.body),
+    eyes: ok(o.eyes, EYES, DEFAULT_AVATAR.eyes),
+    mouth: ok(o.mouth, MOUTHS, DEFAULT_AVATAR.mouth),
+    hat: ok(o.hat, HATS, DEFAULT_AVATAR.hat),
   };
 }
 
-/** Chave estável — serve de sufixo para os ids de <defs> do SVG. */
+/** Chave estável — sufixo para os ids de <defs> do SVG. */
 export function avatarKey(a: AvatarSpec): string {
-  return `${a.shape[0]}${a.color[0]}${a.pattern[0]}${a.metal[0]}${a.mark.slice(0, 3)}`;
+  return `${a.color[0]}${a.body[0]}${a.eyes[0]}${a.mouth[0]}${a.hat[0]}`;
 }
 
-/* ── geometria ──────────────────────────────────────────────────────────── */
+/* ── silhuetas ──────────────────────────────────────────────────────────── */
 
-function poly(sides: number, r: number, rot = 0): string {
+function star(pontas: number, re: number, ri: number, cy: number): string {
   const pts: string[] = [];
-  for (let i = 0; i < sides; i++) {
-    const a = rot + (i / sides) * Math.PI * 2;
-    pts.push(`${(50 + r * Math.cos(a)).toFixed(2)},${(50 + r * Math.sin(a)).toFixed(2)}`);
+  for (let i = 0; i < pontas * 2; i++) {
+    const r = i % 2 === 0 ? re : ri;
+    const a = -Math.PI / 2 + (i / (pontas * 2)) * Math.PI * 2;
+    pts.push(`${(50 + r * Math.cos(a)).toFixed(1)},${(cy + r * Math.sin(a)).toFixed(1)}`);
   }
   return `M${pts.join("L")}Z`;
 }
 
-/** Selo de cera: círculo com borda ondulada. */
-function seal(r: number, lobes = 14): string {
-  const steps = lobes * 8;
-  const pts: string[] = [];
-  for (let i = 0; i < steps; i++) {
-    const t = (i / steps) * Math.PI * 2;
-    const rr = r + Math.cos(t * lobes) * 2.4;
-    pts.push(`${(50 + rr * Math.cos(t)).toFixed(2)},${(50 + rr * Math.sin(t)).toFixed(2)}`);
-  }
-  return `M${pts.join("L")}Z`;
-}
-
-export function shapePath(shape: Shape, r = 46): string {
-  switch (shape) {
-    case "circulo":
-      return `M50,${50 - r}A${r},${r} 0 1,1 ${50 - 0.01},${50 - r}Z`;
-    case "hexagono":
-      return poly(6, r, -Math.PI / 2);
-    case "octogono":
-      return poly(8, r, Math.PI / 8);
-    case "losango":
-      return poly(4, r, -Math.PI / 2);
-    case "escudo":
-      return `M${50 - r * 0.82},${50 - r * 0.92}H${50 + r * 0.82}V${50 + r * 0.1}
-              Q${50 + r * 0.82},${50 + r * 0.78} 50,${50 + r * 0.98}
-              Q${50 - r * 0.82},${50 + r * 0.78} ${50 - r * 0.82},${50 + r * 0.1}Z`.replace(/\s+/g, " ");
-    case "selo":
-      return seal(r - 2);
+export function bodyPath(body: Body): string {
+  switch (body) {
+    case "bolha":
+      return "M50 19C73 19 85 34 85 55C85 75 70 88 50 88C30 88 15 75 15 55C15 34 27 19 50 19Z";
+    case "gota":
+      return "M50 14C62 33 85 44 85 61C85 78 69 89 50 89C31 89 15 78 15 61C15 44 38 33 50 14Z";
+    case "ovo":
+      return "M50 14C67 14 81 38 81 59C81 78 67 89 50 89C33 89 19 78 19 59C19 38 33 14 50 14Z";
+    case "estrela":
+      return star(5, 38, 19, 54);
+    case "nuvem":
+      return (
+        "M27 88C14 88 8 76 13 66C6 56 15 43 27 46C31 32 49 27 57 38" +
+        "C71 31 85 42 82 55C92 60 91 79 77 88Z"
+      );
+    case "bicho":
+      return (
+        "M24 32L16 11L39 23ZM76 32L84 11L61 23Z" +
+        "M50 21C73 21 85 36 85 57C85 76 70 88 50 88C30 88 15 76 15 57C15 36 27 21 50 21Z"
+      );
   }
 }
 
-/** Brasões — geométricos e heráldicos, legíveis a 24px. */
-export function markPath(mark: Mark): string {
-  switch (mark) {
-    case "coroa":
-      return "M30 62h40v-6H30zM30 52l7-14 6 9 7-15 7 15 6-9 7 14z";
-    case "chave":
-      return "M50 26a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 6a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM47 44h6v26h-6zM53 54h9v5h-9zM53 63h7v5h-7z";
-    case "raio":
-      return "M56 24 34 54h12l-6 22 24-32H52z";
-    case "lua":
-      return "M58 26a24 24 0 1 0 0 48 20 20 0 1 1 0-48z";
-    case "estrela": {
-      const pts: string[] = [];
-      for (let i = 0; i < 10; i++) {
-        const r = i % 2 === 0 ? 25 : 10.5;
-        const a = -Math.PI / 2 + (i / 10) * Math.PI * 2;
-        pts.push(`${(50 + r * Math.cos(a)).toFixed(2)},${(50 + r * Math.sin(a)).toFixed(2)}`);
-      }
-      return `M${pts.join("L")}Z`;
-    }
-    case "bussola": {
-      const pts: string[] = [];
-      for (let i = 0; i < 8; i++) {
-        const r = i % 2 === 0 ? 26 : 8;
-        const a = -Math.PI / 2 + (i / 8) * Math.PI * 2;
-        pts.push(`${(50 + r * Math.cos(a)).toFixed(2)},${(50 + r * Math.sin(a)).toFixed(2)}`);
-      }
-      return `M${pts.join("L")}Z`;
-    }
-    case "folha":
-      return "M50 24c14 10 18 22 12 32-5 8-12 10-12 10s-7-2-12-10c-6-10-2-22 12-32zM48 44h4v30h-4z";
-    case "chama":
-      return "M50 22c10 12 16 20 16 30a16 16 0 0 1-32 0c0-10 6-18 16-30zm0 18c-4 6-6 10-6 14a6 6 0 0 0 12 0c0-4-2-8-6-14z";
-    case "torre":
-      return "M32 40h6v-8h6v8h4v-8h6v8h6v-8h6v8h2v34H30V40zM44 54h12v20H44z";
-    case "olho":
-      return "M50 34c14 0 24 10 26 16-2 6-12 16-26 16s-24-10-26-16c2-6 12-16 26-16zm0 8a8 8 0 1 0 0 16 8 8 0 0 0 0-16z";
-    case "ampulheta":
-      return "M32 24h36v6H32zM32 70h36v6H32zM36 30h28L52 50l12 20H36l12-20z";
-    case "losangos":
-      return "M50 22l11 13-11 13-11-13zM50 52l11 13-11 13-11-13z";
+/** Ponto onde o chapéu assenta, por silhueta. */
+export function hatAnchor(body: Body): { x: number; y: number } {
+  switch (body) {
+    case "gota":
+      return { x: 50, y: 20 };
+    case "estrela":
+      return { x: 50, y: 21 };
+    case "nuvem":
+      return { x: 52, y: 32 };
+    case "bicho":
+      return { x: 50, y: 24 };
     default:
-      return "";
+      return { x: 50, y: 21 };
   }
 }

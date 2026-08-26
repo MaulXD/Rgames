@@ -14,9 +14,9 @@ import type { Game } from "@/lib/games";
  * era a reclamação certa. Agora o botão cria a sala de verdade via RPC e
  * leva para o lobby.
  *
- * O brilho é verniz e foil pegando luz, não glow: reflexo especular segue o
- * ponteiro, a moldura de latão acende, a carta inclina de leve. Onde não há
- * ponteiro (celular) o foil fica estático — o toque abre a sala.
+ * Cada jogo é uma caixa de brinquedo de cor diferente: fundo chapado,
+ * contorno grosso e a lateral pintada por baixo (a sombra sólida). O reflexo
+ * segue o ponteiro; onde não há ponteiro, ele fica parado e o toque abre a sala.
  */
 export function GameCard({ game }: { game: Game }) {
   const router = useRouter();
@@ -69,14 +69,13 @@ export function GameCard({ game }: { game: Game }) {
 
   const skin = {
     "--c-bg": game.skin.bg,
-    "--c-lit": game.skin.lit,
+    "--c-deep": game.skin.deep,
     "--c-ink": game.skin.ink,
     "--c-dim": game.skin.dim,
     "--c-glow": game.skin.glow,
-    "--c-sheen": game.skin.sheen,
   } as CSSProperties;
 
-  const isMvp = game.seal === "MVP";
+  const isMvp = game.key === "letreiro";
 
   return (
     <article ref={ref} className="card" style={skin} onPointerMove={onMove} onPointerLeave={onLeave}>
@@ -87,7 +86,7 @@ export function GameCard({ game }: { game: Game }) {
         {game.seal}
       </span>
 
-      {/* cantoneiras de guilhoché */}
+      {/* estrelinhas de canto */}
       <span
         aria-hidden
         style={{ position: "absolute", top: 13, left: 13, zIndex: 5, color: "var(--c-glow)", opacity: 0.5 }}

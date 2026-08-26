@@ -29,9 +29,11 @@ export function SiteHeader() {
         href="/perfil"
         className="flex items-center gap-3 py-1 pl-1 pr-3 transition-colors"
         style={{
-          border: "1px solid var(--line)",
+          border: "3px solid var(--ink)",
           borderRadius: 999,
-          minHeight: 44,
+          minHeight: 46,
+          background: "rgb(7 28 26 / .5)",
+          fontWeight: 700,
         }}
       >
         {status === "ready" ? (
@@ -39,12 +41,12 @@ export function SiteHeader() {
         ) : (
           <span
             className="block h-[34px] w-[34px] rounded-full"
-            style={{ background: "var(--line)" }}
+            style={{ background: "var(--line)", border: "3px solid var(--ink)" }}
             aria-hidden
           />
         )}
         <span className="text-sm font-medium">
-          {status === "ready" ? (named ? profile!.display_name : "Montar ficha") : "…"}
+          {status === "ready" ? (named ? profile!.display_name : "Montar bichinho") : "…"}
         </span>
       </Link>
     </header>

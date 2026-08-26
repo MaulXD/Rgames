@@ -89,7 +89,7 @@ export function HouseRules({
           <span className="eyebrow">Regras da casa</span>
           <span className="mt-1 block text-sm dim">{resumo}</span>
         </span>
-        <span className="mono text-xs" style={{ color: "var(--brass-300)" }}>
+        <span className="mono text-xs" style={{ color: "var(--vivo-amarelo)" }}>
           {open ? "fechar" : "mudar"}
         </span>
       </button>

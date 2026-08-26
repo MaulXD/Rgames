@@ -64,6 +64,7 @@ export function LetreiroGame({
   const [flash, setFlash] = useState<{ kind: "ok" | "bad"; text: string } | null>(null);
   const [left, setLeft] = useState<number>(0);
   const offset = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const revealing = match.public_state.phase === "reveal" || match.status === "finished";
 
@@ -193,6 +194,8 @@ export function LetreiroGame({
     if (revealing) return;
     function onKey(e: KeyboardEvent) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // com o foco no campo, quem manda é o próprio campo
+      if (e.target instanceof HTMLInputElement) return;
       if (e.key === "Enter") {
         e.preventDefault();
         const alvo = typed ? pathForTyped : path;
@@ -270,12 +273,38 @@ export function LetreiroGame({
       />
 
       {/* ── palavra em construção ──────────────────────────────────────── */}
-      <div className="compose" data-state={trailState}>
-        <span className="mono compose-text">{current || " "}</span>
+      <label className="compose" data-state={trailState}>
+        <input
+          ref={inputRef}
+          className="mono compose-input"
+          value={current}
+          onChange={(e) => {
+            setTapPath([]);
+            setTyped(e.target.value.slice(0, 16));
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const alvo = typed ? pathForTyped : path;
+              if (alvo && alvo.length >= 2) void submit(pathWord(grid, alvo), alvo);
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              limpar();
+            }
+          }}
+          placeholder="digite ou arraste"
+          inputMode="text"
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          aria-label="Palavra"
+          disabled={left === 0}
+        />
         {current.length >= 3 && trailState === "ok" && (
           <span className="compose-pts">+{score(current.length)}</span>
         )}
-      </div>
+      </label>
 
       <div className="compose-actions">
         <button
@@ -301,8 +330,9 @@ export function LetreiroGame({
       )}
 
       <p className="hint dim">
-        Digite ou arraste o dedo pelas letras vizinhas. <kbd>Enter</kbd> envia,{" "}
-        <kbd>Esc</kbd> limpa.
+        Três jeitos: <strong>digite</strong> no campo, <strong>arraste</strong> pelas letras
+        vizinhas, ou <strong>clique</strong> letra por letra — e clique de novo na
+        última para enviar. <kbd>Enter</kbd> envia, <kbd>Esc</kbd> limpa.
       </p>
 
       {/* ── barras de tensão ───────────────────────────────────────────── */}

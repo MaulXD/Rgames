@@ -11,14 +11,17 @@ export type Game = {
   /** Selo do canto: em que fase do roadmap o jogo em si fica jogável. */
   seal: string;
   phase: string;
-  /** paleta do mundo do jogo — ver docs/01-DIRECAO-DE-ARTE.md §3.3 */
+  /**
+   * Cada jogo é uma caixa de brinquedo de cor diferente.
+   * `deep` é a sombra sólida embaixo da caixa — não é gradiente, é a lateral
+   * pintada. Ver docs/01-DIRECAO-DE-ARTE.md.
+   */
   skin: {
     bg: string;
-    lit: string;
+    deep: string;
     ink: string;
     dim: string;
     glow: string;
-    sheen: string;
   };
 };
 
@@ -32,15 +35,14 @@ export const GAMES: Game[] = [
       "Dezesseis dados de letra caem na bandeja. Três minutos, todo mundo na mesma grade. No fim, o jogo mostra as palavras que ninguém viu.",
     players: "1–8",
     duration: "3–12 min",
-    seal: "MVP",
+    seal: "Jogável",
     phase: "Fase 1",
     skin: {
-      bg: "#2E2015",
-      lit: "#5C4126",
-      ink: "#F6EEDA",
-      dim: "#C3B091",
-      glow: "#B4DC4C",
-      sheen: "#FFF8DE",
+      bg: "#2FA36A",
+      deep: "#1B6B44",
+      ink: "#FFFBEC",
+      dim: "#CFEEDD",
+      glow: "#FFC42E",
     },
   },
   {
@@ -52,15 +54,14 @@ export const GAMES: Game[] = [
       "Quatro mundos no mesmo motor: uma mansão em 1953, uma boate em 1987, uma escavação no deserto e uma estação orbital. Cada um com sua regra.",
     players: "3–6",
     duration: "25–40 min",
-    seal: "Fase 2",
+    seal: "Motor pronto",
     phase: "Fase 2",
     skin: {
-      bg: "#0E2A22",
-      lit: "#1E4A38",
-      ink: "#ECE0C8",
-      dim: "#A5B7A4",
-      glow: "#D4AC63",
-      sheen: "#FFF4D4",
+      bg: "#8A48D6",
+      deep: "#5A2894",
+      ink: "#FFF7FF",
+      dim: "#E7D2FB",
+      glow: "#FFC42E",
     },
   },
   {
@@ -75,12 +76,11 @@ export const GAMES: Game[] = [
     seal: "Fase 3",
     phase: "Fase 3",
     skin: {
-      bg: "#D8C9A6",
-      lit: "#EFE4C6",
-      ink: "#33271A",
-      dim: "#6E5A40",
-      glow: "#B03C3F",
-      sheen: "#FFFDF2",
+      bg: "#EA6A2A",
+      deep: "#A8420F",
+      ink: "#FFF6EC",
+      dim: "#FCDCC3",
+      glow: "#2FD8C4",
     },
   },
   {
@@ -95,12 +95,11 @@ export const GAMES: Game[] = [
     seal: "Fase 4",
     phase: "Fase 4",
     skin: {
-      bg: "#7E351F",
-      lit: "#B0522F",
-      ink: "#FBF1E4",
-      dim: "#E2BCA6",
-      glow: "#5FC0A0",
-      sheen: "#FFEBD2",
+      bg: "#2B84E0",
+      deep: "#14559B",
+      ink: "#F2F9FF",
+      dim: "#CBE4FC",
+      glow: "#FF6FA5",
     },
   },
 ];

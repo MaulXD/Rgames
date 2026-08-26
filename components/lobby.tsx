@@ -329,14 +329,14 @@ export function Lobby({ code }: { code: string }) {
                   }
                   style={{
                     flex: "none",
-                    width: 46,
-                    height: 46,
-                    borderRadius: 3,
+                    width: 50,
+                    height: 50,
+                    borderRadius: 999,
                     background: COLORS[k].enamel,
                     opacity: taken ? 0.28 : 1,
                     cursor: taken ? "not-allowed" : "pointer",
-                    border: `2px solid ${me.color === k ? "var(--brass-300)" : "transparent"}`,
-                    boxShadow: `inset 0 -5px 9px ${COLORS[k].deep}, inset 0 4px 6px rgb(255 255 255 / .3)`,
+                    border: `3px solid ${me.color === k ? "var(--ink)" : "transparent"}`,
+                    boxShadow: `inset 0 -7px 0 ${COLORS[k].deep}, inset 0 5px 0 ${COLORS[k].light}`,
                   }}
                 >
                   <span className="sr-only">{COLORS[k].name}</span>
@@ -361,7 +361,7 @@ export function Lobby({ code }: { code: string }) {
             </button>
           </div>
           {note && (
-            <p className="mt-3 text-sm" style={{ color: "var(--brass-300)" }}>
+            <p className="mt-3 text-sm" style={{ color: "var(--vivo-amarelo)" }}>
               {note}
             </p>
           )}

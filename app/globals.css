@@ -4,73 +4,79 @@
    MESA — sistema visual
    Ver docs/01-DIRECAO-DE-ARTE.md
 
-   Um mundo só, escolhido de propósito: uma mesa de feltro sob luz de
-   luminária, à noite. Papel claro fazia o site parecer documento — e o
-   assunto aqui é brincadeira, não catálogo de museu.
+   TERCEIRA direção, e a certa. A primeira era papel claro e comedida: parecia
+   documento. A segunda era feltro e latão heráldico: parecia museu. As duas
+   erraram o registro — o assunto é BRINCADEIRA.
 
-   Riqueza vem de material e ornamento, não de glow: feltro com relevo,
-   guilhoché de carta de baralho, latão que pega luz, selo de cera.
+   Agora: brinquedo de madeira pintado. Cor viva e chapada, contorno grosso,
+   forma gorda, botão que afunda de verdade. O feltro escuro fica só como
+   PALCO — é ele que faz a cor viva cantar. Sem gradiente de marca, sem glow:
+   o brilho vem de contorno, sombra sólida e barriga clara.
    ══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* feltro */
-  --felt-950: #061713;
-  --felt-900: #0a231d;
-  --felt-800: #103128;
-  --felt-700: #164034;
-  --felt-600: #1d5343;
-  --felt-500: #2a6b57;
+  /* palco */
+  --felt-950: #071c1a;
+  --felt-900: #0b2723;
+  --felt-800: #10362f;
+  --felt-700: #17473d;
+  --felt-600: #1f5c4d;
 
-  /* latão — mais quente e mais claro que antes; é o metal do jogo */
-  --brass-700: #8a6524;
-  --brass-600: #b58a35;
-  --brass-500: #d8ac52;
-  --brass-400: #e8c77e;
-  --brass-300: #f4e0ac;
+  /* tinta: o contorno de tudo */
+  --ink: #1d1526;
+  --ink-soft: #2c2138;
 
-  /* marfim e papel de carta */
-  --ivory-100: #f6efdd;
-  --ivory-200: #e6d9bd;
-  --ivory-400: #b9a887;
-  --ivory-600: #8a7c62;
+  /* cores vivas */
+  --vivo-vermelho: #ff4d5e;
+  --vivo-laranja: #ff8a2b;
+  --vivo-amarelo: #ffc42e;
+  --vivo-limao: #a8e827;
+  --vivo-verde: #5fd13a;
+  --vivo-menta: #25c08b;
+  --vivo-turquesa: #2fd8c4;
+  --vivo-azul: #2e8cff;
+  --vivo-roxo: #b25cff;
+  --vivo-rosa: #ff6fa5;
 
-  /* laca e sinais */
-  --lacquer: #c8402f;
-  --lacquer-dark: #8d2a1e;
-  --jade: #3aa677;
+  /* sombras sólidas de cada viva (o "por baixo" do botão de brinquedo) */
+  --sob-amarelo: #c58f00;
+  --sob-verde: #3a9420;
+  --sob-vermelho: #c22436;
+  --sob-azul: #1157bc;
 
   /* papéis semânticos */
   --bg: var(--felt-800);
   --bg-sunk: var(--felt-900);
   --bg-raise: var(--felt-700);
-  --line: #1c4a3c;
-  --line-strong: #2b6350;
-  --fg: var(--ivory-100);
-  --fg-mid: #d8ccb0;
-  --fg-dim: #9fb3a4;
-  --fg-faint: #74907f;
-  --accent: var(--brass-400);
+  --line: #1e5245;
+  --line-strong: #2c6d5b;
+  --fg: #fdf7e8;
+  --fg-mid: #e2dcc8;
+  --fg-dim: #a8c4b6;
+  --fg-faint: #7ba392;
+  --accent: var(--vivo-amarelo);
 
-  /* sombras: contato curto + ambiente longo, na cor da tinta */
-  --shadow-rest: 0 1px 2px rgb(3 12 9 / 0.5), 0 14px 30px -12px rgb(3 12 9 / 0.7);
-  --shadow-lift: 0 4px 6px rgb(3 12 9 / 0.45), 0 40px 70px -18px rgb(3 12 9 / 0.85);
-  --shadow-inset: inset 0 2px 8px -3px rgb(3 12 9 / 0.75);
+  /* sombras: contato curto + ambiente longo */
+  --shadow-rest: 0 2px 0 rgb(4 16 14 / 0.5), 0 12px 26px -12px rgb(4 16 14 / 0.7);
+  --shadow-lift: 0 4px 0 rgb(4 16 14 / 0.5), 0 34px 60px -18px rgb(4 16 14 / 0.85);
+  --shadow-inset: inset 0 3px 0 rgb(4 16 14 / 0.55);
 
-  /* movimento */
+  /* raios gordos */
+  --r-sm: 8px;
+  --r-md: 14px;
+  --r-lg: 22px;
+
   --dur-instant: 80ms;
   --dur-fast: 160ms;
   --dur-base: 260ms;
   --dur-slow: 420ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   color-scheme: dark;
 }
 
-/* ── base ─────────────────────────────────────────────────────────────────
-   O fundo é uma mesa: feltro com grão, um foco de luz quente em cima e
-   vinheta funda nas bordas. Isso é o que dá profundidade sem gradiente
-   de marca. */
+/* ── base ─────────────────────────────────────────────────────────────── */
 
 html {
   scroll-behavior: smooth;
@@ -84,14 +90,12 @@ body {
   line-height: 1.6;
   background-color: var(--felt-800);
   background-image:
-    /* foco da luminária */
-    radial-gradient(130% 70% at 50% -12%, rgb(232 199 126 / 0.16), transparent 62%),
-    /* vinheta */
-    radial-gradient(120% 100% at 50% 40%, transparent 42%, rgb(4 14 11 / 0.72) 100%);
+    radial-gradient(120% 62% at 50% -10%, rgb(255 196 46 / 0.14), transparent 60%),
+    radial-gradient(120% 100% at 50% 45%, transparent 40%, rgb(4 16 14 / 0.7) 100%);
   background-attachment: fixed;
 }
 
-/* trama do feltro + guilhoché de carta de baralho, os dois muito baixos */
+/* confete de losangos, bem baixo: dá vida sem virar padrão de fundo de site */
 body::before {
   content: "";
   position: fixed;
@@ -99,22 +103,16 @@ body::before {
   z-index: 0;
   pointer-events: none;
   opacity: 0.5;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Cg fill='none' stroke='%23e8c77e' stroke-width='0.7' opacity='0.13'%3E%3Cpath d='M22 4 L40 22 L22 40 L4 22 Z'/%3E%3Ccircle cx='22' cy='22' r='4.5'/%3E%3Cpath d='M0 0 L4 4 M44 0 L40 4 M0 44 L4 40 M44 44 L40 40'/%3E%3C/g%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.09'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='72' height='72'%3E%3Cg opacity='0.1'%3E%3Cpath d='M18 6 l6 6 -6 6 -6 -6z' fill='%23ffc42e'/%3E%3Cpath d='M54 30 l5 5 -5 5 -5 -5z' fill='%232fd8c4'/%3E%3Cpath d='M36 54 l5 5 -5 5 -5 -5z' fill='%23ff6fa5'/%3E%3Ccircle cx='62' cy='62' r='3' fill='%23a8e827'/%3E%3Ccircle cx='8' cy='44' r='2.6' fill='%23ff8a2b'/%3E%3C/g%3E%3C/svg%3E");
 }
-
-/* ── tipografia ───────────────────────────────────────────────────────────
-   Fraunces com o eixo WONK aberto e peso cheio. Antes eu usei educado
-   demais; título de jogo tem atitude. */
 
 h1,
 h2,
 h3 {
   font-family: var(--font-fraunces), "Iowan Old Style", Georgia, serif;
-  font-variation-settings: "SOFT" 4, "WONK" 1, "opsz" 96;
+  font-variation-settings: "SOFT" 40, "WONK" 1, "opsz" 96;
   font-weight: 700;
-  letter-spacing: -0.026em;
+  letter-spacing: -0.028em;
   line-height: 0.98;
   text-wrap: balance;
   margin: 0;
@@ -132,14 +130,13 @@ a {
   font-variant-numeric: tabular-nums;
 }
 
-/* rótulo de latão gravado */
 .eyebrow {
   font-family: var(--font-archivo), var(--font-inter-tight), sans-serif;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.22em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--brass-400);
+  color: var(--vivo-amarelo);
 }
 
 .dim {
@@ -147,182 +144,181 @@ a {
 }
 
 :focus-visible {
-  outline: 2px solid var(--brass-400);
+  outline: 3px solid var(--vivo-amarelo);
   outline-offset: 3px;
-  border-radius: 2px;
+  border-radius: var(--r-sm);
 }
 
 ::selection {
-  background: rgb(232 199 126 / 0.28);
+  background: rgb(255 196 46 / 0.32);
 }
 
-/* ── latão ────────────────────────────────────────────────────────────────
-   Metal é literalmente gradiente — a única exceção da lista de proibições. */
-
+/* título em cor viva chapada — sem gradiente clipado */
 .brass-text {
-  background: linear-gradient(172deg, var(--brass-300) 0%, var(--brass-500) 48%, var(--brass-700) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--vivo-amarelo);
+  text-shadow: 0 4px 0 var(--sob-amarelo);
 }
 
+/* fita de confete no lugar do filete de latão */
 .brass-rule {
-  height: 3px;
-  background: linear-gradient(
-    100deg,
-    transparent 0%,
-    var(--brass-700) 6%,
-    var(--brass-300) 26%,
-    var(--brass-600) 50%,
-    var(--brass-300) 74%,
-    var(--brass-700) 94%,
-    transparent 100%
+  height: 8px;
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--vivo-vermelho) 0 14px,
+    var(--vivo-amarelo) 14px 28px,
+    var(--vivo-turquesa) 28px 42px,
+    var(--vivo-roxo) 42px 56px
   );
 }
 
-/* filete duplo, como moldura de carta impressa */
-.rule-double {
-  border-top: 1px solid var(--line-strong);
-  box-shadow: 0 3px 0 -2px var(--line);
-}
-
-/* ── botões ───────────────────────────────────────────────────────────── */
+/* ── botões de brinquedo ──────────────────────────────────────────────── */
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.55rem;
-  min-height: 48px;
-  padding: 0 1.5rem;
-  border-radius: 3px;
-  border: 1px solid transparent;
+  gap: 0.5rem;
+  min-height: 50px;
+  padding: 0 1.6rem;
+  border-radius: 999px;
+  border: 3px solid var(--ink);
   cursor: pointer;
   font-family: var(--font-archivo), var(--font-inter-tight), sans-serif;
-  font-weight: 650;
-  font-size: 0.88rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-weight: 800;
+  font-size: 0.94rem;
+  letter-spacing: 0.02em;
   transition:
     transform var(--dur-instant) var(--ease-out),
-    box-shadow var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-instant) var(--ease-out),
     filter var(--dur-fast) var(--ease-out);
-}
-.btn:active {
-  transform: translateY(1.5px);
 }
 .btn:disabled {
   cursor: not-allowed;
-  filter: grayscale(0.6) brightness(0.7);
+  filter: saturate(0.35) brightness(0.72);
 }
 
-/* placa de latão estampada */
-.btn-brass {
-  color: #23180a;
-  background: linear-gradient(172deg, var(--brass-300) 0%, var(--brass-400) 34%, var(--brass-600) 100%);
-  box-shadow:
-    inset 0 1px 0 rgb(255 250 230 / 0.75),
-    inset 0 -2px 0 rgb(90 62 15 / 0.5),
-    var(--shadow-rest);
-  text-shadow: 0 1px 0 rgb(255 250 230 / 0.4);
-}
-.btn-brass:hover:not(:disabled) {
-  box-shadow:
-    inset 0 1px 0 rgb(255 252 240 / 0.9),
-    inset 0 -2px 0 rgb(90 62 15 / 0.5),
-    0 0 0 1px rgb(232 199 126 / 0.35),
-    var(--shadow-lift);
-  filter: brightness(1.05);
-}
-
+/* o gesto: afunda de verdade e a sombra sólida desaparece */
+.btn-brass,
+.btn-vivo,
 .btn-lacquer {
-  color: #fff3ef;
-  background: linear-gradient(172deg, #d9503d 0%, var(--lacquer) 40%, var(--lacquer-dark) 100%);
-  box-shadow: inset 0 1px 0 rgb(255 220 210 / 0.4), var(--shadow-rest);
+  color: var(--ink);
+  box-shadow: 0 5px 0 var(--btn-sob), var(--shadow-rest);
+}
+.btn-brass:active:not(:disabled),
+.btn-vivo:active:not(:disabled),
+.btn-lacquer:active:not(:disabled) {
+  transform: translateY(5px);
+  box-shadow: 0 0 0 var(--btn-sob);
+}
+.btn-brass:hover:not(:disabled),
+.btn-vivo:hover:not(:disabled),
+.btn-lacquer:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+
+.btn-brass {
+  --btn-sob: var(--sob-amarelo);
+  background: var(--vivo-amarelo);
+}
+.btn-vivo {
+  --btn-sob: var(--sob-verde);
+  background: var(--vivo-limao);
+}
+.btn-lacquer {
+  --btn-sob: var(--sob-vermelho);
+  background: var(--vivo-vermelho);
+  color: #fff4f5;
 }
 
 .btn-ghost {
-  color: var(--fg-mid);
+  color: var(--fg);
   border-color: var(--line-strong);
-  background: rgb(6 23 19 / 0.4);
+  background: rgb(7 28 26 / 0.55);
 }
 .btn-ghost:hover:not(:disabled) {
-  color: var(--fg);
-  border-color: var(--brass-600);
-  background: rgb(6 23 19 / 0.7);
+  border-color: var(--vivo-amarelo);
+  background: rgb(7 28 26 / 0.8);
+}
+.btn-ghost:active:not(:disabled) {
+  transform: translateY(2px);
 }
 
-/* ── plaquetas e selos ────────────────────────────────────────────────── */
+/* ── plaquetas ────────────────────────────────────────────────────────── */
 
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.3rem 0.65rem;
-  border: 1px solid var(--line-strong);
+  padding: 0.34rem 0.75rem;
+  border: 2px solid var(--ink);
   border-radius: 999px;
-  background: rgb(6 23 19 / 0.5);
-  font-family: var(--font-jetbrains), monospace;
-  font-size: 0.7rem;
+  background: rgb(255 255 255 / 0.12);
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.74rem;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--fg-mid);
 }
 
-/* selo de cera com o número da seção */
+/* botão redondo com número — o marcador de etapa */
 .seal {
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
+  width: 48px;
+  height: 48px;
   flex: none;
   border-radius: 50%;
-  color: #23180a;
+  border: 3px solid var(--ink);
+  color: var(--ink);
   font-family: var(--font-archivo), sans-serif;
-  font-weight: 700;
-  font-size: 0.95rem;
-  background: radial-gradient(circle at 34% 28%, var(--brass-300), var(--brass-500) 52%, var(--brass-700) 100%);
-  box-shadow:
-    inset 0 2px 3px rgb(255 250 230 / 0.6),
-    inset 0 -3px 5px rgb(70 46 8 / 0.6),
-    var(--shadow-rest);
+  font-weight: 800;
+  font-size: 1.05rem;
+  background: var(--vivo-amarelo);
+  box-shadow: 0 4px 0 var(--sob-amarelo);
 }
 
-/* ── painel: superfície de madeira/feltro elevada ─────────────────────── */
+/* ── painéis ──────────────────────────────────────────────────────────── */
 
 .panel {
   position: relative;
-  border: 1px solid var(--line-strong);
-  border-radius: 4px;
-  background:
-    radial-gradient(120% 90% at 30% 0%, rgb(232 199 126 / 0.07), transparent 60%),
-    var(--felt-700);
+  border: 3px solid var(--ink);
+  border-radius: var(--r-md);
+  background: var(--felt-700);
   box-shadow: var(--shadow-rest);
 }
 
-/* moldura interna de filete duplo, como carta impressa */
-.panel::after {
-  content: "";
-  position: absolute;
-  inset: 6px;
-  border: 1px solid rgb(232 199 126 / 0.18);
-  border-radius: 2px;
-  pointer-events: none;
-}
+/* ── campos ───────────────────────────────────────────────────────────── */
 
-/* ── campo de código ──────────────────────────────────────────────────── */
+.field {
+  padding: 0.85rem 1.1rem;
+  border: 3px solid var(--ink);
+  border-radius: var(--r-md);
+  background: var(--felt-950);
+  color: var(--fg);
+  font-size: 1.05rem;
+  outline: none;
+  box-shadow: var(--shadow-inset);
+}
+.field:focus {
+  border-color: var(--vivo-amarelo);
+}
+.field::placeholder {
+  color: var(--fg-faint);
+}
 
 .code-field {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0.4rem 0.4rem 1.1rem;
-  border: 1px solid var(--line-strong);
-  border-radius: 3px;
+  padding: 0.35rem 0.35rem 0.35rem 1.15rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
   background: var(--felt-950);
   box-shadow: var(--shadow-inset);
 }
 .code-field:focus-within {
-  border-color: var(--brass-600);
+  border-color: var(--vivo-amarelo);
 }
 .code-field input {
   flex: 1;
@@ -330,24 +326,165 @@ a {
   background: none;
   border: 0;
   outline: none;
-  color: var(--brass-300);
+  color: var(--vivo-amarelo);
   font-family: var(--font-jetbrains), monospace;
   font-size: 1.3rem;
-  font-weight: 500;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.34em;
+  letter-spacing: 0.3em;
   text-transform: uppercase;
 }
 .code-field input::placeholder {
-  color: #3f6a5a;
-  letter-spacing: 0.34em;
+  color: #3d6b5c;
+  letter-spacing: 0.3em;
+}
+
+.code-plate {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.08em;
+  padding: 0.5rem 1.15rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--vivo-amarelo);
+  box-shadow: 0 4px 0 var(--sob-amarelo);
+  font-family: var(--font-jetbrains), monospace;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.16em;
+  color: var(--ink);
+}
+
+/* ── palco do avatar ──────────────────────────────────────────────────── */
+
+.stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 2rem 1.5rem 1.6rem;
+  border: 3px solid var(--ink);
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, #1c5a4a, #103128);
+  box-shadow: var(--shadow-rest);
+  overflow: hidden;
+}
+.stage-glow {
+  position: absolute;
+  inset: -30% -30% 40%;
+  background: radial-gradient(circle at 50% 40%, rgb(255 196 46 / 0.28), transparent 62%);
+  pointer-events: none;
+}
+.stage > svg {
+  position: relative;
+  filter: drop-shadow(0 10px 0 rgb(4 16 14 / 0.45));
+}
+.stage-name {
+  position: relative;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 60, "WONK" 1, "opsz" 72;
+  font-weight: 700;
+  font-size: 1.7rem;
+  line-height: 1;
+  text-align: center;
+  color: var(--fg);
+}
+.stage-sub {
+  position: relative;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--vivo-amarelo);
+}
+
+/* ── chips de escolha ─────────────────────────────────────────────────── */
+
+.chip {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 62px;
+  height: 62px;
+  padding: 4px;
+  border: 3px solid var(--line);
+  border-radius: var(--r-md);
+  background: rgb(7 28 26 / 0.5);
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition:
+    transform var(--dur-fast) var(--ease-pop),
+    border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+.chip:hover {
+  border-color: var(--line-strong);
+}
+.chip[data-on="true"] {
+  border-color: var(--vivo-amarelo);
+  background: rgb(255 196 46 / 0.16);
+  transform: translateY(-3px) scale(1.04);
+}
+.chip:active {
+  transform: translateY(1px);
+}
+
+.swatch {
+  display: block;
+  width: 38px;
+  height: 38px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+}
+
+/* ── assentos ─────────────────────────────────────────────────────────── */
+
+.seat {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.7rem 0.9rem;
+  border: 3px solid var(--line);
+  border-radius: var(--r-md);
+  background: rgb(7 28 26 / 0.5);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.seat[data-me="true"] {
+  border-color: var(--vivo-amarelo);
+  background: rgb(255 196 46 / 0.09);
+}
+.seat[data-away="true"] {
+  opacity: 0.45;
+}
+.seat-empty {
+  border-style: dashed;
+  color: var(--fg-faint);
+  justify-content: center;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.dot {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border-radius: 50%;
+  border: 2.5px solid var(--ink);
+}
+.dot[data-on="true"] {
+  background: var(--vivo-limao);
+}
+.dot[data-on="false"] {
+  background: #3f6a5c;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   CARTA DE JOGO
-   Uma caixa de jogo vista de frente: campo saturado, moldura de filete
-   duplo, ornamento nos cantos, emblema grande, selo de latão.
-   O brilho é verniz e foil pegando luz — nunca glow.
+   CARTA DE JOGO — caixa de brinquedo
    ══════════════════════════════════════════════════════════════════════════ */
 
 .card {
@@ -361,40 +498,26 @@ a {
   isolation: isolate;
   display: flex;
   flex-direction: column;
-  border-radius: 5px;
+  border-radius: var(--r-lg);
   overflow: hidden;
   color: var(--c-ink);
   background-color: var(--c-bg);
-  background-image: radial-gradient(120% 88% at 26% 0%, var(--c-lit), transparent 66%);
-  border: 1px solid rgb(0 0 0 / 0.5);
-  box-shadow: var(--shadow-rest);
+  border: 3px solid var(--ink);
+  box-shadow: 0 6px 0 var(--c-deep), var(--shadow-rest);
   transform: perspective(1200px) rotateX(var(--tilt-x)) rotateY(var(--tilt-y))
     translate3d(0, var(--lift), 0);
   transform-style: preserve-3d;
   transition:
-    transform var(--dur-base) var(--ease-out),
+    transform var(--dur-base) var(--ease-pop),
     box-shadow var(--dur-base) var(--ease-out);
   will-change: transform;
 }
-
 .card:where(:hover, :focus-within) {
-  --lift: -8px;
-  box-shadow: var(--shadow-lift), 0 0 0 1px color-mix(in srgb, var(--c-glow) 45%, transparent);
+  --lift: -6px;
+  box-shadow: 0 10px 0 var(--c-deep), var(--shadow-lift);
 }
 
-/* trama do papel da carta */
-.card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.42;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23c)'/%3E%3C/svg%3E");
-}
-
-/* verniz: reflexo especular seguindo o ponteiro */
+/* brilho de verniz seguindo o ponteiro */
 .card-gloss {
   position: absolute;
   inset: 0;
@@ -403,10 +526,10 @@ a {
   opacity: 0;
   transition: opacity var(--dur-base) var(--ease-out);
   background: radial-gradient(
-    46% 36% at var(--mx) var(--my),
-    color-mix(in srgb, var(--c-sheen) 72%, transparent) 0%,
-    color-mix(in srgb, var(--c-sheen) 20%, transparent) 44%,
-    transparent 74%
+    44% 34% at var(--mx) var(--my),
+    rgb(255 255 255 / 0.4) 0%,
+    rgb(255 255 255 / 0.1) 44%,
+    transparent 72%
   );
   mix-blend-mode: soft-light;
 }
@@ -414,41 +537,35 @@ a {
   opacity: 1;
 }
 
-/* foil: varredura holográfica */
+/* faixa de confete varrendo a carta */
 .card-foil {
   position: absolute;
   inset: -45%;
   z-index: 2;
   pointer-events: none;
-  opacity: 0.14;
+  opacity: 0.16;
   transition: opacity var(--dur-slow) var(--ease-out);
   background: linear-gradient(
     112deg,
-    transparent 32%,
-    color-mix(in srgb, var(--c-glow) 30%, transparent) 43%,
-    color-mix(in srgb, var(--c-sheen) 55%, transparent) 50%,
-    color-mix(in srgb, var(--c-glow) 30%, transparent) 57%,
-    transparent 68%
+    transparent 34%,
+    rgb(255 255 255 / 0.55) 50%,
+    transparent 66%
   );
   transform: translateX(calc((var(--mx) - 50%) * 0.95));
-  mix-blend-mode: color-dodge;
-  filter: blur(7px);
+  filter: blur(8px);
 }
 .card:where(:hover, :focus-within) .card-foil {
-  opacity: 0.9;
+  opacity: 0.42;
 }
 
-/* moldura de filete duplo, como fundo de carta de baralho */
+/* moldura interna, como borda pintada de caixa */
 .card-frame {
   position: absolute;
-  inset: 9px;
+  inset: 10px;
   z-index: 4;
   pointer-events: none;
-  border: 1px solid color-mix(in srgb, var(--c-glow) 46%, transparent);
-  border-radius: 3px;
-  box-shadow:
-    inset 0 0 0 1px rgb(0 0 0 / 0.22),
-    0 0 0 3px color-mix(in srgb, var(--c-glow) 14%, transparent);
+  border: 3px dashed rgb(255 255 255 / 0.28);
+  border-radius: calc(var(--r-lg) - 8px);
 }
 
 .card-body {
@@ -458,47 +575,45 @@ a {
   flex: 1;
   flex-direction: column;
   gap: 0.7rem;
-  padding: clamp(1.5rem, 3.4vw, 2.1rem);
+  padding: clamp(1.6rem, 3.4vw, 2.2rem);
 }
 
 .card-ref {
   font-family: var(--font-archivo), sans-serif;
-  font-size: 0.64rem;
-  font-weight: 600;
-  letter-spacing: 0.2em;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--c-glow) 78%, var(--c-ink));
+  color: var(--c-glow);
 }
 
 .card-emblem {
   display: grid;
   place-items: center;
-  padding: 0.4rem 0 0.7rem;
+  padding: 0.5rem 0 0.8rem;
   color: var(--c-glow);
   transform: translateZ(30px);
-  transition: transform var(--dur-slow) var(--ease-out);
-  filter: drop-shadow(0 8px 14px rgb(0 0 0 / 0.4));
+  transition: transform var(--dur-slow) var(--ease-pop);
+  filter: drop-shadow(0 6px 0 rgb(0 0 0 / 0.28));
 }
 .card:where(:hover, :focus-within) .card-emblem {
-  transform: translateZ(30px) scale(1.06) rotate(-1.5deg);
+  transform: translateZ(30px) scale(1.08) rotate(-2deg);
 }
 
 .card-name {
   font-family: var(--font-fraunces), Georgia, serif;
-  font-variation-settings: "SOFT" 12, "WONK" 1, "opsz" 144;
+  font-variation-settings: "SOFT" 70, "WONK" 1, "opsz" 144;
   font-weight: 700;
-  font-size: clamp(2.2rem, 5.2vw, 3rem);
+  font-size: clamp(2.3rem, 5.4vw, 3.1rem);
   line-height: 0.92;
   letter-spacing: -0.03em;
   color: var(--c-ink);
-  text-shadow:
-    0 1px 0 color-mix(in srgb, var(--c-glow) 34%, transparent),
-    0 2px 12px rgb(0 0 0 / 0.35);
+  text-shadow: 0 4px 0 var(--c-deep);
 }
 
 .card-pitch {
   color: var(--c-dim);
-  font-size: 0.94rem;
+  font-size: 0.95rem;
   line-height: 1.5;
 }
 
@@ -509,116 +624,53 @@ a {
   margin-top: 0.35rem;
 }
 .card-meta .pill {
-  border-color: color-mix(in srgb, var(--c-ink) 26%, transparent);
-  background: color-mix(in srgb, #000 22%, transparent);
-  color: var(--c-dim);
+  color: var(--c-ink);
+  background: rgb(255 255 255 / 0.18);
 }
 
 .card-action {
   margin-top: auto;
-  padding-top: 1.1rem;
+  padding-top: 1.2rem;
 }
 
-/* selo de estado, canto superior direito */
 .card-seal {
   position: absolute;
   z-index: 6;
   top: 18px;
   right: 18px;
-  padding: 0.34rem 0.7rem;
-  border-radius: 2px;
+  padding: 0.4rem 0.8rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
   font-family: var(--font-archivo), sans-serif;
-  font-size: 0.6rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  transform: rotate(2.5deg);
+  transform: rotate(4deg);
+  color: var(--ink);
 }
 .card-seal[data-kind="mvp"] {
-  color: #23180a;
-  background: linear-gradient(170deg, var(--brass-300), var(--brass-500) 55%, var(--brass-700));
-  box-shadow: inset 0 1px 0 rgb(255 250 230 / 0.7), 0 4px 10px -3px rgb(0 0 0 / 0.6);
+  background: var(--vivo-amarelo);
+  box-shadow: 0 3px 0 var(--sob-amarelo);
 }
 .card-seal[data-kind="soon"] {
-  color: var(--c-dim);
-  border: 1px dashed color-mix(in srgb, var(--c-ink) 40%, transparent);
-  background: color-mix(in srgb, #000 30%, transparent);
-}
-
-/* ── lobby ────────────────────────────────────────────────────────────── */
-
-.seat {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  background: rgb(6 23 19 / 0.45);
-  transition: border-color var(--dur-fast) var(--ease-out);
-}
-.seat[data-me="true"] {
-  border-color: var(--brass-600);
-  background: rgb(232 199 126 / 0.07);
-}
-.seat[data-away="true"] {
-  opacity: 0.48;
-}
-.seat-empty {
-  border-style: dashed;
-  color: var(--fg-faint);
-  justify-content: center;
-  font-family: var(--font-jetbrains), monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: 50%;
-  box-shadow: 0 0 0 3px rgb(6 23 19 / 0.8);
-}
-.dot[data-on="true"] {
-  background: var(--jade);
-}
-.dot[data-on="false"] {
-  background: #4b6a5c;
-}
-
-/* código grande, gravado em placa */
-.code-plate {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1em;
-  padding: 0.55rem 1.1rem;
-  border-radius: 3px;
-  background: var(--felt-950);
-  border: 1px solid var(--line-strong);
-  box-shadow: var(--shadow-inset);
-  font-family: var(--font-jetbrains), monospace;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.2em;
-  color: var(--brass-300);
+  background: rgb(255 255 255 / 0.82);
 }
 
 /* ── celular ──────────────────────────────────────────────────────────── */
 
 @media (hover: none) {
   .card-foil {
-    opacity: 0.4;
+    opacity: 0.3;
     transform: none;
   }
   .card-gloss {
-    opacity: 0.75;
+    opacity: 0.6;
     --mx: 26%;
     --my: 6%;
   }
   .card:active {
-    --lift: -3px;
+    --lift: -2px;
   }
 }
 
@@ -628,7 +680,7 @@ a {
   }
   .code-field .btn {
     width: auto;
-    padding: 0 1.15rem;
+    padding: 0 1.2rem;
   }
 }
 
@@ -636,8 +688,6 @@ html,
 body {
   overflow-x: clip;
 }
-
-/* ── movimento reduzido ───────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -651,7 +701,8 @@ body {
     transition-duration: 0.01ms !important;
   }
   .card,
-  .card-emblem {
+  .card-emblem,
+  .chip {
     transform: none !important;
   }
   .card-foil {

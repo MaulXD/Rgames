@@ -5,22 +5,20 @@ import { Avatar } from "@/components/avatar";
 import { useSession } from "@/components/session";
 import type { Profile } from "@/lib/supabase/types";
 import {
+  BODIES,
+  BODY_NAMES,
   COLORS,
-  MARKS,
-  MARK_NAMES,
-  METALS,
-  METAL_TONES,
-  PATTERNS,
-  PATTERN_NAMES,
-  SHAPES,
-  SHAPE_NAMES,
+  COLOR_KEYS,
+  EYES,
+  EYES_NAMES,
+  HATS,
+  HAT_NAMES,
+  MOUTHS,
+  MOUTH_NAMES,
   parseAvatar,
   randomAvatar,
   type AvatarSpec,
-  type ColorKey,
 } from "@/lib/avatar";
-
-const COLOR_KEYS = Object.keys(COLORS) as ColorKey[];
 
 export function AvatarStudio() {
   const { status, profile, error } = useSession();
@@ -32,7 +30,7 @@ export function AvatarStudio() {
     return (
       <div
         className="mt-6 border-l-2 p-4 text-sm"
-        style={{ borderColor: "var(--lacquer)", background: "var(--bg-sunk)" }}
+        style={{ borderColor: "var(--vivo-vermelho)", background: "var(--bg-sunk)" }}
       >
         <p style={{ color: "var(--fg)", fontWeight: 600 }}>Não deu para abrir a sessão.</p>
         <p className="mt-1" style={{ color: "var(--fg-dim)" }}>
@@ -42,7 +40,6 @@ export function AvatarStudio() {
     );
   }
 
-  // key = id do perfil: se a sessão trocar, o editor renasce com o estado certo
   return <Editor key={profile.id} profile={profile} />;
 }
 
@@ -79,45 +76,27 @@ function Editor({ profile }: { profile: Profile }) {
   }
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,22rem)_1fr] lg:gap-12">
+    <div className="grid gap-8 lg:grid-cols-[minmax(0,20rem)_1fr] lg:gap-12">
       {/* ── prévia ──────────────────────────────────────────────────────── */}
       <div className="lg:sticky lg:top-8 lg:self-start">
-        <div
-          className="flex flex-col items-center gap-5 px-6 py-8"
-          style={{
-            background: "var(--felt-800)",
-            border: "1px solid var(--felt-600)",
-            boxShadow: "var(--shadow-rest)",
-          }}
-        >
-          <div style={{ filter: "drop-shadow(0 10px 18px rgb(0 0 0 / .45))" }}>
-            <Avatar spec={spec} size={176} title="Sua ficha" />
-          </div>
-          <p
-            className="text-center text-2xl leading-tight"
-            style={{
-              fontFamily: "var(--font-fraunces), Georgia, serif",
-              fontVariationSettings: '"SOFT" 8, "WONK" 1, "opsz" 72',
-              fontWeight: 700,
-              color: "#F2EADA",
-            }}
-          >
-            {name.trim() || "Convidado"}
-          </p>
-          <p className="eyebrow" style={{ color: "#7B8E82" }}>
-            {SHAPE_NAMES[spec.shape]} · {COLORS[spec.color].name} · {MARK_NAMES[spec.mark]}
+        <div className="stage">
+          <div className="stage-glow" aria-hidden />
+          <Avatar spec={spec} size={168} title="Seu bichinho" />
+          <p className="stage-name">{name.trim() || "Convidado"}</p>
+          <p className="stage-sub">
+            {BODY_NAMES[spec.body]} · {COLORS[spec.color].name}
           </p>
         </div>
 
         <button
           type="button"
-          className="btn btn-ghost mt-3 w-full"
+          className="btn btn-vivo mt-3 w-full"
           onClick={() => {
             setSpec(randomAvatar());
             setSaved(false);
           }}
         >
-          Sortear ficha
+          Sortear outro
         </button>
       </div>
 
@@ -136,82 +115,73 @@ function Editor({ profile }: { profile: Profile }) {
             }}
             placeholder="Como te chamam"
             maxLength={16}
-            className="w-full max-w-sm px-4 py-3 text-lg"
-            style={{
-              background: "var(--bg-sunk)",
-              border: "1px solid var(--line-strong)",
-              borderRadius: 2,
-              color: "var(--fg)",
-              boxShadow: "inset 0 2px 6px -3px rgb(0 0 0 / .35)",
-            }}
+            className="field w-full max-w-sm"
           />
           <p className="mt-2 text-xs" style={{ color: "var(--fg-faint)" }}>
             De 2 a 16 caracteres. Não precisa ser único — só dentro da sala.
           </p>
         </div>
 
-        <Row label="Forma">
-          {SHAPES.map((s) => (
-            <Chip key={s} active={spec.shape === s} onClick={() => set("shape", s)} label={SHAPE_NAMES[s]}>
-              <Avatar spec={{ ...spec, shape: s }} size={40} />
-            </Chip>
-          ))}
-        </Row>
-
-        <Row label="Esmalte">
+        <Row label="Cor">
           {COLOR_KEYS.map((k) => (
             <Chip key={k} active={spec.color === k} onClick={() => set("color", k)} label={COLORS[k].name}>
               <span
-                className="block h-9 w-9 rounded-full"
+                className="swatch"
                 style={{
                   background: COLORS[k].enamel,
-                  boxShadow: `inset 0 -4px 8px ${COLORS[k].deep}, inset 0 3px 5px rgb(255 255 255 / .28)`,
+                  boxShadow: `inset 0 -6px 0 ${COLORS[k].deep}, inset 0 4px 0 ${COLORS[k].light}`,
                 }}
               />
             </Chip>
           ))}
         </Row>
 
-        <Row label="Hachura">
-          {PATTERNS.map((p) => (
-            <Chip key={p} active={spec.pattern === p} onClick={() => set("pattern", p)} label={PATTERN_NAMES[p]}>
-              <Avatar spec={{ ...spec, pattern: p, mark: "losangos" }} size={40} />
+        <Row label="Corpo">
+          {BODIES.map((b) => (
+            <Chip key={b} active={spec.body === b} onClick={() => set("body", b)} label={BODY_NAMES[b]}>
+              <Avatar spec={{ ...spec, body: b }} size={44} />
             </Chip>
           ))}
         </Row>
 
-        <Row label="Metal">
-          {METALS.map((m) => (
-            <Chip key={m} active={spec.metal === m} onClick={() => set("metal", m)} label={METAL_TONES[m].name}>
-              <span
-                className="block h-9 w-9 rounded-full"
-                style={{
-                  background: `linear-gradient(135deg, ${METAL_TONES[m].hi}, ${METAL_TONES[m].mid} 40%, ${METAL_TONES[m].lo} 70%, ${METAL_TONES[m].hi})`,
-                }}
-              />
+        <Row label="Olhos">
+          {EYES.map((e) => (
+            <Chip key={e} active={spec.eyes === e} onClick={() => set("eyes", e)} label={EYES_NAMES[e]}>
+              <Avatar spec={{ ...spec, eyes: e }} size={44} />
             </Chip>
           ))}
         </Row>
 
-        <Row label="Brasão">
-          {MARKS.map((m) => (
-            <Chip key={m} active={spec.mark === m} onClick={() => set("mark", m)} label={MARK_NAMES[m]}>
-              <Avatar spec={{ ...spec, mark: m }} size={40} />
+        <Row label="Boca">
+          {MOUTHS.map((m) => (
+            <Chip key={m} active={spec.mouth === m} onClick={() => set("mouth", m)} label={MOUTH_NAMES[m]}>
+              <Avatar spec={{ ...spec, mouth: m }} size={44} />
             </Chip>
           ))}
         </Row>
 
-        <div className="flex flex-wrap items-center gap-3 border-t pt-6" style={{ borderColor: "var(--line)" }}>
-          <button type="button" className="btn btn-primary" onClick={onSave} disabled={!nameOk || saving}>
-            {saving ? "Gravando…" : "Salvar ficha"}
+        <Row label="Enfeite">
+          {HATS.map((h) => (
+            <Chip key={h} active={spec.hat === h} onClick={() => set("hat", h)} label={HAT_NAMES[h]}>
+              <Avatar spec={{ ...spec, hat: h }} size={44} />
+            </Chip>
+          ))}
+        </Row>
+
+        <div
+          className="flex flex-wrap items-center gap-3 border-t pt-6"
+          style={{ borderColor: "var(--line)" }}
+        >
+          <button type="button" className="btn btn-vivo" onClick={onSave} disabled={!nameOk || saving}>
+            {saving ? "Gravando…" : "Salvar"}
           </button>
           {saved && (
-            <span className="eyebrow" style={{ color: "var(--jade)" }}>
+            <span className="eyebrow" style={{ color: "var(--vivo-limao)" }}>
               Salvo
             </span>
           )}
           {failure && (
-            <span className="text-sm" style={{ color: "var(--lacquer)" }}>
+            <span className="text-sm" style={{ color: "var(--vivo-vermelho)" }}>
               {failure}
             </span>
           )}
@@ -247,22 +217,7 @@ function Chip({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      title={label}
-      className="flex snap-start items-center justify-center p-2 transition-transform active:translate-y-px"
-      style={{
-        minWidth: 56,
-        minHeight: 56,
-        flex: "none",
-        borderRadius: 2,
-        background: active ? "var(--bg-sunk)" : "transparent",
-        border: `1px solid ${active ? "var(--accent)" : "var(--line)"}`,
-        boxShadow: active ? "inset 0 0 0 1px var(--accent)" : "none",
-      }}
-    >
+    <button type="button" onClick={onClick} aria-pressed={active} title={label} className="chip" data-on={active}>
       {children}
       <span className="sr-only">{label}</span>
     </button>

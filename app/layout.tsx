@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Fraunces, Inter_Tight, JetBrains_Mono } from "next/font/google";
 import { SessionBanner } from "@/components/session-banner";
+import { SfxBridge } from "@/components/sfx-bridge";
 import { SessionProvider } from "@/components/session";
 import "./globals.css";
 import "./letreiro.css";
+import "./dossie.css";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
@@ -57,6 +59,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="relative flex min-h-full flex-col">
         <SessionProvider>
+          <SfxBridge />
           <SessionBanner />
           {children}
         </SessionProvider>

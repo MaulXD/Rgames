@@ -8,6 +8,7 @@ import { Fleuron } from "@/components/ornament";
 import { HouseRules } from "@/components/house-rules";
 import { useSession } from "@/components/session";
 import { LetreiroGame, type MatchRow } from "@/components/letreiro/game";
+import { DossieGame, type DossieMatch } from "@/components/dossie/game";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { COLORS, parseAvatar, type ColorKey } from "@/lib/avatar";
 import { GAMES } from "@/lib/games";
@@ -55,7 +56,7 @@ export function Lobby({ code }: { code: string }) {
     const sb = supabaseBrowser();
     const { data } = await sb
       .from("matches")
-      .select("id, status, ends_at, public_state")
+      .select("id, status, ends_at, turn_deadline, public_state")
       .eq("room_id", roomId)
       .in("status", ["running", "finished"])
       .order("started_at", { ascending: false })
@@ -147,7 +148,8 @@ export function Lobby({ code }: { code: string }) {
     if (!room) return;
     setStarting(true);
     setNote(null);
-    const { error } = await supabaseBrowser().rpc("letreiro_start", { p_room: room.id });
+    const rpc = room.game_key === "dossie" ? "dossie_start" : "letreiro_start";
+    const { error } = await supabaseBrowser().rpc(rpc, { p_room: room.id });
     setStarting(false);
     if (error) {
       const msg = error.message ?? String(error);
@@ -156,7 +158,9 @@ export function Lobby({ code }: { code: string }) {
           ? "Só o anfitrião começa a partida."
           : /ALREADY_RUNNING/.test(msg)
             ? "Já tem partida rolando nesta sala."
-            : msg,
+            : /NEED_THREE/.test(msg)
+              ? "O Dossiê precisa de pelo menos três jogadores."
+              : msg,
       );
       return;
     }
@@ -217,18 +221,30 @@ export function Lobby({ code }: { code: string }) {
   const iAmHost = room.host_id === user?.id;
   const takenColors = new Set(seats.filter((s) => s.user_id !== user?.id).map((s) => s.color));
   const players = seats.filter((s) => s.seat !== null).sort((a, b) => a.seat! - b.seat!);
-  const jogavel = room.game_key === "letreiro";
+  const jogavel = room.game_key === "letreiro" || room.game_key === "dossie";
 
   // ── partida em andamento ou recém-terminada: o jogo toma a tela ─────────
   if (match && !dismissed.has(match.id)) {
+    const naMesa = players.map((p) => ({
+      user_id: p.user_id,
+      display_name: p.profiles?.display_name ?? "Convidado",
+      avatar: p.profiles?.avatar,
+    }));
+
+    if (room.game_key === "dossie") {
+      return (
+        <DossieGame
+          match={match as unknown as DossieMatch}
+          assentos={naMesa}
+          onSair={() => setDismissed((d) => new Set(d).add(match.id))}
+        />
+      );
+    }
+
     return (
       <LetreiroGame
         match={match}
-        seats={players.map((p) => ({
-          user_id: p.user_id,
-          display_name: p.profiles?.display_name ?? "Convidado",
-          avatar: p.profiles?.avatar,
-        }))}
+        seats={naMesa}
         onLeaveMatch={() => setDismissed((d) => new Set(d).add(match.id))}
         onRematch={
           iAmHost
@@ -368,7 +384,9 @@ export function Lobby({ code }: { code: string }) {
         </div>
       )}
 
-      {jogavel && <HouseRules room={room} isHost={iAmHost} onChanged={setRoom} />}
+      {room.game_key === "letreiro" && (
+        <HouseRules room={room} isHost={iAmHost} onChanged={setRoom} />
+      )}
 
       <div className="panel mt-4 p-5 sm:p-6">
         <button
@@ -388,10 +406,17 @@ export function Lobby({ code }: { code: string }) {
         <p className="mt-3 text-sm dim">
           {jogavel ? (
             iAmHost ? (
-              <>
-                Três minutos, todo mundo na mesma grade. Dá para jogar sozinho também — a revelação
-                no fim mostra o que escapou.
-              </>
+              room.game_key === "dossie" ? (
+                <>
+                  Seis suspeitos, seis objetos, nove lugares. Precisa de três jogadores ou mais — e
+                  começa com a história do caso.
+                </>
+              ) : (
+                <>
+                  Três minutos, todo mundo na mesma grade. Dá para jogar sozinho também — a
+                  revelação no fim mostra o que escapou.
+                </>
+              )
             ) : (
               <>Esperando o anfitrião começar.</>
             )

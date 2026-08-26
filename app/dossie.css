@@ -1,0 +1,362 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   DOSSIÊ
+   Planta baixa iluminada. Lugar vazio fica apagado, lugar com gente acende, e
+   o lugar do palpite ganha foco enquanto o resto escurece — a atenção da mesa
+   vai sozinha para onde o jogo está. Ver docs/03-PRD-DOSSIE.md §9.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── abertura ──────────────────────────────────────────────────────────── */
+
+.abertura {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.4rem;
+  padding: 2rem 1.5rem 5rem;
+  text-align: center;
+  cursor: pointer;
+  background: radial-gradient(120% 90% at 50% 0%, #1c2a3f, #070b13 70%);
+  animation: abre-cena 700ms var(--ease-out) both;
+}
+@keyframes abre-cena {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* chuva: duas camadas de riscos finos, em velocidades diferentes */
+.abertura-chuva {
+  position: absolute;
+  inset: -20%;
+  pointer-events: none;
+  opacity: 0.3;
+  background-image:
+    repeating-linear-gradient(
+      104deg,
+      transparent 0 7px,
+      rgb(190 215 255 / 0.5) 7px 8px,
+      transparent 8px 22px
+    ),
+    repeating-linear-gradient(
+      100deg,
+      transparent 0 13px,
+      rgb(190 215 255 / 0.28) 13px 14px,
+      transparent 14px 41px
+    );
+  animation: chove 0.7s linear infinite;
+}
+@keyframes chove {
+  from {
+    transform: translate3d(0, -80px, 0);
+  }
+  to {
+    transform: translate3d(-20px, 80px, 0);
+  }
+}
+
+.abertura-cartaz {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  animation: sobe-cartaz 900ms var(--ease-out) both;
+}
+@keyframes sobe-cartaz {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.abertura-era {
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: #d8a24a;
+}
+.abertura-nome {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 20, "WONK" 1, "opsz" 144;
+  font-weight: 700;
+  font-size: clamp(2.6rem, 11vw, 5.4rem);
+  line-height: 0.94;
+  color: #f4ecdc;
+  text-shadow: 0 0 40px rgb(0 0 0 / 0.8);
+}
+.abertura-tagline {
+  max-width: 30ch;
+  margin: 0 auto;
+  font-style: italic;
+  font-size: 1.05rem;
+  color: #b9c6da;
+}
+.abertura-vitima {
+  margin-top: 0.6rem;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8fa0b8;
+}
+.abertura-vitima strong {
+  color: #e2d6bf;
+}
+
+.abertura-beat {
+  position: relative;
+  max-width: 34ch;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 30, "WONK" 0, "opsz" 40;
+  font-size: clamp(1.15rem, 4.2vw, 1.7rem);
+  line-height: 1.42;
+  color: #f0e8d8;
+  text-shadow: 0 2px 18px rgb(0 0 0 / 0.9);
+  animation: entra-beat 900ms var(--ease-out) both;
+}
+@keyframes entra-beat {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.abertura-pular {
+  position: absolute;
+  right: 1.2rem;
+  bottom: 1.4rem;
+  width: auto;
+  min-height: 42px;
+  padding: 0 1.1rem;
+}
+
+.abertura-pontos {
+  position: absolute;
+  bottom: 1.9rem;
+  left: 50%;
+  display: flex;
+  gap: 7px;
+  transform: translateX(-50%);
+}
+.abertura-pontos span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.2);
+  transition: background var(--dur-base) var(--ease-out);
+}
+.abertura-pontos span[data-on="true"] {
+  background: #d8a24a;
+}
+
+/* ── planta baixa ──────────────────────────────────────────────────────── */
+
+.mapa {
+  position: relative;
+  padding: clamp(0.6rem, 2.4vw, 1rem);
+  border: 3px solid var(--ink);
+  border-radius: var(--r-lg);
+  background: #123045;
+  box-shadow: 0 6px 0 #0a1e2c, var(--shadow-rest);
+}
+
+.mapa-grade {
+  display: grid;
+  gap: clamp(0.3rem, 1.4vw, 0.55rem);
+  aspect-ratio: 1;
+}
+
+.mapa-passagens {
+  position: absolute;
+  inset: clamp(0.6rem, 2.4vw, 1rem);
+  pointer-events: none;
+}
+.mapa-passagens line {
+  stroke: #d8a24a;
+  stroke-width: 3;
+  stroke-dasharray: 7 9;
+  stroke-opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+/* um cômodo */
+.lugar {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  border: 3px solid var(--ink);
+  border-radius: var(--r-md);
+  background: #0e2536;
+  color: #7f9bb0;
+  cursor: default;
+  overflow: hidden;
+  transition:
+    background var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out),
+    transform var(--dur-fast) var(--ease-pop),
+    box-shadow var(--dur-base) var(--ease-out),
+    opacity var(--dur-base) var(--ease-out);
+}
+
+/* aceso: tem gente lá */
+.lugar[data-aceso="true"] {
+  background: radial-gradient(120% 90% at 50% 0%, #4a3a1e, #24344a 72%);
+  color: #f0e2c6;
+  box-shadow: inset 0 0 22px rgb(255 196 46 / 0.16);
+}
+
+/* onde eu estou */
+.lugar[data-aqui="true"] {
+  border-color: var(--vivo-amarelo);
+}
+
+/* posso ir para lá */
+.lugar[data-pode="true"] {
+  cursor: pointer;
+  color: #d7e6f2;
+  box-shadow: inset 0 0 0 3px rgb(255 196 46 / 0.4);
+  animation: chama 1.6s var(--ease-out) infinite alternate;
+}
+.lugar[data-pode="true"]:hover {
+  transform: translateY(-3px);
+  background: #163449;
+}
+@keyframes chama {
+  from {
+    box-shadow: inset 0 0 0 3px rgb(255 196 46 / 0.22);
+  }
+  to {
+    box-shadow: inset 0 0 0 3px rgb(255 196 46 / 0.6);
+  }
+}
+
+/* o palpite está acontecendo aqui: spot nele, sombra no resto */
+.mapa[data-focando="true"] .lugar {
+  opacity: 0.42;
+}
+.mapa[data-focando="true"] .lugar[data-foco="true"] {
+  opacity: 1;
+  background: radial-gradient(120% 90% at 50% 0%, #6b4a1c, #2a3a52 72%);
+  box-shadow:
+    inset 0 0 30px rgb(255 196 46 / 0.3),
+    0 0 0 3px var(--vivo-amarelo);
+  transform: scale(1.03);
+}
+
+.lugar-nome {
+  font-family: var(--font-archivo), sans-serif;
+  font-size: clamp(0.5rem, 1.7vw, 0.68rem);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-align: center;
+  text-transform: uppercase;
+  line-height: 1.15;
+}
+
+.lugar-passagem {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.44rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #d8a24a;
+}
+
+.lugar-peoes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px;
+}
+.peao[data-fantasma="true"] {
+  opacity: 0.42;
+  filter: grayscale(0.7);
+}
+
+.lugar-armas {
+  display: flex;
+  gap: 2px;
+}
+.arma {
+  display: grid;
+  place-items: center;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  background: #b9c3ce;
+  color: var(--ink);
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.5rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .abertura,
+  .abertura-chuva,
+  .abertura-cartaz,
+  .abertura-beat,
+  .lugar[data-pode="true"] {
+    animation: none;
+  }
+}
+
+/* ── partida ───────────────────────────────────────────────────────────── */
+
+.dossie { display: flex; flex-direction: column; gap: 1rem; }
+.dossie-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
+.dossie-titulo { font-size: clamp(1.7rem,6vw,2.6rem); margin-top: 0.4rem; }
+.dossie-acoes { margin-top: 0.5rem; font-family: var(--font-archivo), sans-serif; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--vivo-amarelo); }
+
+.dossie-refuta, .dossie-acoes-painel, .dossie-fantasma, .dossie-mao, .dossie-log, .dossie-desfecho { padding: 1rem 1.1rem; }
+.refuta-palpite { margin-top: 0.4rem; font-family: var(--font-fraunces), Georgia, serif; font-variation-settings: "SOFT" 30, "WONK" 1, "opsz" 48; font-size: 1.25rem; color: var(--fg); }
+
+.dossie-desfecho { text-align: center; }
+.desfecho-linha { margin-top: 0.5rem; font-family: var(--font-fraunces), Georgia, serif; font-variation-settings: "SOFT" 20, "WONK" 1, "opsz" 144; font-weight: 700; font-size: clamp(1.8rem,7vw,3rem); line-height: 1; color: var(--vivo-amarelo); text-shadow: 0 4px 0 var(--sob-amarelo); }
+.desfecho-com, .desfecho-onde { margin-top: 0.35rem; font-size: 1.05rem; color: var(--fg-mid); }
+.desfecho-nota { margin-top: 1rem; font-style: italic; font-size: 0.92rem; color: var(--fg-dim); }
+
+/* mão em leque */
+.mao { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.7rem; }
+.carta { --gir: 0deg; display: inline-flex; flex-direction: column; gap: 0.15rem; padding: 0.5rem 0.8rem; border: 3px solid var(--ink); border-radius: 10px; background: #f6efdb; color: var(--ink); font-family: var(--font-archivo), sans-serif; font-size: 0.8rem; font-weight: 700; box-shadow: 0 4px 0 #b9a983; transform: rotate(var(--gir)); transition: transform var(--dur-fast) var(--ease-pop); }
+.carta:hover { transform: rotate(0deg) translateY(-4px); }
+.carta-vista { background: #cfe0ee; box-shadow: 0 4px 0 #8ea7ba; }
+.carta em { font-style: normal; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.6; }
+
+/* log */
+.dossie-log ol { list-style: none; margin: 0.7rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; max-height: 15rem; overflow-y: auto; }
+.dossie-log li { padding: 0.45rem 0.7rem; border-left: 4px solid var(--line-strong); border-radius: 0 8px 8px 0; background: rgb(7 28 26 / 0.45); font-size: 0.88rem; color: var(--fg-mid); }
+.dossie-log li[data-tipo="no_refute"] { border-left-color: var(--vivo-vermelho); background: rgb(255 77 94 / 0.14); color: var(--fg); font-weight: 600; }
+.dossie-log li[data-tipo="suggest"] { border-left-color: var(--vivo-amarelo); }
+.dossie-log li[data-tipo="accuse"] { border-left-color: var(--vivo-roxo); color: var(--fg); font-weight: 600; }
+
+/* escolha dentro da caixa */
+.escolha { padding: 0.55rem 0.9rem; border: 3px solid var(--line); border-radius: 999px; background: rgb(7 28 26 / 0.5); color: var(--fg-mid); font-family: var(--font-archivo), sans-serif; font-size: 0.84rem; font-weight: 700; cursor: pointer; transition: transform var(--dur-fast) var(--ease-pop), border-color var(--dur-fast) var(--ease-out); }
+.escolha[data-on="true"] { border-color: var(--vivo-amarelo); background: var(--vivo-amarelo); color: var(--ink); transform: translateY(-2px); }
+
+@media (prefers-reduced-motion: reduce) { .carta { transition: none; } }

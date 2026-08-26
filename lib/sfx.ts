@@ -61,6 +61,7 @@ export function isMuted() {
 export function setMuted(v: boolean) {
   carrega();
   mudo = v;
+  if (v) paraTrilha();
   try {
     window.localStorage.setItem(CHAVE, v ? "0" : "1");
   } catch {
@@ -100,9 +101,10 @@ function toca(notas: Nota[]) {
   carrega();
   if (mudo || !ctx || !master) return;
 
-  // no máximo um disparo por 45 ms: senão vira ruído
+  // no máximo um disparo por 40 ms: senão vira ruído. Vale para a CHAMADA,
+  // não para cada nota — um arpejo de três notas é um disparo só.
   const agora = performance.now();
-  if (agora - ultimo < 45) return;
+  if (agora - ultimo < 40) return;
   ultimo = agora;
 
   const t0 = ctx.currentTime;
@@ -199,6 +201,137 @@ export function revela(i: number) {
     { freq: semi(base), dur: 0.2, vol: 0.16, tipo: "sine", corte: 4000 },
     { freq: semi(base + 12), em: 0.02, dur: 0.3, vol: 0.1, tipo: "sine", corte: 6000 },
   ]);
+}
+
+/* ── vocabulario do site ────────────────────────────────────────────────── */
+
+/** Clique de botao. Curto e seco, para nao cansar. */
+export function clique() {
+  toca([{ freq: semi(28), dur: 0.05, vol: 0.11, tipo: "triangle", corte: 2200 }]);
+}
+
+/** Painel/modal abrindo. */
+export function abre() {
+  toca([
+    { freq: semi(17), dur: 0.09, vol: 0.13, tipo: "triangle" },
+    { freq: semi(24), em: 0.05, dur: 0.12, vol: 0.13, tipo: "triangle" },
+  ]);
+}
+
+/** Painel/modal fechando. */
+export function fecha() {
+  toca([
+    { freq: semi(24), dur: 0.08, vol: 0.12, tipo: "triangle" },
+    { freq: semi(17), em: 0.05, dur: 0.11, vol: 0.12, tipo: "triangle" },
+  ]);
+}
+
+/** Alguem entrou na sala. */
+export function entrou() {
+  toca([
+    { freq: semi(19), dur: 0.09, vol: 0.15, tipo: "triangle" },
+    { freq: semi(26), em: 0.07, dur: 0.13, vol: 0.15, tipo: "triangle" },
+    { freq: semi(31), em: 0.14, dur: 0.18, vol: 0.13, tipo: "sine", corte: 5000 },
+  ]);
+}
+
+/** Alguem ficou pronto. */
+export function pronto() {
+  toca([{ freq: semi(31), dur: 0.09, vol: 0.14, tipo: "sine", corte: 4200 }]);
+}
+
+/** Passo do peao. O timbre muda pelo piso do lugar. */
+export function passo(piso: "madeira" | "tapete" | "ladrilho" = "madeira") {
+  const cfg = {
+    madeira: { freq: semi(9), corte: 900, vol: 0.11, tipo: "triangle" as OscillatorType },
+    tapete: { freq: semi(5), corte: 420, vol: 0.08, tipo: "sine" as OscillatorType },
+    ladrilho: { freq: semi(14), corte: 1800, vol: 0.1, tipo: "square" as OscillatorType },
+  }[piso];
+  toca([{ ...cfg, dur: 0.06 }]);
+}
+
+/** Porta pesada. */
+export function porta() {
+  toca([{ freq: semi(8), para: semi(3), dur: 0.22, vol: 0.13, tipo: "sawtooth", corte: 380 }]);
+}
+
+/** Carta virando: o "tec" seco. */
+export function carta() {
+  toca([{ freq: semi(33), para: semi(27), dur: 0.055, vol: 0.12, tipo: "square", corte: 3400 }]);
+}
+
+/** Sino: ninguem pode refutar. A linha mais importante do Dossie. */
+export function sino() {
+  toca([
+    { freq: semi(28), dur: 0.5, vol: 0.2, tipo: "sine", corte: 4800 },
+    { freq: semi(40), em: 0.01, dur: 0.7, vol: 0.09, tipo: "sine", corte: 7000 },
+  ]);
+}
+
+/** Acusacao certa: o caso fechou. */
+export function caso() {
+  toca([
+    { freq: semi(12), dur: 0.16, vol: 0.2 },
+    { freq: semi(19), em: 0.14, dur: 0.16, vol: 0.2 },
+    { freq: semi(24), em: 0.28, dur: 0.2, vol: 0.2 },
+    { freq: semi(31), em: 0.44, dur: 0.5, vol: 0.22, tipo: "sine", corte: 5200 },
+  ]);
+}
+
+/** Acusacao errada: virou fantasma. */
+export function fantasma() {
+  toca([
+    { freq: semi(20), para: semi(6), dur: 0.55, vol: 0.16, tipo: "sine", corte: 900 },
+  ]);
+}
+
+/* ── trilha ambiente ────────────────────────────────────────────────────── */
+/**
+ * Nao e musica gravada: e um acorde lento que respira, com uma nota solta de
+ * vez em quando. Fica muito abaixo do resto (a mesa provavelmente esta em
+ * chamada de voz) e morre junto com o mudo.
+ */
+
+let trilhaId: ReturnType<typeof setInterval> | null = null;
+let trilhaPasso = 0;
+
+const CLIMAS = {
+  /** Dossie: menor, arrastado, com uma nota que nao resolve. */
+  misterio: { raiz: 3, graus: [0, 3, 7, 10, 12, 15], dur: 2.6, vol: 0.05, tipo: "sine" as OscillatorType },
+  /** Letreiro: maior, leve, quase infantil. */
+  brincadeira: { raiz: 12, graus: [0, 4, 7, 9, 12, 16], dur: 1.7, vol: 0.04, tipo: "triangle" as OscillatorType },
+} as const;
+
+export type Clima = keyof typeof CLIMAS;
+
+export function iniciaTrilha(clima: Clima = "misterio") {
+  carrega();
+  if (typeof window === "undefined") return;
+  paraTrilha();
+  const c = CLIMAS[clima];
+  trilhaPasso = 0;
+
+  const bater = () => {
+    if (mudo || !ctx) return;
+    const g = c.graus[trilhaPasso % c.graus.length];
+    const alt = c.graus[(trilhaPasso * 3 + 2) % c.graus.length];
+    // dois toques por batida: a nota e uma quinta acima, bem apagada
+    toca([
+      { freq: semi(c.raiz + g), dur: c.dur, vol: c.vol, tipo: c.tipo, corte: 1500 },
+      { freq: semi(c.raiz + alt + 12), em: c.dur * 0.4, dur: c.dur * 0.8, vol: c.vol * 0.55, tipo: "sine", corte: 2600 },
+    ]);
+    trilhaPasso++;
+  };
+
+  bater();
+  trilhaId = setInterval(bater, (c.dur + 1.1) * 1000);
+}
+
+export function paraTrilha() {
+  if (trilhaId) {
+    clearInterval(trilhaId);
+    trilhaId = null;
+  }
 }
 
 /** Sala: alguém chegou. */

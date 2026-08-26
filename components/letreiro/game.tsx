@@ -46,10 +46,12 @@ export function LetreiroGame({
   match,
   seats,
   onLeaveMatch,
+  onRematch,
 }: {
   match: MatchRow;
   seats: Seat[];
   onLeaveMatch: () => void;
+  onRematch?: () => void;
 }) {
   const { user } = useSession();
   const grid = match.public_state.grid;
@@ -230,6 +232,7 @@ export function LetreiroGame({
         seats={seats}
         meId={user?.id ?? ""}
         onDone={onLeaveMatch}
+        onRematch={onRematch}
       />
     );
   }

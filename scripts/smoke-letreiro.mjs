@@ -78,6 +78,31 @@ const sala = (await rpc(A.token, "create_room", { p_game: "letreiro" })).body;
 await rpc(B.token, "join_room", { p_code: sala.code });
 ok(!!sala?.id, `sala ${sala?.code} criada`);
 
+// ── regras da casa ────────────────────────────────────────────────────────
+const regraB = await rpc(B.token, "set_room_settings", {
+  p_room: sala.id,
+  p_settings: { modo: "relampago" },
+});
+ok(regraB.status >= 400 && /NOT_HOST/.test(JSON.stringify(regraB.body)), "quem não é anfitrião não muda as regras");
+
+const regraRuim = await rpc(A.token, "set_room_settings", {
+  p_room: sala.id,
+  p_settings: { modo: "eterno" },
+});
+ok(regraRuim.status >= 400 && /BAD_MODE/.test(JSON.stringify(regraRuim.body)), "modo fora do vocabulário é recusado");
+
+const regraRuim2 = await rpc(A.token, "set_room_settings", {
+  p_room: sala.id,
+  p_settings: { anulacao: "vale-tudo" },
+});
+ok(regraRuim2.status >= 400 && /BAD_SCORING/.test(JSON.stringify(regraRuim2.body)), "anulação fora do vocabulário é recusada");
+
+const regraOk = await rpc(A.token, "set_room_settings", {
+  p_room: sala.id,
+  p_settings: { modo: "relampago", anulacao: "classica" },
+});
+ok(regraOk.status === 200 && regraOk.body?.settings?.modo === "relampago", "anfitrião grava Relâmpago + anulação clássica");
+
 // só o anfitrião começa
 const naoHost = await rpc(B.token, "letreiro_start", { p_room: sala.id });
 ok(naoHost.status >= 400 && /NOT_HOST/.test(JSON.stringify(naoHost.body)), "quem não é anfitrião não começa");
@@ -96,6 +121,10 @@ ok(dupla.status >= 400 && /ALREADY_RUNNING/.test(JSON.stringify(dupla.body)), "n
 // o cliente vê a partida pelo RLS
 const vista = await get(B.token, `matches?select=id,ends_at,public_state&id=eq.${partida.id}`);
 ok(vista.body?.[0]?.id === partida.id, "RLS: membro da sala lê a partida");
+
+const dura = Math.round((new Date(partida.ends_at).getTime() - new Date(partida.started_at).getTime()) / 1000);
+ok(dura >= 58 && dura <= 62, `Relâmpago aplicou 60s de rodada (medido ${dura}s)`);
+ok(partida.public_state.scoring === "classica", "a regra de anulação foi congelada no início da partida");
 
 // gabarito pelo servidor, para escolher palavras de verdade
 const { rows } = await db.query(
@@ -153,6 +182,13 @@ ok(tarde.status >= 400 && /TIME_OVER/.test(JSON.stringify(tarde.body)), "palavra
 
 const naoPode = await rpc(A.token, "letreiro_score", { p_match: partida.id });
 ok(naoPode.status >= 400, "cliente não consegue chamar letreiro_score");
+
+const regraDurante = await rpc(A.token, "set_room_settings", {
+  p_room: sala.id,
+  p_settings: { modo: "classico" },
+});
+ok(regraDurante.status >= 400 && /MATCH_IN_PROGRESS/.test(JSON.stringify(regraDurante.body)),
+   "não muda as regras com partida rolando");
 
 const { rows: varridas } = await db.query("select public.letreiro_sweep() n");
 ok(varridas[0].n >= 1, "a varredura encerrou a rodada");

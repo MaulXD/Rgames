@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { Avatar } from "@/components/avatar";
 import { Fleuron } from "@/components/ornament";
+import { HouseRules } from "@/components/house-rules";
 import { useSession } from "@/components/session";
 import { LetreiroGame, type MatchRow } from "@/components/letreiro/game";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -229,6 +230,14 @@ export function Lobby({ code }: { code: string }) {
           avatar: p.profiles?.avatar,
         }))}
         onLeaveMatch={() => setDismissed((d) => new Set(d).add(match.id))}
+        onRematch={
+          iAmHost
+            ? async () => {
+                setDismissed((d) => new Set(d).add(match.id));
+                await comecar();
+              }
+            : undefined
+        }
       />
     );
   }
@@ -358,6 +367,8 @@ export function Lobby({ code }: { code: string }) {
           )}
         </div>
       )}
+
+      {jogavel && <HouseRules room={room} isHost={iAmHost} onChanged={setRoom} />}
 
       <div className="panel mt-4 p-5 sm:p-6">
         <button

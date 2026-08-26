@@ -512,3 +512,55 @@
     animation: none;
   }
 }
+
+/* ── regras da casa ────────────────────────────────────────────────────── */
+
+.rule-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: rgb(6 23 19 / 0.4);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out);
+}
+.rule-option[data-on="true"] {
+  border-color: var(--brass-600);
+  background: rgb(232 199 126 / 0.07);
+}
+.rule-option:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.rule-mark {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 3px;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  background: var(--felt-950);
+}
+.rule-option[data-on="true"] .rule-mark {
+  border-color: var(--brass-400);
+  background:
+    radial-gradient(circle at 34% 30%, var(--brass-300), var(--brass-600) 70%);
+  box-shadow: inset 0 1px 0 rgb(255 250 230 / 0.5);
+}
+.rule-name {
+  display: block;
+  font-weight: 550;
+  font-size: 0.94rem;
+}
+.rule-note {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: var(--fg-dim);
+}

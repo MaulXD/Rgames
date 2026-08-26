@@ -20,11 +20,13 @@ export function Reveal({
   seats,
   meId,
   onDone,
+  onRematch,
 }: {
   match: MatchRow;
   seats: Seat[];
   meId: string;
   onDone: () => void;
+  onRematch?: () => void;
 }) {
   const st = match.public_state;
   const grid = st.grid;
@@ -181,9 +183,16 @@ export function Reveal({
             </div>
           )}
 
-          <button className="btn btn-brass reveal-again" onClick={onDone}>
-            Voltar para a sala
-          </button>
+          <div className="reveal-again flex flex-col gap-2 sm:flex-row">
+            {onRematch && (
+              <button className="btn btn-brass flex-1" onClick={onRematch}>
+                Outra grade
+              </button>
+            )}
+            <button className="btn btn-ghost flex-1" onClick={onDone}>
+              Voltar para a sala
+            </button>
+          </div>
         </div>
       )}
     </div>

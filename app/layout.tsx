@@ -3,6 +3,7 @@ import { Archivo, Fraunces, Inter_Tight, JetBrains_Mono } from "next/font/google
 import { SessionBanner } from "@/components/session-banner";
 import { SessionProvider } from "@/components/session";
 import "./globals.css";
+import "./letreiro.css";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",

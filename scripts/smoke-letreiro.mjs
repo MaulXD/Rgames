@@ -127,7 +127,7 @@ const naoPalavra = await rpc(A.token, "letreiro_submit", { p_match: partida.id, 
 ok(naoPalavra.body?.reason === "NOT_A_WORD", "palavra inexistente dá NOT_A_WORD");
 
 // palavra ainda nao submetida, para nao bater no REPEATED antes do BAD_PATH
-const [w4, p4] = todas[2];
+const [w4] = todas[2];
 const caminhoRuim = await rpc(A.token, "letreiro_submit", { p_match: partida.id, p_word: w4, p_path: "0f" });
 ok(caminhoRuim.body?.reason === "BAD_PATH", `palavra certa (${w4}) com caminho errado dá BAD_PATH`);
 

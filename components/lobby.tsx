@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { Avatar } from "@/components/avatar";
 import { Fleuron } from "@/components/ornament";
 import { useSession } from "@/components/session";
+import { LetreiroGame, type MatchRow } from "@/components/letreiro/game";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { COLORS, parseAvatar, type ColorKey } from "@/lib/avatar";
 import { GAMES } from "@/lib/games";
@@ -28,9 +29,12 @@ export function Lobby({ code }: { code: string }) {
   const { status, user } = useSession();
   const [room, setRoom] = useState<Room | null>(null);
   const [seats, setSeats] = useState<Seat[]>([]);
+  const [match, setMatch] = useState<MatchRow | null>(null);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [fatal, setFatal] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const roomIdRef = useRef<string | null>(null);
@@ -46,12 +50,24 @@ export function Lobby({ code }: { code: string }) {
     setSeats((data ?? []) as unknown as Seat[]);
   }, []);
 
-  // entra na sala e assina presença + mudanças de assento
+  const loadMatch = useCallback(async (roomId: string) => {
+    const sb = supabaseBrowser();
+    const { data } = await sb
+      .from("matches")
+      .select("id, status, ends_at, public_state")
+      .eq("room_id", roomId)
+      .in("status", ["running", "finished"])
+      .order("started_at", { ascending: false })
+      .limit(1);
+    const m = (data?.[0] as MatchRow | undefined) ?? null;
+    setMatch(m ?? null);
+  }, []);
+
+  // entra na sala e assina presença, assentos e partidas
   useEffect(() => {
     if (status !== "ready" || !user) return;
     let alive = true;
     const sb = supabaseBrowser();
-    // TS perde o narrowing de `user` dentro da closure async — fixa aqui.
     const uid = user.id;
     let channel: ReturnType<typeof sb.channel> | null = null;
 
@@ -63,16 +79,13 @@ export function Lobby({ code }: { code: string }) {
         if (!alive) return;
         setRoom(r);
         roomIdRef.current = r.id;
-        await loadSeats(r.id);
+        await Promise.all([loadSeats(r.id), loadMatch(r.id)]);
 
-        channel = sb.channel(`room:${code}`, {
-          config: { presence: { key: uid } },
-        });
+        channel = sb.channel(`room:${code}`, { config: { presence: { key: uid } } });
 
         channel
           .on("presence", { event: "sync" }, () => {
-            const st = channel!.presenceState();
-            setOnline(new Set(Object.keys(st)));
+            setOnline(new Set(Object.keys(channel!.presenceState())));
           })
           .on(
             "postgres_changes",
@@ -83,6 +96,11 @@ export function Lobby({ code }: { code: string }) {
             "postgres_changes",
             { event: "UPDATE", schema: "public", table: "rooms", filter: `id=eq.${r.id}` },
             (payload: { new: unknown }) => setRoom(payload.new as Room),
+          )
+          .on(
+            "postgres_changes",
+            { event: "*", schema: "public", table: "matches", filter: `room_id=eq.${r.id}` },
+            () => void loadMatch(r.id),
           )
           .subscribe((state: string) => {
             if (state === "SUBSCRIBED") void channel!.track({ at: Date.now() });
@@ -103,9 +121,8 @@ export function Lobby({ code }: { code: string }) {
       alive = false;
       if (channel) void sb.removeChannel(channel);
     };
-  }, [status, user, code, loadSeats]);
+  }, [status, user, code, loadSeats, loadMatch]);
 
-  // batida de presença no banco, para reconexão saber quem estava
   useEffect(() => {
     const id = setInterval(() => {
       const rid = roomIdRef.current;
@@ -119,19 +136,36 @@ export function Lobby({ code }: { code: string }) {
     const { error } = await fn();
     if (error) {
       const msg = (error as { message?: string }).message ?? String(error);
-      setNote(
-        /COLOR_TAKEN/.test(msg) ? "Essa cor já é de outra pessoa." : msg,
-      );
+      setNote(/COLOR_TAKEN/.test(msg) ? "Essa cor já é de outra pessoa." : msg);
       return;
     }
     if (roomIdRef.current) await loadSeats(roomIdRef.current);
   }
 
+  async function comecar() {
+    if (!room) return;
+    setStarting(true);
+    setNote(null);
+    const { error } = await supabaseBrowser().rpc("letreiro_start", { p_room: room.id });
+    setStarting(false);
+    if (error) {
+      const msg = error.message ?? String(error);
+      setNote(
+        /NOT_HOST/.test(msg)
+          ? "Só o anfitrião começa a partida."
+          : /ALREADY_RUNNING/.test(msg)
+            ? "Já tem partida rolando nesta sala."
+            : msg,
+      );
+      return;
+    }
+    await loadMatch(room.id);
+  }
+
   async function openInvite() {
     setShowInvite(true);
     if (!qr) {
-      const url = `${window.location.origin}/j/${code}`;
-      const svg = await QRCode.toString(url, {
+      const svg = await QRCode.toString(`${window.location.origin}/j/${code}`, {
         type: "svg",
         margin: 1,
         errorCorrectionLevel: "M",
@@ -182,11 +216,25 @@ export function Lobby({ code }: { code: string }) {
   const iAmHost = room.host_id === user?.id;
   const takenColors = new Set(seats.filter((s) => s.user_id !== user?.id).map((s) => s.color));
   const players = seats.filter((s) => s.seat !== null).sort((a, b) => a.seat! - b.seat!);
-  const allReady = players.length >= 2 && players.every((p) => p.is_ready);
+  const jogavel = room.game_key === "letreiro";
+
+  // ── partida em andamento ou recém-terminada: o jogo toma a tela ─────────
+  if (match && !dismissed.has(match.id)) {
+    return (
+      <LetreiroGame
+        match={match}
+        seats={players.map((p) => ({
+          user_id: p.user_id,
+          display_name: p.profiles?.display_name ?? "Convidado",
+          avatar: p.profiles?.avatar,
+        }))}
+        onLeaveMatch={() => setDismissed((d) => new Set(d).add(match.id))}
+      />
+    );
+  }
 
   return (
     <>
-      {/* ── cabeça da sala ─────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-5">
         <div>
           <p className="eyebrow">{game?.ref ?? "Sala"}</p>
@@ -211,7 +259,6 @@ export function Lobby({ code }: { code: string }) {
         <Fleuron />
       </div>
 
-      {/* ── assentos ───────────────────────────────────────────────────── */}
       <div className="grid gap-2.5 sm:grid-cols-2">
         {Array.from({ length: SEATS }, (_, i) => {
           const s = players.find((p) => p.seat === i);
@@ -232,7 +279,10 @@ export function Lobby({ code }: { code: string }) {
                   {prof?.display_name ?? "Convidado"}
                   {mine && <span className="dim"> · você</span>}
                 </p>
-                <p className="mono text-[0.66rem] tracking-[0.14em] uppercase" style={{ color: "var(--fg-faint)" }}>
+                <p
+                  className="mono text-[0.66rem] tracking-[0.14em] uppercase"
+                  style={{ color: "var(--fg-faint)" }}
+                >
                   {s.role === "host" ? "anfitrião" : `assento ${i + 1}`}
                   {s.color ? ` · ${COLORS[s.color].name}` : ""}
                 </p>
@@ -241,14 +291,15 @@ export function Lobby({ code }: { code: string }) {
                 className="dot"
                 data-on={s.is_ready}
                 title={s.is_ready ? "Pronto" : "Ainda não"}
-                style={s.color ? { background: s.is_ready ? COLORS[s.color].enamel : undefined } : undefined}
+                style={
+                  s.color ? { background: s.is_ready ? COLORS[s.color].enamel : undefined } : undefined
+                }
               />
             </div>
           );
         })}
       </div>
 
-      {/* ── minhas escolhas ────────────────────────────────────────────── */}
       {me && (
         <div className="panel mt-8 p-5 sm:p-6">
           <p className="eyebrow">Sua cor na mesa</p>
@@ -263,7 +314,9 @@ export function Lobby({ code }: { code: string }) {
                   aria-pressed={me.color === k}
                   disabled={taken}
                   onClick={() =>
-                    act(async () => supabaseBrowser().rpc("set_color", { p_room: room.id, p_color: k }))
+                    act(async () =>
+                      supabaseBrowser().rpc("set_color", { p_room: room.id, p_color: k }),
+                    )
                   }
                   style={{
                     flex: "none",
@@ -306,21 +359,41 @@ export function Lobby({ code }: { code: string }) {
         </div>
       )}
 
-      {/* ── começar ────────────────────────────────────────────────────── */}
       <div className="panel mt-4 p-5 sm:p-6">
-        <button className="btn btn-brass w-full" disabled title="O jogo em si ainda não existe">
-          Começar partida
+        <button
+          className="btn btn-brass w-full"
+          onClick={comecar}
+          disabled={!jogavel || !iAmHost || starting}
+          title={
+            !jogavel
+              ? `${game?.name} entra na ${game?.phase} do roadmap`
+              : !iAmHost
+                ? "Só o anfitrião começa"
+                : undefined
+          }
+        >
+          {starting ? "Embaralhando…" : "Começar partida"}
         </button>
         <p className="mt-3 text-sm dim">
-          {iAmHost ? "Você é o anfitrião. " : ""}
-          {allReady ? "Todo mundo pronto — " : ""}
-          mas <strong style={{ color: "var(--fg)" }}>{game?.name}</strong> ainda não é jogável: ele
-          entra na {game?.phase} do roadmap. Até lá, esta sala serve para testar o que já funciona —
-          entrar por link ou QR, ver quem chegou ao vivo, escolher cor, sair e voltar.
+          {jogavel ? (
+            iAmHost ? (
+              <>
+                Três minutos, todo mundo na mesma grade. Dá para jogar sozinho também — a revelação
+                no fim mostra o que escapou.
+              </>
+            ) : (
+              <>Esperando o anfitrião começar.</>
+            )
+          ) : (
+            <>
+              <strong style={{ color: "var(--fg)" }}>{game?.name}</strong> ainda não é jogável: entra
+              na {game?.phase} do roadmap. Esta sala já funciona — entrar por link ou QR, ver quem
+              chegou ao vivo, escolher cor, sair e voltar.
+            </>
+          )}
         </p>
       </div>
 
-      {/* ── convite ────────────────────────────────────────────────────── */}
       {showInvite && (
         <div
           className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
@@ -341,11 +414,7 @@ export function Lobby({ code }: { code: string }) {
                 style={{ background: "var(--felt-950)", border: "1px solid var(--line-strong)" }}
               >
                 {qr ? (
-                  <div
-                    style={{ width: 208, height: 208 }}
-                    // QR gerado no cliente pela lib qrcode — sem chamada de rede
-                    dangerouslySetInnerHTML={{ __html: qr }}
-                  />
+                  <div style={{ width: 208, height: 208 }} dangerouslySetInnerHTML={{ __html: qr }} />
                 ) : (
                   <div style={{ width: 208, height: 208 }} />
                 )}
@@ -359,7 +428,9 @@ export function Lobby({ code }: { code: string }) {
                 {code.slice(3)}
               </span>
             </p>
-            <p className="mt-2 text-center text-xs dim">É isso que você fala em voz alta na chamada.</p>
+            <p className="mt-2 text-center text-xs dim">
+              É isso que você fala em voz alta na chamada.
+            </p>
 
             <div className="mt-6 flex flex-col gap-2 sm:flex-row">
               <button className="btn btn-brass flex-1" onClick={share}>

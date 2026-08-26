@@ -33,6 +33,26 @@ fecha o navegador e volta, o host sai e outro assume — tudo sem recarregar a p
 
 ---
 
+## Onde o projeto está de verdade
+
+Isto não é estimativa — é o que existe e roda:
+
+| Entregue | Estado |
+|---|---|
+| Chassi Next 16 + Vercel `gru1` + Supabase São Paulo | ✅ no ar |
+| Sessão de convidado (nativa **e** por `/api/guest`, sem depender de toggle de painel) | ✅ |
+| Perfil persistido, avatar de esmalte e metal | ✅ |
+| Salas: código, link, QR, lobby ao vivo, cor, pronto, migração de host | ✅ |
+| Dicionário PT-BR: 248.614 palavras em `dict_pt` | ✅ |
+| Pool de 1.500 grades aprovadas por solver | ✅ |
+| Motor do Letreiro: começar, submeter, apurar, varredura por `pg_cron` | ✅ |
+| Interface do Letreiro: bandeja, cronômetro, digitação e arraste, revelação em 3 atos | ✅ |
+| Testes de fumaça: 33 + 25 verificações contra o Supabase real | ✅ |
+| **Falta no Letreiro** | modo Relâmpago na interface, desafio diário, multiplicadores, estatísticas |
+| **Falta nos outros três** | tudo — Dossiê, Domínio e Metrópole são só documento |
+
+---
+
 ## Fase 1 — Letreiro · 4 semanas
 
 **Ataque o dicionário na semana 1.** É o único risco que pode inviabilizar o jogo, e descobrir isso

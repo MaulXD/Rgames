@@ -150,9 +150,23 @@ válida (raiva) ou aceita lixo (o jogo perde sentido).
 6. Comprimir  brotli
 ```
 
-**Tamanho estimado:** ~900 KB bruto, **~380 KB brotli**. Carregado de forma preguiçosa quando o
-jogador entra na sala de Letreiro (não no lobby), com `Cache-Control: immutable` e hash no nome —
-baixa uma vez na vida.
+**O que foi construído, e por que mudou:** o dicionário ficou **só no Postgres** — nada de DAWG no
+cliente. Ao implementar, ficou claro que as duas coisas que o cliente precisa resolver na hora são
+independentes do dicionário:
+
+- **o caminho aceso enquanto você digita** é geometria pura: 16 células, busca em profundidade,
+  instantâneo (`lib/letreiro.ts`);
+- **a validação da palavra** só acontece ao submeter, onde 200 ms com UI otimista é imperceptível.
+
+Isso economiza ~700 KB de download e ~40 MB de memória no celular, e nada é perdido. O DAWG no
+cliente volta à mesa em v1.1, se e quando a recusa instantânea (antes de submeter) valer o custo.
+
+**Resultado real:** 248.614 palavras em `dict_pt`, com a grafia acentuada preservada
+(`ACAO → ação`). Pipeline em `scripts/build-dict.mjs` (`npm run dict`).
+
+**Limitação conhecida da fonte:** a lista é toda minúscula, então nome próprio que virou substantivo
+comum (`brasil`, `maria`) não dá para separar por caixa. Aceitar isso num Boggle não machuca;
+recusar, sim. A lista curada do botão "contestar palavra" é o conserto quando incomodar.
 
 **Curadoria manual obrigatória** antes do lançamento:
 - Lista de exclusão: palavras ofensivas que não queremos ver na tela de revelação
@@ -175,9 +189,15 @@ solver:
 | Células que participam de alguma palavra de 6+ | **≥ 40%** |
 | Vogais na grade | 5 a 9 (de 16) |
 
-**Implementação:** geramos um pool de **5.000 grades aprovadas offline** e guardamos numa tabela
-`letreiro_boards` com o gabarito completo pré-computado (todas as palavras, todos os caminhos,
-pontuação máxima). No início da partida, o servidor sorteia uma pelo `seed`.
+**Implementação:** `scripts/build-boards.mjs` (`npm run boards`) gera o pool offline e guarda em
+`letreiro_boards` com o gabarito pré-computado. No início da partida o servidor sorteia uma linha
+pelo `seed` — zero solver em tempo de jogo.
+
+**Resultado real:** 1.500 grades aprovadas em 4 segundos, 40% de aproveitamento das candidatas,
+63–394 palavras por grade, **3 MB** no banco. O gabarito é compacto de propósito —
+`{ "CASA": "0123" }`, com o caminho em dígitos hexadecimais de índice de célula. A pontuação sai do
+tamanho da chave e a grafia acentuada sai de `dict_pt` na revelação. Um gabarito verboso custaria
+~40 KB por grade; este custa ~5 KB.
 
 Vantagens: início instantâneo (zero solver em runtime), gabarito pronto para a tela de revelação,
 e conseguimos ordenar grades por dificuldade para o modo Duelo.

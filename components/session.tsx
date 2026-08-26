@@ -46,10 +46,33 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
         // Convidado é um auth.users de verdade — é isso que faz o RLS valer
         // igual para conta e convidado. Ver docs/00-PRD-PLATAFORMA.md §6.2.
+        //
+        // Dois caminhos, nessa ordem:
+        //   1. signInAnonymously — nativo, mais leve, mas depende de um toggle
+        //      no dashboard do Supabase que pode estar desligado;
+        //   2. /api/guest — o servidor cria o usuário com service role.
+        //      Não depende de painel nenhum, então sempre funciona.
         if (!current) {
           const { data: anon, error: authErr } = await sb.auth.signInAnonymously();
-          if (authErr) throw authErr;
-          current = anon.user;
+          if (!authErr && anon.user) {
+            current = anon.user;
+          } else {
+            const res = await fetch("/api/guest", { method: "POST" });
+            const body = (await res.json()) as {
+              access_token?: string;
+              refresh_token?: string;
+              message?: string;
+            };
+            if (!res.ok || !body.access_token || !body.refresh_token) {
+              throw new Error(body.message ?? "Não foi possível abrir a sessão de convidado.");
+            }
+            const { data: sess, error: setErr } = await sb.auth.setSession({
+              access_token: body.access_token,
+              refresh_token: body.refresh_token,
+            });
+            if (setErr) throw setErr;
+            current = sess.user;
+          }
         }
         if (!alive) return;
         setUser(current);
@@ -67,11 +90,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       } catch (e) {
         if (!alive) return;
         const msg = e instanceof Error ? e.message : String(e);
-        setError(
-          /anonymous/i.test(msg)
-            ? "Entrada de convidado está desligada no Supabase. Ligue em Authentication → Sign In / Providers → Anonymous sign-ins."
-            : msg,
-        );
+        setError(msg);
         setStatus("error");
       }
     }

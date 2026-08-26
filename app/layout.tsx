@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Fraunces, Inter_Tight, JetBrains_Mono } from "next/font/google";
+import { SessionBanner } from "@/components/session-banner";
 import { SessionProvider } from "@/components/session";
 import "./globals.css";
 
@@ -54,7 +55,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${fraunces.variable} ${interTight.variable} ${jetbrains.variable} ${archivo.variable} h-full antialiased`}
     >
       <body className="relative flex min-h-full flex-col">
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          <SessionBanner />
+          {children}
+        </SessionProvider>
       </body>
     </html>
   );

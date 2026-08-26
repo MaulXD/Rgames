@@ -116,6 +116,20 @@ export const CONQUISTAS: Conquista[] = [
     glifo: "lua",
     cor: "#7BA392",
   },
+  {
+    id: "general",
+    nome: "General",
+    como: "Cumpriu o objetivo secreto e venceu uma partida de Domínio.",
+    glifo: "coroa",
+    cor: "#FFC42E",
+  },
+  {
+    id: "assalto-perfeito",
+    nome: "Assalto perfeito",
+    como: "Tirou três baixas do defensor numa única rolagem. Um em vinte e sete.",
+    glifo: "raio",
+    cor: "#FF4D5E",
+  },
 ];
 
 export function parseStats(raw: unknown): Stats {

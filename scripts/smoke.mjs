@@ -11,6 +11,7 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
+import pg from "pg";
 
 config({ path: join(dirname(fileURLToPath(import.meta.url)), "..", ".env.local"), quiet: true });
 
@@ -155,6 +156,81 @@ const gone = await fetch(`${URL_}/rest/v1/rooms?select=id&id=eq.${room.id}`, {
   headers: { apikey: SVC, Authorization: `Bearer ${SVC}` },
 });
 ok((await gone.json()).length === 0, "sala vazia foi apagada");
+
+/* ── auditoria de privilégio ──────────────────────────────────────────────
+   Esta é a verificação mais importante do arquivo, e ela existe por causa de
+   um erro cometido duas vezes.
+
+   O Postgres concede EXECUTE em toda função nova ao papel PUBLIC, e o projeto
+   Supabase concede também, por ALTER DEFAULT PRIVILEGES, a `anon` e
+   `authenticated`. Os três grants têm de ser revogados; revogar só de PUBLIC
+   parece funcionar e não funciona. Já deixou aberto `letreiro_score` (encerrar
+   a rodada quando quiser), `sweep_guests` (APAGAR usuários) e, na segunda vez,
+   `dominio_termina` — que recebe o estado da partida como argumento e grava,
+   ou seja: escrever o mapa que quiser e se coroar vencedor.
+
+   Em vez de confiar que eu vou lembrar de escrever as três palavras na
+   próxima migração, a lista permitida está aqui e é comparada nos DOIS
+   sentidos. Função nova exposta por acidente quebra o teste. Função do
+   cliente trancada por acidente também. */
+
+const PERMITIDAS = [
+  // plataforma
+  "create_room", "join_room", "leave_room", "set_color", "set_profile",
+  "set_ready", "set_room_settings", "touch_presence",
+  // Letreiro
+  "letreiro_start", "letreiro_submit",
+  // Dossiê
+  "dossie_accuse", "dossie_end_turn", "dossie_move", "dossie_pad",
+  "dossie_pass_refute", "dossie_refute", "dossie_start", "dossie_suggest",
+  // Domínio
+  "dominio_atacar", "dominio_avancar", "dominio_encerrar_turno",
+  "dominio_reforcar", "dominio_remanejar", "dominio_start", "dominio_trocar",
+  // auxiliares que a RLS PRECISA executar: a expressão de uma policy roda com
+  // o privilégio de quem consulta, então revogar estas mata o lobby inteiro
+  "is_match_member", "is_room_member", "shares_room_with",
+];
+
+const db = new pg.Client({
+  connectionString:
+    (process.env.POSTGRES_URL ?? process.env.DATABASE_URL) + "&uselibpqcompat=true",
+});
+await db.connect();
+
+const expostas = (
+  await db.query(`
+    select p.proname nome
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and (has_function_privilege('authenticated', p.oid, 'execute')
+         or has_function_privilege('anon', p.oid, 'execute'))
+     order by 1`)
+).rows.map((r) => r.nome);
+
+const sobrando = expostas.filter((f) => !PERMITIDAS.includes(f));
+const faltando = PERMITIDAS.filter((f) => !expostas.includes(f));
+
+ok(
+  sobrando.length === 0,
+  sobrando.length === 0
+    ? `nenhuma função interna exposta ao cliente (${expostas.length} chamáveis, todas previstas)`
+    : `FUNÇÃO INTERNA EXPOSTA: ${sobrando.join(", ")} — revogue de public, anon E authenticated`,
+);
+ok(
+  faltando.length === 0,
+  faltando.length === 0
+    ? "toda função do cliente continua chamável"
+    : `função do cliente trancada por acidente: ${faltando.join(", ")}`,
+);
+
+// e a checagem que não depende de lista: nenhuma faxina na mão de ninguém
+const faxinas = expostas.filter((f) => f.endsWith("_sweep") || f.startsWith("sweep_"));
+ok(faxinas.length === 0, `nenhuma rotina de faxina é chamável pelo cliente${faxinas.length ? `: ${faxinas.join(", ")}` : ""}`);
+
+const premios = expostas.filter((f) => f.endsWith("_premia") || f === "dar_xp" || f === "melhor_palavra");
+ok(premios.length === 0, `nenhuma função de crédito de XP é chamável pelo cliente${premios.length ? `: ${premios.join(", ")}` : ""}`);
+
+await db.end();
 
 // faxina
 for (const u of [A, B, C]) await admin(`/admin/users/${u.id}`, { method: "DELETE" });

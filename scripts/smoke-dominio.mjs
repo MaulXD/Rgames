@@ -10,6 +10,7 @@
  * 1%, ninguém percebe jogando — e o jogo fica injusto para sempre.
  */
 import { join, dirname } from "node:path";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
@@ -296,6 +297,453 @@ if (partida?.public_state) {
     dupla.status >= 400 && /ALREADY_RUNNING/.test(JSON.stringify(dupla.body)),
     "não começa duas partidas na mesma sala",
   );
+}
+
+/* ── 8. o ciclo de turno ──────────────────────────────────────────────────
+   Reforçar, atacar em série, avançar, remanejar, encerrar. É a primeira vez
+   que o Domínio é JOGADO num teste, e não só montado. O mapa é lido do mesmo
+   JSON que o servidor publicou, então vizinhança aqui e vizinhança lá são a
+   mesma coisa por construção. */
+
+const MAPA = JSON.parse(
+  await readFile(join(root, "lib", "dominio", "vantara.json"), "utf8"),
+);
+const VIZ = Object.fromEntries(MAPA.territorios.map((t) => [t.id, t.vizinhos]));
+
+/** Quem está na vez, com token. */
+async function daVez(matchId) {
+  const est = (await db.query("select public_state from matches where id = $1", [matchId]))
+    .rows[0].public_state;
+  const dono = (
+    await db.query("select user_id from match_players where match_id = $1 and seat = $2", [
+      matchId,
+      est.turnSeat,
+    ])
+  ).rows[0].user_id;
+  return { est, jogador: P.find((x) => x.id === dono) };
+}
+
+if (partida?.public_state) {
+  let { est, jogador } = await daVez(partida.id);
+  ok(!!jogador, `o assento ${est.turnSeat} é de um dos três jogadores do teste`);
+
+  const meus = () =>
+    Object.entries(est.donos)
+      .filter(([, s]) => s === est.turnSeat)
+      .map(([t]) => t);
+
+  /* reforço */
+  const alheio = Object.entries(est.donos).find(([, s]) => s !== est.turnSeat)[0];
+  const naoMeu = await rpc(jogador.token, "dominio_reforcar", {
+    p_match: partida.id,
+    p_ter: alheio,
+    p_qtd: 1,
+  });
+  ok(/NOT_YOURS/.test(JSON.stringify(naoMeu.body)), "não se reforça território alheio");
+
+  const demais = await rpc(jogador.token, "dominio_reforcar", {
+    p_match: partida.id,
+    p_ter: meus()[0],
+    p_qtd: est.reforcoLeft + 1,
+  });
+  ok(
+    /NOT_ENOUGH_REINFORCEMENTS/.test(JSON.stringify(demais.body)),
+    "não se coloca mais exército do que se recebeu",
+  );
+
+  const cedo = await rpc(jogador.token, "dominio_atacar", {
+    p_match: partida.id,
+    p_de: meus()[0],
+    p_para: alheio,
+    p_vezes: 1,
+  });
+  ok(/WRONG_PHASE/.test(JSON.stringify(cedo.body)), "não se ataca antes de colocar o reforço");
+
+  const antesDoReforco = est.exercitos[meus()[0]];
+  const quantos = est.reforcoLeft;
+  const posto = await rpc(jogador.token, "dominio_reforcar", {
+    p_match: partida.id,
+    p_ter: meus()[0],
+    p_qtd: quantos,
+  });
+  ok(posto.status === 200, `reforço de ${quantos} colocado`);
+  est = posto.body.public_state;
+  ok(
+    est.exercitos[meus()[0]] === antesDoReforco + quantos,
+    `o exército chegou onde foi mandado (${antesDoReforco} → ${est.exercitos[meus()[0]]})`,
+  );
+  ok(est.reforcoLeft === 0 && est.phase === "ataque", "acabou o reforço, a fase virou ataque sozinha");
+
+  /* ataque */
+  const frente = meus()
+    .filter((t) => est.exercitos[t] >= 2)
+    .map((t) => [t, VIZ[t].find((v) => est.donos[v] !== est.turnSeat)])
+    .find(([, alvo]) => !!alvo);
+  ok(!!frente, "existe um território meu com dois exércitos e um vizinho inimigo");
+
+  const [de, para] = frente;
+  const longe = MAPA.territorios.find(
+    (t) => t.id !== de && t.id !== para && !VIZ[de].includes(t.id) && est.donos[t.id] !== est.turnSeat,
+  ).id;
+  const naoVizinho = await rpc(jogador.token, "dominio_atacar", {
+    p_match: partida.id,
+    p_de: de,
+    p_para: longe,
+    p_vezes: 1,
+  });
+  ok(/NOT_ADJACENT/.test(JSON.stringify(naoVizinho.body)), "não se ataca quem não é vizinho");
+
+  const proprio = await rpc(jogador.token, "dominio_atacar", {
+    p_match: partida.id,
+    p_de: de,
+    p_para: VIZ[de].find((v) => est.donos[v] === est.turnSeat) ?? de,
+    p_vezes: 1,
+  });
+  ok(
+    /TARGET_IS_YOURS|SAME_TERRITORY/.test(JSON.stringify(proprio.body)),
+    "não se ataca território próprio",
+  );
+
+  const antesA = est.exercitos[de];
+  const antesD = est.exercitos[para];
+  const briga = await rpc(jogador.token, "dominio_atacar", {
+    p_match: partida.id,
+    p_de: de,
+    p_para: para,
+    p_vezes: 12,
+  });
+  ok(briga.status === 200, `ataque em série resolvido (${JSON.stringify(briga.body).slice(0, 90)})`);
+
+  const rodadas = briga.body?.assaltos ?? [];
+  ok(rodadas.length >= 1, `o servidor devolveu ${rodadas.length} assalto(s) para animar`);
+  ok(
+    rodadas.every(
+      (a) =>
+        a.dAtac.every((d) => d >= 1 && d <= 6) &&
+        a.dDefe.every((d) => d >= 1 && d <= 6) &&
+        a.perdeAtac + a.perdeDefe === Math.min(a.dAtac.length, a.dDefe.length),
+    ),
+    "todo dado é de 1 a 6, e cada par comparado tira exatamente uma baixa",
+  );
+  est = briga.body.match.public_state;
+  const perdidoA = rodadas.reduce((n, a) => n + a.perdeAtac, 0);
+  const perdidoD = rodadas.reduce((n, a) => n + a.perdeDefe, 0);
+  console.log(
+    `  ${de}(${antesA}) → ${para}(${antesD}): ${rodadas.length} assaltos, ` +
+      `${perdidoA} baixas minhas, ${perdidoD} dele${briga.body.conquistou ? " · CONQUISTOU" : ""}`,
+  );
+  ok(
+    Object.values(est.exercitos).every((n) => n >= 1),
+    "nenhum território ficou com zero exército depois da briga",
+  );
+  ok(
+    Object.keys(est.donos).length === 42 && Object.keys(est.exercitos).length === 42,
+    "o mapa continua com 42 territórios e 42 guarnições",
+  );
+
+  /* avanço */
+  if (briga.body.conquistou) {
+    ok(est.donos[para] === est.turnSeat, `${para} mudou de dono`);
+    ok(est.conquistou === true, "o turno ficou marcado como conquistador — vale carta no fim");
+    if (est.avanco) {
+      const demasiado = await rpc(jogador.token, "dominio_avancar", {
+        p_match: partida.id,
+        p_qtd: est.avanco.max + 1,
+      });
+      ok(/TOO_MANY/.test(JSON.stringify(demasiado.body)), "o avanço tem teto de três no total");
+
+      const trava = await rpc(jogador.token, "dominio_remanejar", {
+        p_match: partida.id,
+        p_de: de,
+        p_para: para,
+        p_qtd: 1,
+      });
+      ok(
+        /ADVANCE_PENDING/.test(JSON.stringify(trava.body)),
+        "com avanço pendente, nada mais acontece antes de resolvê-lo",
+      );
+
+      const av = await rpc(jogador.token, "dominio_avancar", {
+        p_match: partida.id,
+        p_qtd: est.avanco.max,
+      });
+      ok(av.status === 200, `avançou ${est.avanco.max} para o território tomado`);
+      est = av.body.public_state;
+      ok(est.avanco === null, "o avanço foi resolvido e saiu do estado");
+    }
+  }
+
+  /* remanejo */
+  const par = meus()
+    .filter((t) => est.exercitos[t] >= 2)
+    .map((t) => [t, VIZ[t].find((v) => est.donos[v] === est.turnSeat)])
+    .find(([, v]) => !!v);
+  if (par) {
+    const [rd, rp] = par;
+    const tudo = await rpc(jogador.token, "dominio_remanejar", {
+      p_match: partida.id,
+      p_de: rd,
+      p_para: rp,
+      p_qtd: est.exercitos[rd],
+    });
+    ok(/WOULD_EMPTY/.test(JSON.stringify(tudo.body)), "remanejo nunca deixa o território vazio");
+
+    const rem = await rpc(jogador.token, "dominio_remanejar", {
+      p_match: partida.id,
+      p_de: rd,
+      p_para: rp,
+      p_qtd: 1,
+    });
+    ok(rem.status === 200, `remanejou 1 de ${rd} para ${rp}`);
+    est = rem.body.public_state;
+
+    const denovo = await rpc(jogador.token, "dominio_remanejar", {
+      p_match: partida.id,
+      p_de: rd,
+      p_para: rp,
+      p_qtd: 1,
+    });
+    ok(/ALREADY_MOVED/.test(JSON.stringify(denovo.body)), "um remanejo por turno, e só um");
+  }
+
+  /* encerrar */
+  const conquistou = est.conquistou === true;
+  const antesSeat = est.turnSeat;
+  const fim = await rpc(jogador.token, "dominio_encerrar_turno", { p_match: partida.id });
+  ok(fim.status === 200, `turno encerrado (${JSON.stringify(fim.body).slice(0, 80)})`);
+  est = fim.body.public_state;
+  ok(est.turnSeat !== antesSeat, `a vez passou do assento ${antesSeat} para o ${est.turnSeat}`);
+  ok(est.phase === "reforco", "o próximo entra na fase de reforço");
+  ok(est.reforcoLeft >= 3, `e já com ${est.reforcoLeft} de reforço calculado`);
+  ok(est.conquistou === false && est.remanejou === false, "as marcas do turno anterior foram limpas");
+
+  const mao = (
+    await db.query(
+      `select jsonb_array_length(coalesce(data -> 'cartas', '[]'::jsonb)) n
+         from match_private_state where match_id = $1 and user_id = $2`,
+      [partida.id, jogador.id],
+    )
+  ).rows[0].n;
+  ok(
+    conquistou ? mao === 1 : mao === 0,
+    `quem ${conquistou ? "conquistou levou" : "não conquistou não levou"} carta (mão: ${mao})`,
+  );
+
+  const forado = await rpc(jogador.token, "dominio_atacar", {
+    p_match: partida.id,
+    p_de: de,
+    p_para: para,
+    p_vezes: 1,
+  });
+  ok(/NOT_YOUR_TURN/.test(JSON.stringify(forado.body)), "quem já jogou não age fora da vez");
+
+  /* ── 9. troca de cartas ────────────────────────────────────────────────
+     Chegar a três cartas jogando levaria três turnos de conquista. A mão é
+     posta na mesa pelo caminho de serviço, e a TROCA é exercitada de verdade:
+     é a regra com mais jeito de dar errado em silêncio. */
+
+  const { jogador: agora } = await daVez(partida.id);
+  const meusAgora = Object.entries(est.donos)
+    .filter(([, s]) => s === est.turnSeat)
+    .map(([t]) => t);
+
+  const mao3 = [
+    { ter: meusAgora[0], simbolo: "infante", id: meusAgora[0] },
+    { ter: null, simbolo: "coringa", id: "coringa-1" },
+    { ter: meusAgora[1], simbolo: "cavalo", id: meusAgora[1] },
+  ];
+  await db.query(
+    `update match_private_state set data = jsonb_set(data, '{cartas}', $3::jsonb)
+      where match_id = $1 and user_id = $2`,
+    [partida.id, agora.id, JSON.stringify(mao3)],
+  );
+
+  const ruim = await rpc(agora.token, "dominio_trocar", {
+    p_match: partida.id,
+    p_cartas: [0, 1, 2],
+  });
+  ok(
+    /BAD_COMBO/.test(JSON.stringify(ruim.body)),
+    "infante + cavalo + coringa não fecha trinca (o coringa completa PAR igual)",
+  );
+
+  mao3[2] = { ter: meusAgora[1], simbolo: "infante", id: meusAgora[1] };
+  await db.query(
+    `update match_private_state set data = jsonb_set(data, '{cartas}', $3::jsonb)
+      where match_id = $1 and user_id = $2`,
+    [partida.id, agora.id, JSON.stringify(mao3)],
+  );
+
+  const antesRef = (await daVez(partida.id)).est.reforcoLeft;
+  const antesT0 = (await daVez(partida.id)).est.exercitos[meusAgora[0]];
+  const troca = await rpc(agora.token, "dominio_trocar", {
+    p_match: partida.id,
+    p_cartas: [0, 1, 2],
+  });
+  ok(troca.status === 200, `troca aceita (${JSON.stringify(troca.body).slice(0, 80)})`);
+  const depois = troca.body.public_state;
+  ok(depois.trocas === 1, "é a primeira troca da partida");
+  ok(
+    depois.reforcoLeft === antesRef + 4,
+    `a primeira troca vale 4 exércitos (${antesRef} → ${depois.reforcoLeft})`,
+  );
+  ok(
+    depois.exercitos[meusAgora[0]] === antesT0 + 2,
+    "carta de território seu põe dois exércitos ali na hora",
+  );
+  const maoDepois = (
+    await db.query(
+      `select jsonb_array_length(data -> 'cartas') n from match_private_state
+        where match_id = $1 and user_id = $2`,
+      [partida.id, agora.id],
+    )
+  ).rows[0].n;
+  ok(maoDepois === 0, "as três cartas saíram da mão");
+
+  const semCarta = await rpc(agora.token, "dominio_trocar", {
+    p_match: partida.id,
+    p_cartas: [0, 1, 2],
+  });
+  ok(
+    /CARD_NOT_HELD|NEED_THREE/.test(JSON.stringify(semCarta.body)),
+    "não se troca carta que não está na mão",
+  );
+
+  /* obrigado a trocar com cinco na mão */
+  const cinco = Array.from({ length: 5 }, (_, i) => ({
+    ter: null,
+    simbolo: ["infante", "cavalo", "canhao", "infante", "cavalo"][i],
+    id: `x${i}`,
+  }));
+  await db.query(
+    `update match_private_state set data = jsonb_set(data, '{cartas}', $3::jsonb)
+      where match_id = $1 and user_id = $2`,
+    [partida.id, agora.id, JSON.stringify(cinco)],
+  );
+  const obrigado = await rpc(agora.token, "dominio_reforcar", {
+    p_match: partida.id,
+    p_ter: meusAgora[0],
+    p_qtd: 1,
+  });
+  ok(
+    /MUST_TRADE/.test(JSON.stringify(obrigado.body)),
+    "com cinco cartas na mão, trocar deixa de ser opcional",
+  );
+}
+
+/* ── 10. o baralho e a escada da troca ────────────────────────────────────
+   Estas duas rodam direto no banco porque são função pura — e é assim que se
+   testa uma permutação sem depender de sorte. */
+
+const baralho = (
+  await db.query(
+    `select jsonb_agg(public.dominio_carta(gt.data, 12345::bigint, k) -> 'id') ids
+       from public.game_themes gt, generate_series(0, 43) k where gt.id = 'vantara'`,
+  )
+).rows[0].ids;
+ok(baralho.length === 44, "o baralho tem 44 cartas");
+ok(new Set(baralho).size === 44, "as 44 primeiras cartas dadas NÃO se repetem");
+ok(baralho.filter((c) => String(c).startsWith("coringa")).length === 2, "e há exatamente 2 coringas");
+
+const naipes = (
+  await db.query(
+    `select public.dominio_carta(gt.data, 1::bigint, k) ->> 'simbolo' s, count(*) n
+       from public.game_themes gt, generate_series(0, 43) k
+      where gt.id = 'vantara' group by 1 order by 1`,
+  )
+).rows;
+ok(
+  naipes.filter((r) => r.s !== "coringa").every((r) => Number(r.n) === 14),
+  `os três naipes têm 14 cartas cada (${naipes.map((r) => `${r.s}:${r.n}`).join(" ")})`,
+);
+
+const escada = (
+  await db.query(
+    "select array_agg(public.dominio_valor_troca(n) order by n) v from generate_series(1,8) n",
+  )
+).rows[0].v.map(Number);
+ok(
+  JSON.stringify(escada) === JSON.stringify([4, 6, 8, 10, 12, 15, 20, 25]),
+  `a escada da troca sobe 4-6-8-10-12-15-20-25 (${escada.join("-")})`,
+);
+
+/* ── 11. objetivo: a conta que decide a partida ───────────────────────────
+   Estado montado à mão, para cada tipo de objetivo. Vale mais que testar num
+   jogo de verdade, porque aqui a resposta certa é conhecida. */
+
+async function objOk(estado, seat, obj) {
+  const r = await db.query(
+    `select public.dominio_objetivo_ok(gt.data, $1::jsonb, $2::smallint, $3::jsonb) ok
+       from public.game_themes gt where gt.id = 'vantara'`,
+    [JSON.stringify(estado), seat, JSON.stringify(obj)],
+  );
+  return r.rows[0].ok;
+}
+
+const todosMeus = {
+  donos: Object.fromEntries(MAPA.territorios.map((t) => [t.id, 0])),
+  exercitos: Object.fromEntries(MAPA.territorios.map((t) => [t.id, 1])),
+  abates: {},
+};
+const nenhum = {
+  donos: Object.fromEntries(MAPA.territorios.map((t) => [t.id, 1])),
+  exercitos: Object.fromEntries(MAPA.territorios.map((t) => [t.id, 1])),
+  abates: {},
+};
+
+ok(await objOk(todosMeus, 0, { tipo: "territorios", alvo: 24 }), "24 territórios: cumprido com 42");
+ok(!(await objOk(nenhum, 0, { tipo: "territorios", alvo: 24 })), "24 territórios: não cumprido com 0");
+ok(
+  !(await objOk(todosMeus, 0, { tipo: "territorios-com-dois", alvo: 18 })),
+  "18 com dois exércitos: 42 territórios de 1 exército NÃO cumprem",
+);
+ok(
+  await objOk(
+    { ...todosMeus, exercitos: Object.fromEntries(MAPA.territorios.map((t) => [t.id, 2])) },
+    0,
+    { tipo: "territorios-com-dois", alvo: 18 },
+  ),
+  "18 com dois exércitos: cumprido quando todos têm 2",
+);
+ok(await objOk(todosMeus, 0, { tipo: "portos" }), "todos os portos: cumprido com o mapa inteiro");
+ok(!(await objOk(nenhum, 0, { tipo: "portos" })), "todos os portos: não cumprido sem nada");
+ok(
+  await objOk({ ...nenhum, abates: { 0: 2 } }, 0, { tipo: "eliminar", alvo: 2 }),
+  "eliminar 2: cumprido com dois abates",
+);
+ok(
+  !(await objOk({ ...nenhum, abates: { 0: 1 } }, 0, { tipo: "eliminar", alvo: 2 })),
+  "eliminar 2: um abate não basta",
+);
+
+const soAurelia = {
+  donos: Object.fromEntries(
+    MAPA.territorios.map((t) => [t.id, t.continente === "aurelia" ? 0 : 1]),
+  ),
+  exercitos: Object.fromEntries(MAPA.territorios.map((t) => [t.id, 1])),
+  abates: {},
+};
+ok(
+  !(await objOk(soAurelia, 0, {
+    tipo: "continentes",
+    continentes: ["aurelia", "sarnath"],
+  })),
+  "Aurélia + Sarnath: metade não conta",
+);
+ok(
+  await objOk(soAurelia, 0, { tipo: "continentes", continentes: ["aurelia"] }),
+  "Aurélia inteira: cumprido",
+);
+ok(
+  !(await objOk(soAurelia, 0, { tipo: "continentes", continentes: ["aurelia"], extras: 3 })),
+  "Aurélia + 3 fora dela: não cumprido sem os três de fora",
+);
+
+/* ── 12. as funções internas continuam trancadas ──────────────────────── */
+
+for (const fn of ["dominio_venceu", "dominio_sweep", "dominio_carta", "dominio_termina", "dominio_na_vez"]) {
+  const r = await rpc(P[0].token, fn, {});
+  ok(r.status >= 400, `o cliente NÃO chama ${fn} (status ${r.status})`);
 }
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });

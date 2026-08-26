@@ -10,7 +10,10 @@
     "migrate": "node scripts/migrate.mjs",
     "migrate:status": "node scripts/migrate.mjs --status",
     "typecheck": "tsc --noEmit",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "dict": "node scripts/build-dict.mjs",
+    "boards": "node scripts/build-boards.mjs",
+    "smoke:letreiro": "node scripts/smoke-letreiro.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

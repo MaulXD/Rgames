@@ -1,4 +1,5 @@
 import { GameCard } from "@/components/game-card";
+import { SiteHeader } from "@/components/site-header";
 import { JoinForm } from "@/components/join-form";
 import { GAMES } from "@/lib/games";
 
@@ -23,23 +24,7 @@ const PASSOS = [
 export default function Home() {
   return (
     <>
-      {/* ── cabeçalho ─────────────────────────────────────────────────── */}
-      <header className="relative z-10 mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
-        <span
-          className="text-2xl leading-none"
-          style={{
-            fontFamily: "var(--font-fraunces), Georgia, serif",
-            fontVariationSettings: '"SOFT" 0, "WONK" 1, "opsz" 96',
-            fontWeight: 700,
-            letterSpacing: "-0.03em",
-          }}
-        >
-          Mesa
-        </span>
-        <a className="btn btn-ghost" href="#jogos">
-          Ver os jogos
-        </a>
-      </header>
+      <SiteHeader />
 
       <main className="relative z-10 mx-auto w-full max-w-6xl px-5 sm:px-8">
         {/* ── hero ────────────────────────────────────────────────────── */}

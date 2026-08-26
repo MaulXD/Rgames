@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter_Tight, JetBrains_Mono } from "next/font/google";
+import { SessionProvider } from "@/components/session";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -44,7 +45,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="pt-BR"
       className={`${fraunces.variable} ${interTight.variable} ${jetbrains.variable} h-full antialiased`}
     >
-      <body className="relative flex min-h-full flex-col">{children}</body>
+      <body className="relative flex min-h-full flex-col">
+        <SessionProvider>{children}</SessionProvider>
+      </body>
     </html>
   );
 }

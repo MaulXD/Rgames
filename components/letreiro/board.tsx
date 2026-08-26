@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useRef } from "react";
-import { CELLS, SIZE, areNeighbors, faceLabel, letterValue } from "@/lib/letreiro";
+import { useCallback, useMemo, useRef } from "react";
+import { areNeighbors, faceLabel, letterValue, sizeOf } from "@/lib/letreiro";
 
 /**
- * A bandeja: 16 dados sobre feltro.
+ * A bandeja: 16 ou 25 dados sobre feltro — quem manda é `grid.length`.
  *
  * Três formas de montar a palavra, e as três precisam conviver sem modo:
  *
@@ -41,6 +41,7 @@ export function Board({
 }) {
   const pressing = useRef(false);
   const entered = useRef(0);
+  const lado = useMemo(() => sizeOf(grid), [grid]);
 
   /** Tenta acrescentar (ou desfazer) uma célula. Diz se mudou algo. */
   const touch = useCallback(
@@ -59,7 +60,7 @@ export function Board({
 
       // clicar longe do fim NÃO é mais ignorado em silêncio: recomeça dali.
       // Ignorar era o que dava a sensação de que o jogo não respondia.
-      if (path.length && !areNeighbors(last, cell)) {
+      if (path.length && !areNeighbors(last, cell, lado)) {
         onPathChange([cell]);
         return true;
       }
@@ -67,7 +68,7 @@ export function Board({
       onPathChange([...path, cell]);
       return true;
     },
-    [disabled, path, onPathChange],
+    [disabled, path, onPathChange, lado],
   );
 
   const endPress = useCallback(() => {
@@ -84,6 +85,8 @@ export function Board({
         className="tray-grid"
         role="grid"
         aria-label="Bandeja de letras"
+        data-lado={lado}
+        style={{ "--lado": lado } as React.CSSProperties}
         onPointerUp={endPress}
         onPointerLeave={endPress}
         onPointerCancel={() => {
@@ -91,15 +94,19 @@ export function Board({
           entered.current = 0;
         }}
       >
-        {Array.from({ length: CELLS }, (_, i) => {
+        {Array.from({ length: grid.length }, (_, i) => {
           const ordem = path.indexOf(i);
           const ultima = ordem >= 0 && ordem === path.length - 1;
+          // a entrada dos dados é em diagonal: onda que atravessa a bandeja,
+          // em vez de tudo aparecendo no mesmo instante
+          const onda = Math.floor(i / lado) + (i % lado);
           return (
             <button
               key={i}
               type="button"
               role="gridcell"
               className="die"
+              style={{ "--onda": onda } as React.CSSProperties}
               data-on={ordem >= 0}
               data-last={ultima}
               data-state={ordem >= 0 ? state : "idle"}
@@ -134,9 +141,9 @@ export function Board({
             <polyline
               points={path
                 .map((i) => {
-                  const r = Math.floor(i / SIZE);
-                  const c = i % SIZE;
-                  return `${(c + 0.5) * (100 / SIZE)},${(r + 0.5) * (100 / SIZE)}`;
+                  const r = Math.floor(i / lado);
+                  const c = i % lado;
+                  return `${(c + 0.5) * (100 / lado)},${(r + 0.5) * (100 / lado)}`;
                 })
                 .join(" ")}
               data-state={state}

@@ -162,14 +162,19 @@ export function Reveal({
             <div>
               <p className="eyebrow">Aproveitamento</p>
               <p className="mono reveal-stat-num">{aproveitamento}%</p>
+              {/* o teto conta só palavra comum. Antes contava o gabarito
+                  inteiro — 100% era inalcançável e a porcentagem não media
+                  nada, porque ninguém acha "aalênio". */}
               <p className="dim reveal-stat-note">
-                {meuTotal} de {st.maxScore ?? 0} pontos possíveis
+                {meuTotal} de {st.maxScore ?? 0} pontos em palavra do dia a dia
               </p>
             </div>
             <div>
               <p className="eyebrow">A grade tinha</p>
               <p className="mono reveal-stat-num">{st.wordCount ?? 0}</p>
-              <p className="dim reveal-stat-note">palavras no total</p>
+              <p className="dim reveal-stat-note">
+                palavras conhecidas — as raras também valem, se você achar
+              </p>
             </div>
           </div>
 

@@ -97,11 +97,18 @@ const regraRuim2 = await rpc(A.token, "set_room_settings", {
 });
 ok(regraRuim2.status >= 400 && /BAD_SCORING/.test(JSON.stringify(regraRuim2.body)), "anulação fora do vocabulário é recusada");
 
+const regraRuim3 = await rpc(A.token, "set_room_settings", {
+  p_room: sala.id,
+  p_settings: { tamanho: 6 },
+});
+ok(regraRuim3.status >= 400 && /BAD_SIZE/.test(JSON.stringify(regraRuim3.body)), "tamanho fora do vocabulário é recusado");
+
 const regraOk = await rpc(A.token, "set_room_settings", {
   p_room: sala.id,
-  p_settings: { modo: "relampago", anulacao: "classica" },
+  p_settings: { modo: "relampago", anulacao: "classica", tamanho: 4 },
 });
 ok(regraOk.status === 200 && regraOk.body?.settings?.modo === "relampago", "anfitrião grava Relâmpago + anulação clássica");
+ok(regraOk.body?.settings?.tamanho === 4, "o tamanho da bandeja é gravado nas regras da casa");
 
 // só o anfitrião começa
 const naoHost = await rpc(B.token, "letreiro_start", { p_room: sala.id });
@@ -112,6 +119,7 @@ const partida = inicio.body;
 ok(inicio.status === 200 && partida?.id, "letreiro_start criou a partida");
 ok(Array.isArray(partida?.public_state?.grid) && partida.public_state.grid.length === 16,
    "grade de 16 faces no estado público");
+ok(partida?.public_state?.size === 4, `o tamanho vem no estado público (${partida?.public_state?.size})`);
 ok(partida?.public_state?.solution === undefined && partida?.solution === undefined,
    "o gabarito NÃO vem no estado público");
 
@@ -128,12 +136,18 @@ ok(partida.public_state.scoring === "classica", "a regra de anulação foi conge
 
 // gabarito pelo servidor, para escolher palavras de verdade
 const { rows } = await db.query(
-  "select b.grid, b.solution, b.word_count from letreiro_boards b join matches m on m.board_id = b.id where m.id = $1",
+  `select b.grid, b.solution, b.word_count, b.comuns, b.max_score_comum, b.max_score
+     from letreiro_boards b join matches m on m.board_id = b.id where m.id = $1`,
   [partida.id],
 );
-const { grid, solution } = rows[0];
+const { grid, solution, comuns, max_score_comum: maxComum } = rows[0];
 const todas = Object.entries(solution).sort((a, b) => b[0].length - a[0].length);
-console.log(`  grade: ${grid.join(" ")} · ${rows[0].word_count} palavras`);
+console.log(
+  `  grade: ${grid.join(" ")} · ${rows[0].word_count} palavras · ${comuns?.length ?? 0} comuns`,
+);
+ok(Array.isArray(comuns) && comuns.length > 0, `a grade tem lista de palavras comuns (${comuns?.length ?? 0})`);
+ok(comuns.every((c) => c in solution), "toda palavra comum está no gabarito");
+ok(maxComum > 0 && maxComum <= rows[0].max_score, `o teto comum (${maxComum}) não passa do teto total (${rows[0].max_score})`);
 
 const [w1, p1] = todas[0];
 const [w2, p2] = todas[1];
@@ -225,6 +239,88 @@ const perdidas = fim?.public_state?.missed ?? [];
 ok(perdidas.length === 5, "revelação traz as 5 melhores que ninguém achou");
 ok(perdidas.every((x) => x.p && x.w), "cada perdida tem caminho e grafia");
 console.log(`  perdidas: ${perdidas.map((x) => `${x.w}(${x.pts})`).join(", ")}`);
+
+/* A REGRA QUE MAIS MUDA A SENSAÇÃO DO JOGO: a revelação só mostra palavra que
+   alguém reconhece. Antes ela exibia o topo do gabarito inteiro, e o gabarito
+   inteiro tem "aalênio". O teste compara contra a lista `comuns` da grade,
+   normalizando, porque a revelação devolve a grafia acentuada. */
+const semAcento = (s) =>
+  s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z]/g, "");
+ok(
+  perdidas.every((x) => comuns.includes(semAcento(x.w))),
+  `as perdidas saem SÓ da lista de comuns (${perdidas.map((x) => x.w).join(", ")})`,
+);
+ok(
+  fim?.public_state?.maxScore === maxComum,
+  `o aproveitamento usa o teto comum (${fim?.public_state?.maxScore} = ${maxComum})`,
+);
+ok(
+  fim?.public_state?.wordCount === comuns.length,
+  `"a grade tinha" conta as comuns (${fim?.public_state?.wordCount} = ${comuns.length})`,
+);
+ok(
+  achadasA.every((x) => typeof x.comum === "boolean"),
+  "cada palavra achada vem marcada como comum ou não",
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BANDEJA DE 5×5
+
+   Aqui mora a regressão silenciosa que a base 36 conserta: em hexadecimal só
+   cabem 16 células, então as nove últimas de uma grade de 25 não tinham dígito
+   e todo caminho que passasse por elas era recusado como BAD_PATH. O teste
+   exige uma palavra que USE uma célula de índice ≥ 16.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const sala5 = (await rpc(A.token, "create_room", { p_game: "letreiro" })).body;
+await rpc(B.token, "join_room", { p_code: sala5.code });
+const regra5 = await rpc(A.token, "set_room_settings", {
+  p_room: sala5.id,
+  p_settings: { modo: "relampago", anulacao: "classica", tamanho: 5 },
+});
+ok(regra5.body?.settings?.tamanho === 5, "sala configurada para 5×5");
+
+const inicio5 = await rpc(A.token, "letreiro_start", { p_room: sala5.id });
+const p5 = inicio5.body;
+ok(inicio5.status === 200 && p5?.id, `letreiro_start com 5×5 (${JSON.stringify(inicio5.body).slice(0, 100)})`);
+ok(p5?.public_state?.grid?.length === 25, `grade de 25 faces (${p5?.public_state?.grid?.length})`);
+ok(p5?.public_state?.size === 5, "o estado público diz size 5");
+
+const dura5 = Math.round((new Date(p5.ends_at).getTime() - new Date(p5.started_at).getTime()) / 1000);
+ok(dura5 >= 88 && dura5 <= 92, `Relâmpago de 5×5 dá 90s, não 60 (medido ${dura5}s)`);
+
+const g5 = await db.query(
+  `select b.solution, b.comuns from letreiro_boards b join matches m on m.board_id = b.id where m.id = $1`,
+  [p5.id],
+);
+const sol5 = g5.rows[0].solution;
+const B36 = "0123456789abcdefghijklmnopqrstuvwxyz";
+// uma palavra cujo caminho toca a metade de baixo da grade
+const longe = Object.entries(sol5).find(([, cam]) =>
+  [...cam].some((c) => B36.indexOf(c) >= 16),
+);
+ok(!!longe, "existe palavra usando célula de índice ≥ 16");
+if (longe) {
+  const [w5, cam5] = longe;
+  const env5 = await rpc(A.token, "letreiro_submit", { p_match: p5.id, p_word: w5, p_path: cam5 });
+  ok(
+    env5.body?.ok === true,
+    `${w5} pelo caminho ${cam5} é aceita — a base 36 endereça as 25 células (${JSON.stringify(env5.body)})`,
+  );
+}
+// e o caminho de 5×5 tem de ser recusado se as células não forem vizinhas:
+// 0 e 4 são a mesma linha em 4×4 (vizinhas de canto? não) mas em 5×5 estão a
+// quatro colunas de distância — a adjacência precisa do tamanho certo
+const doisEm5 = Object.entries(sol5).find(([w]) => w.length >= 4);
+if (doisEm5) {
+  const ruim5 = await rpc(A.token, "letreiro_submit", {
+    p_match: p5.id,
+    p_word: doisEm5[0],
+    p_path: "0o",
+  });
+  ok(ruim5.body?.ok === false, `caminho impossível em 5×5 é recusado (${ruim5.body?.reason})`);
+}
+ok(g5.rows[0].comuns?.length > 0, `a grade de 5×5 tem ${g5.rows[0].comuns?.length ?? 0} palavras comuns`);
 
 // a sala volta para o lobby, pronta para revanche
 const salaFim = (await get(A.token, `rooms?select=status&id=eq.${sala.id}`)).body?.[0];

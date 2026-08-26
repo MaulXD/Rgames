@@ -33,11 +33,16 @@ export type MatchRow = {
   public_state: {
     phase: string;
     grid: string[];
+    /** lado da grade: 4 ou 5 (redundante com grid.length, e serve de conferência) */
+    size?: number;
     mode?: string;
     scoring?: string;
     seconds?: number;
     counts?: Record<string, number>;
-    found?: Record<string, { w: string; p: string; pts: number; dup: boolean }[]>;
+    found?: Record<
+      string,
+      { w: string; p: string; pts: number; dup: boolean; comum?: boolean }[]
+    >;
     missed?: { w: string; p: string; pts: number }[];
     scores?: Record<string, number>;
     maxScore?: number;
@@ -273,7 +278,8 @@ export function LetreiroGame({
       }
       if (/^[a-zA-ZçÇáàâãéêíóôõúüÁÀÂÃÉÊÍÓÔÕÚÜ]$/.test(e.key)) {
         e.preventDefault();
-        setTyped((t) => (t + e.key).slice(0, 16));
+        // o teto é o número de células: nenhuma palavra pode passar disso
+        setTyped((t) => (t + e.key).slice(0, grid.length));
       }
     }
     window.addEventListener("keydown", onKey);
@@ -356,7 +362,7 @@ export function LetreiroGame({
           value={current}
           onChange={(e) => {
             setTapPath([]);
-            setTyped(e.target.value.slice(0, 16));
+            setTyped(e.target.value.slice(0, grid.length));
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {

@@ -13,9 +13,40 @@ import type { Room } from "@/lib/supabase/types";
  * Ver docs/00-PRD-PLATAFORMA.md §3 (princípio 2).
  */
 
-const MODOS = [
-  { id: "classico", nome: "Clássico", nota: "Três minutos. O padrão." },
-  { id: "relampago", nome: "Relâmpago", nota: "Um minuto. Cabe entre duas partidas." },
+/**
+ * A duração depende do tamanho da bandeja — 25 letras dão muito mais caminho
+ * para varrer que 16, e o mesmo relógio viraria pressa em vez de desafio. Os
+ * números aqui são os mesmos de `letreiro_start`; se um lado mudar, muda o
+ * outro, senão a tela promete um tempo que o servidor não dá.
+ */
+const DURACAO: Record<number, { classico: string; relampago: string }> = {
+  4: { classico: "Três minutos", relampago: "Um minuto" },
+  5: { classico: "Cinco minutos", relampago: "Um minuto e meio" },
+};
+
+function modos(tamanho: number) {
+  const d = DURACAO[tamanho] ?? DURACAO[4];
+  return [
+    { id: "classico", nome: "Clássico", nota: `${d.classico}. O padrão.` },
+    {
+      id: "relampago",
+      nome: "Relâmpago",
+      nota: `${d.relampago}. Cabe entre duas partidas.`,
+    },
+  ] as const;
+}
+
+const TAMANHOS = [
+  {
+    id: 4,
+    nome: "4 × 4 — dezesseis letras",
+    nota: "A bandeja clássica. Rodada curta e disputada, cabe na mão no celular.",
+  },
+  {
+    id: 5,
+    nome: "5 × 5 — vinte e cinco letras",
+    nota: "Mais letra, palavra mais longa, muito mais caminho. O relógio cresce junto.",
+  },
 ] as const;
 
 const ANULACOES = [
@@ -51,13 +82,15 @@ export function HouseRules({
 
   const modo = (room.settings?.modo as string) ?? "classico";
   const anulacao = (room.settings?.anulacao as string) ?? "classica";
+  const tamanho = Number(room.settings?.tamanho ?? 4);
+  const MODOS = modos(tamanho);
 
-  async function salvar(patch: Record<string, string>) {
+  async function salvar(patch: Record<string, string | number>) {
     setBusy(true);
     setErro(null);
     const { data, error } = await supabaseBrowser().rpc("set_room_settings", {
       p_room: room.id,
-      p_settings: { modo, anulacao, ...patch },
+      p_settings: { modo, anulacao, tamanho, ...patch },
     });
     setBusy(false);
     if (error) {
@@ -73,9 +106,9 @@ export function HouseRules({
     onChanged(data as unknown as Room);
   }
 
-  const resumo = `${MODOS.find((m) => m.id === modo)?.nome} · anulação ${
-    ANULACOES.find((a) => a.id === anulacao)?.nome?.toLowerCase()
-  }`;
+  const resumo = `${tamanho}×${tamanho} · ${
+    MODOS.find((m) => m.id === modo)?.nome
+  } · anulação ${ANULACOES.find((a) => a.id === anulacao)?.nome?.toLowerCase()}`;
 
   return (
     <div className="panel mt-4 p-5 sm:p-6">
@@ -101,6 +134,22 @@ export function HouseRules({
               Só o anfitrião muda as regras. Você está vendo o que valeu para esta sala.
             </p>
           )}
+
+          <fieldset disabled={!isHost || busy} style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="eyebrow mb-3">Tamanho da bandeja</legend>
+            <div className="flex flex-col gap-2">
+              {TAMANHOS.map((t) => (
+                <Opcao
+                  key={t.id}
+                  ativo={tamanho === t.id}
+                  nome={t.nome}
+                  nota={t.nota}
+                  previa={<GradeMini lado={t.id} />}
+                  onClick={() => void salvar({ tamanho: t.id })}
+                />
+              ))}
+            </div>
+          </fieldset>
 
           <fieldset disabled={!isHost || busy} style={{ border: 0, padding: 0, margin: 0 }}>
             <legend className="eyebrow mb-3">Duração</legend>
@@ -147,11 +196,14 @@ function Opcao({
   ativo,
   nome,
   nota,
+  previa,
   onClick,
 }: {
   ativo: boolean;
   nome: string;
   nota: string;
+  /** miniatura opcional à direita — vale mais que a descrição em texto */
+  previa?: React.ReactNode;
   onClick: () => void;
 }) {
   return (
@@ -163,10 +215,26 @@ function Opcao({
       data-on={ativo}
     >
       <span className="rule-mark" aria-hidden />
-      <span>
+      <span style={{ flex: 1 }}>
         <span className="rule-name">{nome}</span>
         <span className="rule-note">{nota}</span>
       </span>
+      {previa}
     </button>
+  );
+}
+
+/** A bandeja em miniatura: dá para ver a diferença sem começar a partida. */
+function GradeMini({ lado }: { lado: number }) {
+  return (
+    <span
+      className="rule-grade"
+      style={{ gridTemplateColumns: `repeat(${lado}, 1fr)` }}
+      aria-hidden
+    >
+      {Array.from({ length: lado * lado }, (_, i) => (
+        <span key={i} style={{ "--onda": (i % lado) + Math.floor(i / lado) } as React.CSSProperties} />
+      ))}
+    </span>
   );
 }

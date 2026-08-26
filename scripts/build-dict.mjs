@@ -35,6 +35,17 @@ config({ path: join(root, ".env.local"), quiet: true });
  * `palavra/FLAGS` — as flags de afixo sao descartadas, entao dele aproveitamos
  * so a forma base. Ainda assim fecha buracos reais.
  */
+/**
+ * Corpus de frequencia: lista de legendas em portugues brasileiro, ordenada da
+ * palavra mais falada para a menos. E "falado", nao "escrito", e isso importa:
+ * o registro de legenda e o registro de mesa de amigos.
+ *
+ * Serve para separar o que o jogo ACEITA (generoso) do que o jogo MOSTRA
+ * (comum). "serioba" existe no VOLP e nunca vai aparecer na revelacao.
+ */
+const CORPUS =
+  "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/pt_br/pt_br_full.txt";
+
 const FONTES = [
   { url: "https://raw.githubusercontent.com/pythonprobr/palavras/master/palavras.txt", dic: false },
   { url: "https://raw.githubusercontent.com/LibreOffice/dictionaries/master/pt_BR/pt_BR.dic", dic: true },
@@ -93,6 +104,32 @@ async function baixar() {
   }
   if (!vivas) throw new Error("nenhuma fonte de dicionário respondeu");
   return linhas;
+}
+
+/** norm -> posto de frequencia (1 = mais falada). Ausente = raro. */
+async function frequencias() {
+  process.stdout.write(`  baixando ${CORPUS}\n`);
+  const posto = new Map();
+  try {
+    const r = await fetch(CORPUS);
+    if (!r.ok) throw new Error(String(r.status));
+    const texto = await r.text();
+    let n = 0;
+    for (const linha of texto.split(/\r?\n/)) {
+      const palavra = linha.split(" ")[0];
+      if (!palavra) continue;
+      const k = norm(palavra);
+      if (!k) continue;
+      n++;
+      // a primeira ocorrencia e a mais frequente (a lista vem ordenada);
+      // formas com e sem acento colapsam no mesmo norm, e fica a melhor
+      if (!posto.has(k)) posto.set(k, n);
+    }
+    console.log(`  ${posto.size.toLocaleString("pt-BR")} formas com frequencia`);
+  } catch (e) {
+    console.error(`  corpus indisponivel (${e.message}) — seguindo sem frequencia`);
+  }
+  return posto;
 }
 
 const linhas = await baixar();
@@ -157,6 +194,8 @@ console.log(
     .join(" "),
 );
 
+const posto = await frequencias();
+
 // ── carrega ────────────────────────────────────────────────────────────────
 const conn = new URL(process.env.POSTGRES_URL_NON_POOLING);
 conn.searchParams.set("uselibpqcompat", "true");
@@ -165,15 +204,24 @@ await client.connect();
 
 await client.query("truncate public.dict_pt");
 
-const entradas = [...dic.entries()];
+const entradas = [...dic.entries()].map(([n, w]) => [n, w, posto.get(n) ?? null]);
+
+// quantas palavras jogaveis sao realmente conhecidas?
+const faixas = [5000, 10000, 20000, 30000, 50000, 100000];
+const dentro = (lim) => entradas.filter((e) => e[2] !== null && e[2] <= lim).length;
+console.log(
+  "  comuns por corte: " +
+    faixas.map((f) => `${f / 1000}k:${dentro(f).toLocaleString("pt-BR")}`).join("  ") +
+    `  |  sem frequencia: ${entradas.filter((e) => e[2] === null).length.toLocaleString("pt-BR")}`,
+);
 const LOTE = 20_000;
 for (let i = 0; i < entradas.length; i += LOTE) {
   const fatia = entradas.slice(i, i + LOTE);
   await client.query(
-    `insert into public.dict_pt (norm, word)
-     select * from unnest($1::text[], $2::text[])
-     on conflict (norm) do nothing`,
-    [fatia.map((e) => e[0]), fatia.map((e) => e[1])],
+    `insert into public.dict_pt (norm, word, freq)
+     select * from unnest($1::text[], $2::text[], $3::int[])
+     on conflict (norm) do update set freq = excluded.freq`,
+    [fatia.map((e) => e[0]), fatia.map((e) => e[1]), fatia.map((e) => e[2])],
   );
   process.stdout.write(`\r  carregadas ${Math.min(i + LOTE, entradas.length)} / ${entradas.length}`);
 }
@@ -213,6 +261,16 @@ for (const w of naoDeveExistir) {
   }
 }
 console.log(erros === 0 ? "  sanidade: tudo certo" : `  sanidade: ${erros} problema(s)`);
+
+// amostra: as palavras de 7 letras mais comuns e as sem frequencia nenhuma
+const amostraComum = await client.query(
+  "select word from public.dict_pt where len = 7 and freq is not null order by freq limit 12",
+);
+const amostraRara = await client.query(
+  "select word from public.dict_pt where len = 7 and freq is null order by norm limit 12",
+);
+console.log("  comuns de 7 letras: " + amostraComum.rows.map((r) => r.word).join(", "));
+console.log("  raras  de 7 letras: " + amostraRara.rows.map((r) => r.word).join(", "));
 
 await client.end();
 process.exit(erros === 0 ? 0 : 1);

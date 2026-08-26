@@ -1,38 +1,62 @@
 /**
  * Geometria e pontuação do Letreiro — tudo que o cliente resolve sozinho.
  *
- * O caminho aceso enquanto você digita não precisa de dicionário: são 16
+ * O caminho aceso enquanto você digita não precisa de dicionário: são poucas
  * células, e achar o caminho é busca em profundidade. É por isso que o
  * dicionário pode ficar só no servidor sem perder o polimento.
+ *
+ * A grade tem tamanho variável (4×4 ou 5×5). Nada aqui crava o tamanho: quem
+ * sabe é a própria grade, porque `grid.length` é `size²`. Assim uma tela que
+ * recebeu 25 letras não tem como desenhar 16.
  */
 
-export const SIZE = 4;
-export const CELLS = SIZE * SIZE;
-const HEX = "0123456789abcdef";
+/** Tamanhos que o jogo oferece. */
+export const TAMANHOS = [4, 5] as const;
+export type Tamanho = (typeof TAMANHOS)[number];
 
-/** Vizinhos nas 8 direções. */
-export const NEIGHBORS: number[][] = (() => {
+export const SIZE_PADRAO: Tamanho = 4;
+
+/** O tamanho implícito na grade — 16 letras é 4, 25 é 5. */
+export function sizeOf(grid: readonly string[]): number {
+  return Math.max(1, Math.round(Math.sqrt(grid.length)));
+}
+
+/**
+ * Base 36, um dígito por célula. Em hexadecimal só cabiam 16 células, e a
+ * grade de 5×5 tem 25 — o caminho da última fileira virava lixo silencioso.
+ * O servidor (`letreiro_path_ok`) lê o mesmo alfabeto.
+ */
+const B36 = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+const CACHE_VIZINHOS = new Map<number, number[][]>();
+
+/** Vizinhos nas 8 direções, para uma grade de lado `size`. */
+export function neighbors(size: number): number[][] {
+  const guardado = CACHE_VIZINHOS.get(size);
+  if (guardado) return guardado;
+
   const out: number[][] = [];
-  for (let i = 0; i < CELLS; i++) {
-    const r = Math.floor(i / SIZE);
-    const c = i % SIZE;
+  for (let i = 0; i < size * size; i++) {
+    const r = Math.floor(i / size);
+    const c = i % size;
     const list: number[] = [];
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (!dr && !dc) continue;
         const nr = r + dr;
         const nc = c + dc;
-        if (nr < 0 || nr >= SIZE || nc < 0 || nc >= SIZE) continue;
-        list.push(nr * SIZE + nc);
+        if (nr < 0 || nr >= size || nc < 0 || nc >= size) continue;
+        list.push(nr * size + nc);
       }
     }
     out.push(list);
   }
+  CACHE_VIZINHOS.set(size, out);
   return out;
-})();
+}
 
-export function areNeighbors(a: number, b: number): boolean {
-  return NEIGHBORS[a]?.includes(b) ?? false;
+export function areNeighbors(a: number, b: number, size: number): boolean {
+  return neighbors(size)[a]?.includes(b) ?? false;
 }
 
 /** Maiúscula, sem acento, sem cedilha — a mesma regra do servidor. */
@@ -88,11 +112,11 @@ export function letterValue(face: string): number {
 }
 
 export function pathToString(path: number[]): string {
-  return path.map((i) => HEX[i]).join("");
+  return path.map((i) => B36[i] ?? "").join("");
 }
 
 export function pathFromString(s: string): number[] {
-  return [...s].map((c) => HEX.indexOf(c)).filter((i) => i >= 0);
+  return [...s].map((c) => B36.indexOf(c)).filter((i) => i >= 0);
 }
 
 /**
@@ -104,12 +128,14 @@ export function findPath(grid: string[], target: string): number[] | null {
   const alvo = normalize(target);
   if (!alvo) return null;
 
-  const usada = new Array(CELLS).fill(false);
+  const size = sizeOf(grid);
+  const viz = neighbors(size);
+  const usada = new Array(grid.length).fill(false);
   const caminho: number[] = [];
 
   function desce(pos: number, celula: number): boolean {
     const face = grid[celula];
-    if (!alvo.startsWith(face, pos)) return false;
+    if (!face || !alvo.startsWith(face, pos)) return false;
 
     usada[celula] = true;
     caminho.push(celula);
@@ -117,7 +143,7 @@ export function findPath(grid: string[], target: string): number[] | null {
 
     if (prox === alvo.length) return true;
 
-    for (const v of NEIGHBORS[celula]) {
+    for (const v of viz[celula]) {
       if (!usada[v] && desce(prox, v)) return true;
     }
 
@@ -126,7 +152,7 @@ export function findPath(grid: string[], target: string): number[] | null {
     return false;
   }
 
-  for (let i = 0; i < CELLS; i++) {
+  for (let i = 0; i < grid.length; i++) {
     if (desce(0, i)) return [...caminho];
   }
   return null;

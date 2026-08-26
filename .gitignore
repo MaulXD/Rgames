@@ -1,0 +1,51 @@
+# dependências
+node_modules/
+.pnp/
+.pnp.js
+.yarn/install-state.gz
+
+# build
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo
+next-env.d.ts
+
+# ambiente — NUNCA commitar
+.env
+.env.local
+.env*.local
+
+# supabase
+.branches
+.temp
+supabase/.temp/
+
+# vercel
+.vercel
+
+# testes
+coverage/
+playwright-report/
+test-results/
+.nyc_output/
+
+# artefatos gerados no build
+# o DAWG do dicionário é construído a partir do Hunspell pt_BR (ver docs/02-PRD-LETREIRO.md §4.4)
+public/dict/*.bin
+public/dict/*.br
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# editor / SO
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json

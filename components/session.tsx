@@ -33,11 +33,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const sb = supabaseBrowser();
     let alive = true;
 
     async function boot() {
       try {
+        // Dentro do try: se faltar variável de ambiente, isso lança aqui e a
+        // mensagem chega na tela em vez de virar erro solto no console.
+        const sb = supabaseBrowser();
+
         const { data } = await sb.auth.getSession();
         let current = data.session?.user ?? null;
 

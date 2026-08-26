@@ -183,7 +183,7 @@ Entram por link com `?spec=1` ou quando a sala está cheia. Veem só o `public_s
 ### 8.1 Stack
 
 ```
-Cliente     Next.js 15 (App Router) · React 19 · TypeScript strict
+Cliente     Next.js 16 (App Router) · React 19 · TypeScript strict
             Tailwind CSS v4 (tokens próprios) · Motion · React Three Fiber + drei + rapier
             Zustand (estado de UI) · TanStack Query (dados) · Zod (contratos)
 

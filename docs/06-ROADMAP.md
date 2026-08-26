@@ -15,7 +15,7 @@ Nada de jogo. Só o chassi.
 
 | Entrega | Detalhe |
 |---|---|
-| Next.js 15 + Vercel `gru1` + Supabase São Paulo | Projeto rodando, deploy automático |
+| Next.js 16 + Vercel `gru1` + Supabase São Paulo | Projeto rodando, deploy automático |
 | Auth completo | Google, Discord, magic link, **e anônimo** com promoção de conta |
 | Esquema do banco + RLS + testes de RLS no CI | Ver [PRD 00 §8.3–8.4](00-PRD-PLATAFORMA.md) |
 | Salas: criar, código, link, QR, entrar, sair | Os três caminhos de convite |

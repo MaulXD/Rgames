@@ -23,7 +23,7 @@ autoral; nomes, marcas e tabuleiros são. Ver [`docs/README.md`](docs/README.md#
 
 | | |
 |---|---|
-| Front | Next.js 15 (App Router) · React 19 · TypeScript strict · Tailwind v4 |
+| Front | Next.js 16 (App Router) · React 19 · TypeScript strict · Tailwind v4 |
 | 3D | React Three Fiber · drei · Rapier |
 | Animação | Motion |
 | Backend | Supabase — Postgres, Auth, Realtime, Storage, `pg_cron` |

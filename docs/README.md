@@ -23,7 +23,7 @@ conta opcional, hospedado na Vercel com Supabase como backend autoritativo.
 
 | Decisão | Escolha | Consequência |
 |---|---|---|
-| Hospedagem | Vercel (região `gru1`) | Next.js 15 App Router, React 19, Edge/Node functions |
+| Hospedagem | Vercel (região `gru1`) | Next.js 16 App Router, React 19, Edge/Node functions |
 | Backend | Supabase (região São Paulo) | Postgres + Auth + Realtime + Storage num lugar só |
 | Tempo real | Supabase Realtime | Sem WebSocket persistente na Vercel; Broadcast + Presence + Postgres Changes |
 | Autoridade | 100% servidor | Toda ação passa por RPC `SECURITY DEFINER` no Postgres. Cliente nunca decide resultado |

@@ -1,0 +1,242 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   GAMIFICAÇÃO
+   Nível, medalha, confete e o "+N" que sobe. Tudo em CSS e SVG autoral —
+   nenhuma biblioteca, nenhum asset. Ver docs/01-DIRECAO-DE-ARTE.md.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── barra de nível ────────────────────────────────────────────────────── */
+
+.nivel {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0 0.6rem;
+}
+.nivel[data-compacto="true"] {
+  grid-template-rows: auto;
+}
+
+.nivel-num {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--vivo-amarelo);
+  box-shadow: 0 3px 0 var(--sob-amarelo);
+  color: var(--ink);
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.nivel[data-compacto="true"] .nivel-num {
+  grid-row: 1;
+  width: 32px;
+  height: 32px;
+  font-size: 0.82rem;
+}
+
+.nivel-texto {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  min-width: 0;
+}
+.nivel-patente {
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vivo-amarelo);
+  white-space: nowrap;
+}
+.nivel-falta {
+  font-size: 0.68rem;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+
+.nivel-barra {
+  display: block;
+  height: 10px;
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  background: var(--felt-950);
+  overflow: hidden;
+}
+.nivel-barra span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--vivo-limao), var(--vivo-amarelo));
+  transition: width var(--dur-slow) var(--ease-pop);
+}
+
+/* ── medalhas ──────────────────────────────────────────────────────────── */
+
+.medalhas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+}
+.medalha {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.7rem 0.8rem;
+  border: 3px solid var(--line);
+  border-radius: var(--r-md);
+  background: rgb(7 28 26 / 0.45);
+}
+.medalha[data-tem="true"] {
+  border-color: var(--vivo-amarelo);
+  background: rgb(255 196 46 / 0.09);
+}
+.medalha-nome {
+  display: block;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+.medalha-como {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.68rem;
+  line-height: 1.3;
+  color: var(--fg-dim);
+}
+
+/* ── números da vida ──────────────────────────────────────────────────── */
+
+.numeros {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+}
+.numero {
+  padding: 0.8rem 0.9rem;
+  border: 3px solid var(--line);
+  border-radius: var(--r-md);
+  background: rgb(7 28 26 / 0.45);
+}
+.numero dt {
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+}
+.numero dd {
+  margin: 0.25rem 0 0;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--vivo-amarelo);
+  line-height: 1;
+}
+.numero dd small {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--fg-dim);
+}
+
+/* ── "+N" que sobe ────────────────────────────────────────────────────── */
+
+.ganhos {
+  position: relative;
+  height: 0;
+}
+.ganho {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  padding: 0.3rem 0.8rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--vivo-limao);
+  color: var(--ink);
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: sobe-ganho 1.1s var(--ease-out) forwards;
+}
+@keyframes sobe-ganho {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.8);
+  }
+  22% {
+    opacity: 1;
+    transform: translate(-50%, -8px) scale(1.12);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -74px) scale(1);
+  }
+}
+
+/* ── confete ──────────────────────────────────────────────────────────── */
+
+.confete {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  pointer-events: none;
+  overflow: hidden;
+}
+.confete span {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--ink);
+  border-radius: var(--lado);
+  background: var(--cor);
+  animation: espalha 1.5s var(--ease-out) var(--atraso) forwards;
+}
+@keyframes espalha {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(0deg) scale(0.4);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy) + 40vh)) rotate(var(--gir))
+      scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confete {
+    display: none;
+  }
+  .ganho {
+    animation: none;
+    opacity: 1;
+  }
+  .nivel-barra span {
+    transition: none;
+  }
+}
+
+/* cabeçalho: nível + bichinho */
+.header-dir { display: flex; align-items: center; gap: 0.9rem; }

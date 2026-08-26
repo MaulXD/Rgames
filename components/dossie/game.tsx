@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Abertura } from "@/components/dossie/abertura";
 import { Mapa, type Peao } from "@/components/dossie/mapa";
+import { Bloco } from "@/components/dossie/bloco";
+import type { Pad } from "@/lib/dossie-bloco";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSession } from "@/components/session";
 import { carregaCaso, nomeDaCarta, type Caso } from "@/lib/dossie";
@@ -42,7 +44,11 @@ export type DossieMatch = {
   public_state: DossieState;
 };
 
-type Privado = { hand: string[]; seen: { card: string; from: number | null; seq: number }[] };
+type Privado = {
+  hand: string[];
+  seen: { card: string; from: number | null; seq: number }[];
+  pad?: Pad;
+};
 
 export function DossieGame({
   match,
@@ -56,7 +62,11 @@ export function DossieGame({
   const { user } = useSession();
   const st = match.public_state;
   const [caso, setCaso] = useState<Caso | null>(null);
-  const [priv, setPriv] = useState<Privado>({ hand: [], seen: [] });
+  const [priv, setPriv] = useState<Privado>({
+    hand: [],
+    seen: [],
+    pad: { marks: {}, assist: "assistido" },
+  });
   const [abriu, setAbriu] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [palpite, setPalpite] = useState<{ s?: string; w?: string } | null>(null);
@@ -95,7 +105,13 @@ export function DossieGame({
         .maybeSingle();
       if (!vivo) return;
       const d = (data as { data?: Privado } | null)?.data;
-      if (d) setPriv({ hand: d.hand ?? [], seen: d.seen ?? [] });
+      if (d) {
+        setPriv({
+          hand: d.hand ?? [],
+          seen: d.seen ?? [],
+          pad: d.pad?.marks ? d.pad : { marks: {}, assist: d.pad?.assist ?? "assistido" },
+        });
+      }
     }
     void puxa();
     return () => {
@@ -214,6 +230,24 @@ export function DossieGame({
         onEscolher={(lugar) =>
           void chama("dossie_move", { p_match: match.id, p_room: lugar })
         }
+      />
+
+      {/* ── bloco de dedução ─────────────────────────────────────────────
+           Fica aberto durante TODO o tempo, inclusive no turno dos outros —
+           é isso que mata o tempo morto do Detetive. */}
+      <Bloco
+        caso={caso}
+        log={st.log ?? []}
+        mao={priv.hand}
+        vistas={priv.seen}
+        jogadores={st.players.map((p) => ({ seat: p.seat, userId: p.userId, hand: p.hand }))}
+        nomes={Object.fromEntries(peoes.map((p) => [p.seat, p.nome]))}
+        meuAssento={meuAssento}
+        pad={priv.pad ?? { marks: {}, assist: "assistido" }}
+        onPad={(novo) => {
+          setPriv((a) => ({ ...a, pad: novo }));
+          void supabaseBrowser().rpc("dossie_pad", { p_match: match.id, p_pad: novo });
+        }}
       />
 
       {/* ── refutação ─────────────────────────────────────────────────── */}

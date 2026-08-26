@@ -6,6 +6,7 @@ import { SessionProvider } from "@/components/session";
 import "./globals.css";
 import "./letreiro.css";
 import "./dossie.css";
+import "./gamificacao.css";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",

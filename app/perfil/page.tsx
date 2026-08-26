@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { AvatarStudio } from "@/components/avatar-studio";
+import { Conquistas } from "@/components/conquistas";
 
 export const metadata: Metadata = {
   title: "Seu bichinho — Mesa",
@@ -22,6 +23,10 @@ export default function PerfilPage() {
 
       <div className="mt-10">
         <AvatarStudio />
+      </div>
+
+      <div className="mt-14">
+        <Conquistas />
       </div>
 
       <p className="mt-12 text-sm" style={{ color: "var(--fg-faint)" }}>

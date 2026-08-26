@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Avatar } from "@/components/avatar";
 import { useSession } from "@/components/session";
+import { NivelBarra } from "@/components/nivel-barra";
 import { DEFAULT_AVATAR, parseAvatar } from "@/lib/avatar";
 
 export function SiteHeader() {
@@ -25,7 +26,12 @@ export function SiteHeader() {
         Mesa
       </Link>
 
-      <Link
+      <div className="header-dir">
+        <div className="hidden sm:block" style={{ minWidth: "11rem" }}>
+          <NivelBarra />
+        </div>
+
+        <Link
         href="/perfil"
         className="flex items-center gap-3 py-1 pl-1 pr-3 transition-colors"
         style={{
@@ -48,7 +54,8 @@ export function SiteHeader() {
         <span className="text-sm font-medium">
           {status === "ready" ? (named ? profile!.display_name : "Montar bichinho") : "…"}
         </span>
-      </Link>
+        </Link>
+      </div>
     </header>
   );
 }

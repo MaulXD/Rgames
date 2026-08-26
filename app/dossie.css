@@ -360,3 +360,39 @@
 .escolha[data-on="true"] { border-color: var(--vivo-amarelo); background: var(--vivo-amarelo); color: var(--ink); transform: translateY(-2px); }
 
 @media (prefers-reduced-motion: reduce) { .carta { transition: none; } }
+
+/* ── bloco de dedução ──────────────────────────────────────────────────── */
+
+.bloco { padding: 1rem 1.1rem; }
+.bloco-cabeca { display: flex; width: 100%; align-items: baseline; justify-content: space-between; gap: 1rem; text-align: left; }
+.bloco-resumo { display: block; margin-top: 0.2rem; font-size: 0.84rem; color: var(--fg-dim); }
+.bloco-toggle { flex: none; font-family: var(--font-archivo), sans-serif; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--vivo-amarelo); }
+
+.bloco-resolvido { margin-top: 0.8rem; padding: 0.7rem 0.9rem; border: 3px solid var(--ink); border-radius: var(--r-md); background: var(--vivo-limao); color: var(--ink); font-size: 0.9rem; font-weight: 600; }
+
+.conjuntos { margin-top: 1rem; }
+.conjuntos ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+.conjuntos li { padding: 0.5rem 0.7rem; border-left: 4px solid var(--vivo-roxo); border-radius: 0 8px 8px 0; background: rgb(178 92 255 / 0.12); font-size: 0.85rem; }
+.conjunto-cartas { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; margin-left: 0.4rem; }
+.conjunto-cartas span { padding: 0.1rem 0.45rem; border: 2px solid var(--ink); border-radius: 999px; background: #f6efdb; color: var(--ink); font-size: 0.7rem; font-weight: 700; }
+
+/* a grade rola na horizontal e a coluna da carta fica grudada */
+.grade-wrap { margin-top: 1rem; overflow-x: auto; border: 3px solid var(--ink); border-radius: var(--r-md); background: var(--felt-950); }
+.grade { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.78rem; }
+.grade th, .grade td { padding: 0; }
+.grade thead th { position: sticky; top: 0; z-index: 2; padding: 0.4rem 0.35rem; background: var(--felt-900); color: var(--fg-dim); font-family: var(--font-archivo), sans-serif; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 2px solid var(--line-strong); }
+.grade thead th em { display: block; font-style: normal; font-size: 0.55rem; color: var(--vivo-amarelo); }
+.grade thead th:first-child, .grade tbody th[scope="row"] { position: sticky; left: 0; z-index: 3; min-width: 8.5rem; max-width: 8.5rem; padding: 0.3rem 0.5rem; text-align: left; background: var(--felt-900); color: var(--fg-mid); font-weight: 600; font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: 2px solid var(--line-strong); }
+.grade-sec th { position: sticky; left: 0; padding: 0.35rem 0.5rem !important; background: var(--felt-700) !important; color: var(--vivo-amarelo) !important; font-family: var(--font-archivo), sans-serif; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; text-align: left; }
+
+.cel { display: block; width: 100%; min-width: 2.4rem; height: 2rem; border: 0; border-right: 1px solid rgb(255 255 255 / 0.06); border-bottom: 1px solid rgb(255 255 255 / 0.06); background: transparent; color: var(--fg-faint); font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+.cel:hover:not(:disabled) { background: rgb(255 196 46 / 0.1); }
+.cel[data-marca="x"] { color: #7f9bb0; }
+.cel[data-marca="check"] { color: var(--vivo-limao); }
+.cel[data-marca="duvida"] { color: var(--vivo-amarelo); }
+/* fato impresso: fundo chapado. Anotação sua: só a tinta. */
+.cel[data-fato="true"] { background: rgb(255 255 255 / 0.07); cursor: default; }
+.cel[data-fato="true"][data-marca="check"] { background: rgb(168 232 39 / 0.2); }
+
+.bloco-niveis { margin-top: 1.2rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.bloco-nota { margin-top: 0.5rem; font-size: 0.76rem; }

@@ -15,6 +15,7 @@ import { useSession } from "@/components/session";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { parseAvatar } from "@/lib/avatar";
 import * as sfx from "@/lib/sfx";
+import { Confete } from "@/components/confete";
 import {
   REJECTION,
   findPath,
@@ -70,6 +71,8 @@ export function LetreiroGame({
   const [typed, setTyped] = useState("");
   const [words, setWords] = useState<PlayerWord[]>([]);
   const [flash, setFlash] = useState<{ kind: "ok" | "bad"; text: string } | null>(null);
+  const [ganhos, setGanhos] = useState<{ id: number; pts: number }[]>([]);
+  const [festa, setFesta] = useState(false);
   const [left, setLeft] = useState<number>(0);
   const offset = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -217,6 +220,10 @@ export function LetreiroGame({
       }
       setWords((prev) => prev.map((x) => (x.w === w ? { ...x, confirmed: true } : x)));
       setFlash({ kind: "ok", text: `${w} · +${pts}` });
+      // o "+N" sobe do campo: recompensa no lugar onde o olho já está
+      setGanhos((g) => [...g, { id: Date.now() + Math.floor(pts), pts }]);
+      // palavra grande merece papel picado
+      if (pts >= 20) setFesta(true);
       sfx.certa(w.length);
     },
     [match.id, words, limpar],
@@ -227,6 +234,18 @@ export function LetreiroGame({
     const id = setTimeout(() => setFlash(null), 1400);
     return () => clearTimeout(id);
   }, [flash]);
+
+  useEffect(() => {
+    if (ganhos.length === 0) return;
+    const id = setTimeout(() => setGanhos((g) => g.slice(1)), 1200);
+    return () => clearTimeout(id);
+  }, [ganhos]);
+
+  useEffect(() => {
+    if (!festa) return;
+    const id = setTimeout(() => setFesta(false), 1700);
+    return () => clearTimeout(id);
+  }, [festa]);
 
   /* ── teclado ───────────────────────────────────────────────────────────── */
   useEffect(() => {
@@ -283,6 +302,7 @@ export function LetreiroGame({
 
   return (
     <div className="game" onPointerDown={() => sfx.arm()}>
+      {festa && <Confete />}
       {/* ── cronômetro e conta ─────────────────────────────────────────── */}
       <div className="game-head">
         <div className="clock" data-urgent={urgente}>
@@ -361,6 +381,14 @@ export function LetreiroGame({
           <span className="compose-pts">+{wordScore(current)}</span>
         )}
       </label>
+
+      <div className="ganhos">
+        {ganhos.map((g) => (
+          <span key={g.id} className="ganho">
+            +{g.pts}
+          </span>
+        ))}
+      </div>
 
       <div className="compose-actions">
         <button

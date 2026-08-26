@@ -7,6 +7,7 @@ import { Fleuron } from "@/components/ornament";
 import { parseAvatar } from "@/lib/avatar";
 import { pathFromString } from "@/lib/letreiro";
 import * as sfx from "@/lib/sfx";
+import { Confete } from "@/components/confete";
 import type { MatchRow, Seat } from "@/components/letreiro/game";
 
 /**
@@ -135,6 +136,7 @@ export function Reveal({
       {/* ── ato 3 · placar ────────────────────────────────────────────── */}
       {ato === 3 && (
         <div className="reveal-final">
+          {ranking[0]?.user_id === meId && ranking.length > 1 && <Confete pecas={48} />}
           <div className="flex justify-center">
             <Fleuron width={200} />
           </div>

@@ -1,0 +1,916 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { LegendaContinentes, MapaVantara } from "@/components/dominio/mapa";
+import { Rolagem, type Assalto } from "@/components/dominio/dados";
+import { Mao, Objetivo, type Carta } from "@/components/dominio/cartas";
+import { Avatar } from "@/components/avatar";
+import { Confete } from "@/components/confete";
+import { useSession } from "@/components/session";
+import { supabaseBrowser } from "@/lib/supabase/client";
+import { parseAvatar } from "@/lib/avatar";
+import { COLORS, type ColorKey } from "@/lib/avatar";
+import { POR_ID, TERRITORIOS, conectados, placar } from "@/lib/dominio/vantara";
+import * as sfx from "@/lib/sfx";
+
+/* ── o estado que o servidor publica ─────────────────────────────────────── */
+
+export type DominioState = {
+  map: string;
+  round: number;
+  phase: "reforco" | "ataque" | "remanejo" | "fim";
+  turnSeat: number;
+  donos: Record<string, number>;
+  exercitos: Record<string, number>;
+  players: { seat: number; userId: string; cor: ColorKey; cartas: number; ativo: boolean }[];
+  eliminados: number[];
+  conquistou: boolean;
+  remanejou: boolean;
+  trocas: number;
+  reforcoLeft: number;
+  avanco: { de: string; para: string; max: number } | null;
+  abates?: Record<string, number>;
+  log: LinhaLog[];
+  vencedor: number | null;
+};
+
+type LinhaLog = {
+  k: string;
+  seat?: number;
+  ter?: string;
+  de?: string;
+  para?: string;
+  n?: number;
+  vitima?: number;
+  por?: number;
+  vale?: number;
+  bonus?: number;
+};
+
+export type DominioMatch = {
+  id: string;
+  status: string;
+  turn_deadline: string | null;
+  public_state: DominioState;
+};
+
+export type Assento = { user_id: string; display_name: string; avatar: unknown };
+
+/** As mensagens de erro do servidor, em português e no contexto certo. */
+const RECADO: Record<string, string> = {
+  NOT_YOUR_TURN: "Não é a sua vez.",
+  WRONG_PHASE: "Não dá para fazer isso nesta fase do turno.",
+  NOT_YOURS: "Esse território não é seu.",
+  TARGET_IS_YOURS: "Esse território já é seu.",
+  NOT_ADJACENT: "Esses dois territórios não fazem fronteira.",
+  NEED_TWO_ARMIES: "Precisa de pelo menos dois exércitos para atacar.",
+  NOT_ENOUGH_REINFORCEMENTS: "Você não tem tantos exércitos para colocar.",
+  MUST_TRADE: "Com cinco cartas na mão, você precisa trocar antes.",
+  PLACE_REINFORCEMENTS: "Coloque todo o reforço antes de passar a vez.",
+  ADVANCE_PENDING: "Resolva o avanço para o território que você tomou.",
+  ALREADY_MOVED: "Um remanejo por turno.",
+  NOT_CONNECTED: "Não há caminho seu entre esses dois territórios.",
+  WOULD_EMPTY: "Território nunca fica sem exército.",
+  BAD_COMBO: "Essas três cartas não fecham.",
+  CARD_NOT_HELD: "Essa carta não está na sua mão.",
+  MATCH_NOT_RUNNING: "Esta partida já terminou.",
+};
+
+function recado(msg: string): string {
+  for (const [k, v] of Object.entries(RECADO)) if (msg.includes(k)) return v;
+  return msg;
+}
+
+/* ── a tela ──────────────────────────────────────────────────────────────── */
+
+export function DominioGame({
+  match,
+  assentos,
+  onSair,
+}: {
+  match: DominioMatch;
+  assentos: Assento[];
+  onSair: () => void;
+}) {
+  const { user } = useSession();
+  const st = match.public_state;
+
+  const [origem, setOrigem] = useState<string | null>(null);
+  const [destino, setDestino] = useState<string | null>(null);
+  const [quanto, setQuanto] = useState(1);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  const [briga, setBriga] = useState<{
+    assaltos: Assalto[];
+    de: string;
+    para: string;
+    congelado: DominioState;
+  } | null>(null);
+  const [priv, setPriv] = useState<{ objetivo?: { texto: string }; cartas?: Carta[] }>({});
+  const [resto, setResto] = useState<number>(0);
+  const [festa, setFesta] = useState(false);
+  const [mexeu, setMexeu] = useState<string[]>([]);
+  const exAntes = useRef<Record<string, number>>({});
+  const ultimoLog = useRef("");
+
+  const mudo = useSyncExternalStore(sfx.subscribe, sfx.getSnapshot, sfx.getServerSnapshot);
+
+  const eu = st.players.find((p) => p.userId === user?.id);
+  const meuAssento = eu?.seat ?? null;
+  const minhaVez = meuAssento !== null && st.turnSeat === meuAssento && st.phase !== "fim";
+  const acabou = st.phase === "fim" || match.status === "finished" || st.vencedor !== null;
+
+  const cores = useMemo(
+    () => Object.fromEntries(st.players.map((p) => [p.seat, p.cor])) as Record<number, ColorKey>,
+    [st.players],
+  );
+  const nomePorAssento = useMemo(() => {
+    const m: Record<number, string> = {};
+    for (const p of st.players) {
+      m[p.seat] = assentos.find((a) => a.user_id === p.userId)?.display_name ?? `Assento ${p.seat}`;
+    }
+    return m;
+  }, [st.players, assentos]);
+
+  // durante a rolagem o mapa mostra o estado ANTERIOR: se ele já mudasse, o
+  // dado estaria contando uma história cujo fim já está na tela
+  const visto = briga ? briga.congelado : st;
+
+  /**
+   * Uma chave que muda a cada acontecimento da partida.
+   *
+   * Serve para reler o estado privado (mão e objetivo) na hora certa. Não dá
+   * para depender de `st.turnSeat` e amigos: quando OUTRO jogador me elimina,
+   * a mão dele cresce com as minhas cartas sem que a vez mude, e a mão na tela
+   * ficaria velha. `log.length` também não serve — o log é capado em 80 linhas
+   * e o comprimento congela no meio da partida.
+   */
+  const chaveEstado = useMemo(
+    () => `${st.round}:${st.turnSeat}:${st.trocas}:${JSON.stringify(st.log?.[0] ?? null)}`,
+    [st.round, st.turnSeat, st.trocas, st.log],
+  );
+
+  /* ── o que está privado: objetivo e mão ─────────────────────────────── */
+  useEffect(() => {
+    let vivo = true;
+    async function puxa() {
+      const { data } = await supabaseBrowser()
+        .from("match_private_state")
+        .select("data")
+        .eq("match_id", match.id)
+        .maybeSingle();
+      if (!vivo) return;
+      const d = (data as { data?: { objetivo?: { texto: string }; cartas?: Carta[] } } | null)?.data;
+      if (d) setPriv({ objetivo: d.objetivo, cartas: d.cartas ?? [] });
+    }
+    void puxa();
+    return () => {
+      vivo = false;
+    };
+  }, [match.id, chaveEstado]);
+
+  /* ── relógio do turno ───────────────────────────────────────────────── */
+  useEffect(() => {
+    if (!match.turn_deadline || acabou) return;
+    const fim = new Date(match.turn_deadline).getTime();
+    const tick = () => setResto(Math.max(0, Math.ceil((fim - Date.now()) / 1000)));
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [match.turn_deadline, acabou]);
+
+  /* ── som e brilho conforme o log anda ───────────────────────────────── */
+  useEffect(() => {
+    const nova = st.log?.[0];
+    if (!nova) return;
+    // o log e capado em 80 linhas, entao o COMPRIMENTO para de mudar depois da
+    // linha 80 e o som sumiria no meio da partida. A chave e a linha em si.
+    // Durante a rolagem quem faz som é a rolagem — e a saída vem ANTES de
+    // marcar a linha como ouvida. Se marcasse primeiro, a conquista seria
+    // consumida em silêncio e o som nunca tocaria: `briga` é dependência
+    // deste efeito, então ele roda de novo quando a rolagem acaba.
+    if (briga) return;
+    const chave = JSON.stringify(nova);
+    if (chave === ultimoLog.current) return;
+    ultimoLog.current = chave;
+    if (nova.k === "conquista") sfx.conquista();
+    else if (nova.k === "eliminado") sfx.eliminado();
+    else if (nova.k === "vez") sfx.vez();
+    else if (nova.k === "troca") sfx.troca();
+    else if (nova.k === "reforco") sfx.planta();
+    else if (nova.k === "vitoria") sfx.venceu();
+  }, [st.log, briga]);
+
+  /* ── territórios que mudaram de exército: piscam ────────────────────── */
+  useEffect(() => {
+    const antes = exAntes.current;
+    const agora = st.exercitos;
+    const mudou = Object.keys(agora).filter((k) => antes[k] !== undefined && antes[k] !== agora[k]);
+    exAntes.current = { ...agora };
+    if (mudou.length === 0 || briga) return;
+    setMexeu(mudou);
+    const id = setTimeout(() => setMexeu([]), 700);
+    return () => clearTimeout(id);
+  }, [st.exercitos, briga]);
+
+  useEffect(() => {
+    if (acabou && st.vencedor === meuAssento) setFesta(true);
+  }, [acabou, st.vencedor, meuAssento]);
+
+  /* ── chamar o servidor ──────────────────────────────────────────────── */
+  const chama = useCallback(
+    async (fn: string, args: Record<string, unknown>) => {
+      setErro(null);
+      setOcupado(true);
+      const { data, error } = await supabaseBrowser().rpc(fn, args);
+      setOcupado(false);
+      if (error) {
+        setErro(recado(error.message ?? String(error)));
+        setOrigem(null);
+        return null;
+      }
+      return data;
+    },
+    [],
+  );
+
+  /* ── o que ainda cabe neste turno ───────────────────────────────────── */
+
+  const podeAtacar = st.phase === "ataque";
+  // Um remanejo por turno, e ele ENCERRA o ataque: mover é a última coisa que
+  // se faz. É a regra do tabuleiro, e o servidor a impõe virando a fase.
+  const podeRemanejar = !st.remanejou && (st.phase === "ataque" || st.phase === "remanejo");
+  const semNadaAFazer = !podeAtacar && !podeRemanejar && st.phase !== "reforco";
+
+  /* ── alvos válidos ──────────────────────────────────────────────────────
+     Atacar e mover tropa NÃO disputam o gesto, e não precisam de aba: o
+     destino desambigua sozinho. Território inimigo vizinho é ataque;
+     território meu ligado é remanejo. Um toque, dois significados, zero
+     ambiguidade — porque um território nunca é as duas coisas. */
+  const alvos = useMemo(() => {
+    if (!minhaVez || acabou) return [];
+    if (visto.phase === "reforco") {
+      return TERRITORIOS.filter((t) => visto.donos[t.id] === meuAssento).map((t) => t.id);
+    }
+    if (visto.avanco) return [visto.avanco.para];
+    if (!origem) {
+      // sem origem escolhida, acende de onde a jogada PODE partir
+      return TERRITORIOS.filter(
+        (t) => visto.donos[t.id] === meuAssento && (visto.exercitos[t.id] ?? 0) >= 2,
+      ).map((t) => t.id);
+    }
+    const out: string[] = [];
+    if (podeAtacar) {
+      out.push(...(POR_ID[origem]?.vizinhos ?? []).filter((v) => visto.donos[v] !== meuAssento));
+    }
+    if (podeRemanejar) {
+      out.push(...conectados(visto.donos, meuAssento!, origem));
+    }
+    return out;
+  }, [minhaVez, acabou, visto, origem, meuAssento, podeAtacar, podeRemanejar]);
+
+  /** O destino escolhido é meu? Então é remanejo, não ataque. */
+  const destinoEhMeu = destino !== null && visto.donos[destino] === meuAssento;
+
+  const escolher = useCallback(
+    (ter: string) => {
+      if (!minhaVez || ocupado || acabou || briga) return;
+      sfx.arm();
+      setErro(null);
+
+      if (visto.phase === "reforco") {
+        if (visto.donos[ter] !== meuAssento) {
+          setErro(RECADO.NOT_YOURS);
+          return;
+        }
+        setOrigem(ter);
+        setQuanto(Math.min(1, visto.reforcoLeft) || 1);
+        return;
+      }
+
+      // primeira escolha: a origem
+      if (!origem) {
+        if (visto.donos[ter] !== meuAssento) {
+          setErro(RECADO.NOT_YOURS);
+          return;
+        }
+        if ((visto.exercitos[ter] ?? 0) < 2) {
+          setErro("Território com um exército só não pode nem atacar nem mandar tropa.");
+          return;
+        }
+        setOrigem(ter);
+        setQuanto(1);
+        return;
+      }
+
+      // tocar de novo na origem cancela — é o gesto que todo mundo tenta
+      if (ter === origem) {
+        setOrigem(null);
+        return;
+      }
+      if (!alvos.includes(ter)) {
+        // trocar de origem em vez de reclamar: era o que a pessoa queria
+        if (visto.donos[ter] === meuAssento && (visto.exercitos[ter] ?? 0) >= 2) {
+          setOrigem(ter);
+          return;
+        }
+        setErro(
+          podeAtacar
+            ? "Daqui você só ataca vizinho, ou move tropa para território seu ligado."
+            : RECADO.NOT_CONNECTED,
+        );
+        return;
+      }
+      setDestino(ter);
+    },
+    [minhaVez, ocupado, acabou, briga, visto, meuAssento, origem, alvos, podeAtacar],
+  );
+
+  useEffect(() => {
+    if (!origem) setDestino(null);
+  }, [origem]);
+
+  /* ── as ações ───────────────────────────────────────────────────────── */
+
+  async function reforcar() {
+    if (!origem) return;
+    sfx.planta();
+    const r = await chama("dominio_reforcar", {
+      p_match: match.id,
+      p_ter: origem,
+      p_qtd: quanto,
+    });
+    if (r) setOrigem(null);
+  }
+
+  async function atacar(vezes: number) {
+    if (!origem || !destino) return;
+    const congelado = st;
+    const r = (await chama("dominio_atacar", {
+      p_match: match.id,
+      p_de: origem,
+      p_para: destino,
+      p_vezes: vezes,
+    })) as { assaltos?: Assalto[] } | null;
+    if (!r?.assaltos?.length) return;
+    setBriga({ assaltos: r.assaltos, de: origem, para: destino, congelado });
+    setOrigem(null);
+    setDestino(null);
+  }
+
+  async function avancar(n: number) {
+    await chama("dominio_avancar", { p_match: match.id, p_qtd: n });
+  }
+
+  async function remanejar() {
+    if (!origem || !destino) return;
+    const r = await chama("dominio_remanejar", {
+      p_match: match.id,
+      p_de: origem,
+      p_para: destino,
+      p_qtd: quanto,
+    });
+    if (r) {
+      setOrigem(null);
+      setDestino(null);
+    }
+  }
+
+  async function encerrar() {
+    setOrigem(null);
+    setDestino(null);
+    await chama("dominio_encerrar_turno", { p_match: match.id });
+  }
+
+  async function trocar(indices: number[]) {
+    await chama("dominio_trocar", { p_match: match.id, p_cartas: indices });
+  }
+
+  /* ── placar lateral ─────────────────────────────────────────────────── */
+  const conta = useMemo(() => placar(visto.donos, visto.exercitos), [visto]);
+  const maiorForca = Math.max(1, ...[...conta.values()].map((x) => x.forca));
+
+  const urgente = resto <= 20 && resto > 0 && minhaVez;
+
+  /* ── fim de partida ─────────────────────────────────────────────────── */
+  if (acabou) {
+    const venc = st.vencedor;
+    const nome = venc !== null ? nomePorAssento[venc] : null;
+    const souEu = venc === meuAssento;
+    return (
+      <div className="dominio-fim">
+        {festa && <Confete pecas={56} />}
+        <p className="eyebrow">Fim da campanha</p>
+        <h2 className="dominio-fim-titulo">{souEu ? "Vantara é sua." : `${nome} venceu.`}</h2>
+        <p className="dim dominio-fim-nota">
+          {souEu
+            ? "Objetivo cumprido. O mapa ficou do jeito que você precisava."
+            : "O objetivo de cada um era secreto — e agora dá para entender por que ele atacava sempre do mesmo lado."}
+        </p>
+
+        <MapaVantara
+          donos={st.donos}
+          exercitos={st.exercitos}
+          cores={cores}
+          meuAssento={meuAssento}
+          origem={null}
+          alvos={[]}
+          onEscolher={() => {}}
+          disabled
+        />
+
+        <ol className="dominio-podio">
+          {[...conta.entries()]
+            .sort((a, b) => b[1].ters - a[1].ters)
+            .map(([seat, x], i) => (
+              <li key={seat} className="panel dominio-podio-linha" data-eu={seat === meuAssento}>
+                <span className="seal">{i + 1}</span>
+                <span
+                  className="dominio-cor"
+                  style={{ background: COLORS[cores[seat] ?? "grafite"].enamel }}
+                  aria-hidden
+                />
+                <span className="dominio-podio-nome">{nomePorAssento[seat]}</span>
+                <span className="mono dim">{x.ters} territórios · {x.forca} exércitos</span>
+                {seat === venc && <span className="dominio-coroa">venceu</span>}
+              </li>
+            ))}
+        </ol>
+
+        <button className="btn btn-ghost" onClick={onSair}>
+          Voltar para a sala
+        </button>
+      </div>
+    );
+  }
+
+  /* ── a partida ──────────────────────────────────────────────────────── */
+  return (
+    <div className="dominio" onPointerDown={() => sfx.arm()}>
+      {/* ── barra de turno ──────────────────────────────────────────── */}
+      <div className="turno" data-minha={minhaVez}>
+        <span
+          className="dominio-cor turno-cor"
+          style={{ background: COLORS[cores[st.turnSeat] ?? "grafite"].enamel }}
+          aria-hidden
+        />
+        <div className="turno-quem">
+          <p className="eyebrow">Rodada {st.round}</p>
+          <p className="turno-nome">
+            {minhaVez ? "Sua vez" : `Vez de ${nomePorAssento[st.turnSeat]}`}
+          </p>
+        </div>
+        <span className="turno-fase mono">
+          {st.phase === "reforco"
+            ? `reforço · ${st.reforcoLeft}`
+            : st.phase === "ataque"
+              ? "ataque"
+              : "remanejo"}
+        </span>
+        <span className="turno-relogio mono" data-urgente={urgente}>
+          {Math.floor(resto / 60)}:{String(resto % 60).padStart(2, "0")}
+        </span>
+        <button
+          type="button"
+          className="som"
+          aria-pressed={mudo}
+          aria-label={mudo ? "Ligar som" : "Desligar som"}
+          onClick={() => {
+            sfx.arm();
+            sfx.toggleMuted();
+          }}
+        >
+          {mudo ? "✕" : "♪"}
+        </button>
+      </div>
+
+      {/* ── rolagem, quando há briga ────────────────────────────────── */}
+      {briga && (
+        <Rolagem
+          /* a chave garante remontagem: uma segunda briga com a mesma
+             quantidade de assaltos reaproveitaria o estado interno da
+             primeira e começaria do passo errado */
+          key={`${briga.de}-${briga.para}-${briga.assaltos.length}`}
+          assaltos={briga.assaltos}
+          nomeAtac={POR_ID[briga.de]?.nome ?? briga.de}
+          nomeDefe={POR_ID[briga.para]?.nome ?? briga.para}
+          onFim={() => setBriga(null)}
+        />
+      )}
+
+      <MapaVantara
+        donos={visto.donos}
+        exercitos={visto.exercitos}
+        cores={cores}
+        meuAssento={meuAssento}
+        origem={origem ?? (briga ? briga.de : null)}
+        alvos={briga ? [briga.para] : alvos}
+        mexeu={mexeu}
+        onEscolher={escolher}
+        disabled={!minhaVez || ocupado || !!briga}
+      />
+
+      {/* ── painel de ação ──────────────────────────────────────────── */}
+      {!briga && (
+        <div className="acao">
+          {!minhaVez && (
+            <p className="acao-espera dim">
+              Esperando {nomePorAssento[st.turnSeat]}. O turno passa sozinho se ninguém jogar.
+            </p>
+          )}
+
+          {minhaVez && st.avanco && (
+            <div className="acao-bloco">
+              <p className="acao-titulo">
+                {POR_ID[st.avanco.para]?.nome} é seu. Mandar mais quantos de{" "}
+                {POR_ID[st.avanco.de]?.nome}?
+              </p>
+              <p className="acao-nota dim">
+                Até {st.avanco.max}. Quem avança segura o que tomou; quem fica defende a
+                retaguarda. Não há resposta certa.
+              </p>
+              <div className="acao-botoes">
+                {Array.from({ length: st.avanco.max + 1 }, (_, n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={n === st.avanco!.max ? "btn btn-brass" : "btn btn-ghost"}
+                    disabled={ocupado}
+                    onClick={() => void avancar(n)}
+                  >
+                    {n === 0 ? "nenhum" : `+${n}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {minhaVez && !st.avanco && st.phase === "reforco" && (
+            <div className="acao-bloco">
+              <p className="acao-titulo">
+                {origem
+                  ? `Quantos em ${POR_ID[origem]?.nome}?`
+                  : `Coloque ${st.reforcoLeft} ${st.reforcoLeft === 1 ? "exército" : "exércitos"}`}
+              </p>
+              {!origem && (
+                <p className="acao-nota dim">
+                  Toque num território seu. O reforço vem de território ÷ 2, mínimo três, mais o
+                  bônus de continente fechado.
+                </p>
+              )}
+              {origem && (
+                <>
+                  <Contador
+                    valor={quanto}
+                    max={st.reforcoLeft}
+                    onMuda={setQuanto}
+                    disabled={ocupado}
+                  />
+                  <div className="acao-botoes">
+                    <button
+                      type="button"
+                      className="btn btn-brass"
+                      disabled={ocupado}
+                      onClick={() => void reforcar()}
+                    >
+                      Colocar {quanto}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setOrigem(null)}
+                    >
+                      Outro lugar
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {minhaVez && !st.avanco && semNadaAFazer && (
+            <div className="acao-bloco">
+              <p className="acao-titulo">Turno cumprido.</p>
+              <p className="acao-nota dim">
+                Você já atacou e já remanejou. O que sobra é passar a vez — e pegar a carta, se
+                conquistou algo.
+              </p>
+            </div>
+          )}
+
+          {minhaVez && !st.avanco && st.phase !== "reforco" && !semNadaAFazer && (
+            <div className="acao-bloco">
+              {!origem && (
+                <>
+                  <p className="acao-titulo">
+                    {podeAtacar && podeRemanejar
+                      ? "Atacar ou mover tropa: de onde?"
+                      : podeAtacar
+                        ? "Atacar: de onde?"
+                        : "Mover tropa: de onde?"}
+                  </p>
+                  <p className="acao-nota dim">
+                    Toque num território seu com dois exércitos ou mais — território com um só não
+                    ataca nem manda tropa, porque alguém tem de ficar.
+                    {podeAtacar && podeRemanejar
+                      ? " Depois, toque num vizinho inimigo para atacar ou num território seu para mover."
+                      : ""}
+                  </p>
+                </>
+              )}
+              {origem && !destino && (
+                <>
+                  <p className="acao-titulo">
+                    De {POR_ID[origem]?.nome} ({visto.exercitos[origem]}) para onde?
+                  </p>
+                  <p className="acao-nota dim">
+                    {alvos.length === 0
+                      ? "Nenhum destino válido daqui. Toque em outro território."
+                      : "Os destinos possíveis estão acesos, e as fronteiras deles também."}
+                  </p>
+                </>
+              )}
+              {origem && destino && !destinoEhMeu && (
+                <>
+                  <p className="acao-titulo">
+                    {POR_ID[origem]?.nome} ({visto.exercitos[origem]}) ataca{" "}
+                    {POR_ID[destino]?.nome} ({visto.exercitos[destino]})
+                  </p>
+                  <p className="acao-nota dim">
+                    {visto.exercitos[origem] >= 4 && visto.exercitos[destino] <= 2
+                      ? "Com essa diferença, ir até o fim costuma valer."
+                      : "Um assalto por vez dá para desistir no meio; ir até o fim resolve numa vez."}
+                  </p>
+                  <div className="acao-botoes">
+                    <button
+                      type="button"
+                      className="btn btn-brass"
+                      disabled={ocupado}
+                      onClick={() => void atacar(1)}
+                    >
+                      Um assalto
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-vivo"
+                      disabled={ocupado}
+                      onClick={() => void atacar(12)}
+                    >
+                      Até acabar
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setDestino(null)}
+                    >
+                      Outro alvo
+                    </button>
+                  </div>
+                </>
+              )}
+              {origem && destino && destinoEhMeu && (
+                <>
+                  <p className="acao-titulo">
+                    Mandar tropa de {POR_ID[origem]?.nome} para {POR_ID[destino]?.nome}
+                  </p>
+                  {/* a consequência tem de estar visível ANTES do toque, não
+                      numa mensagem de erro depois */}
+                  <p className="acao-nota dim">
+                    É o seu único remanejo do turno{podeAtacar ? ", e ele encerra o ataque" : ""}.
+                  </p>
+                  <Contador
+                    valor={quanto}
+                    max={Math.max(1, (visto.exercitos[origem] ?? 1) - 1)}
+                    onMuda={setQuanto}
+                    disabled={ocupado}
+                  />
+                  <div className="acao-botoes">
+                    <button
+                      type="button"
+                      className="btn btn-brass"
+                      disabled={ocupado}
+                      onClick={() => void remanejar()}
+                    >
+                      Mandar {quanto}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => setDestino(null)}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </>
+              )}
+
+            </div>
+          )}
+
+          {minhaVez && !st.avanco && (
+            <button
+              type="button"
+              className="btn btn-lacquer acao-passar"
+              disabled={ocupado || st.reforcoLeft > 0}
+              onClick={() => void encerrar()}
+              title={st.reforcoLeft > 0 ? "Coloque todo o reforço antes" : undefined}
+            >
+              {st.reforcoLeft > 0
+                ? `Coloque ${st.reforcoLeft} antes de passar`
+                : st.conquistou
+                  ? "Encerrar turno e pegar a carta"
+                  : "Encerrar turno"}
+            </button>
+          )}
+
+          {erro && (
+            <p className="acao-erro" role="alert">
+              {erro}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── quem está na mesa ───────────────────────────────────────── */}
+      <div className="panel dominio-mesa">
+        <p className="eyebrow">Na mesa</p>
+        <ul className="dominio-jogadores">
+          {st.players.map((p) => {
+            const x = conta.get(p.seat) ?? { ters: 0, forca: 0 };
+            const perfil = assentos.find((a) => a.user_id === p.userId);
+            return (
+              <li
+                key={p.seat}
+                className="dominio-jogador"
+                data-vez={p.seat === st.turnSeat}
+                data-fora={!p.ativo}
+              >
+                {perfil && <Avatar spec={parseAvatar(perfil.avatar)} size={30} />}
+                <span
+                  className="dominio-cor"
+                  style={{ background: COLORS[p.cor ?? "grafite"].enamel }}
+                  aria-hidden
+                />
+                <span className="dominio-jogador-nome">{nomePorAssento[p.seat]}</span>
+                {p.ativo ? (
+                  <>
+                    <span className="dominio-barra">
+                      <span
+                        style={{
+                          width: `${(x.forca / maiorForca) * 100}%`,
+                          background: COLORS[p.cor ?? "grafite"].enamel,
+                        }}
+                      />
+                    </span>
+                    <span className="mono dominio-jogador-num">{x.ters}</span>
+                    <span className="mono dominio-jogador-cartas" title="cartas na mão">
+                      {p.cartas > 0 ? `▤${p.cartas}` : ""}
+                    </span>
+                  </>
+                ) : (
+                  <span className="dominio-fora">fora</span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <p className="dim dominio-mesa-nota">
+          A barra é a força total; o número é quantos territórios. A mão de cada um é pública em
+          quantidade e secreta em conteúdo.
+        </p>
+      </div>
+
+      <Objetivo texto={priv.objetivo?.texto ?? null} />
+
+      <Mao
+        cartas={priv.cartas ?? []}
+        donos={st.donos}
+        meuAssento={meuAssento}
+        podeTrocar={minhaVez && st.phase === "reforco" && !ocupado}
+        obrigado={(priv.cartas?.length ?? 0) >= 5}
+        onTrocar={(ix) => void trocar(ix)}
+      />
+
+      <div className="panel dominio-continentes">
+        <p className="eyebrow">Continentes</p>
+        <LegendaContinentes donos={visto.donos} cores={cores} />
+      </div>
+
+      <Registro log={st.log ?? []} nomes={nomePorAssento} />
+    </div>
+  );
+}
+
+/* ── peças pequenas ──────────────────────────────────────────────────────── */
+
+/**
+ * O contador.
+ *
+ * Três formas de escolher a quantidade, porque três dedos diferentes tentam
+ * três coisas: os botões de menos e mais para ajuste fino, o "tudo" para o
+ * caso comum (quase sempre você quer colocar tudo num lugar só), e arrastar
+ * para o meio.
+ */
+function Contador({
+  valor,
+  max,
+  onMuda,
+  disabled,
+}: {
+  valor: number;
+  max: number;
+  onMuda: (n: number) => void;
+  disabled?: boolean;
+}) {
+  const preso = Math.min(Math.max(1, valor), Math.max(1, max));
+  return (
+    <div className="contador">
+      <button
+        type="button"
+        className="contador-btn"
+        disabled={disabled || preso <= 1}
+        onClick={() => onMuda(preso - 1)}
+        aria-label="Menos um"
+      >
+        −
+      </button>
+      <input
+        className="contador-faixa"
+        type="range"
+        min={1}
+        max={Math.max(1, max)}
+        value={preso}
+        disabled={disabled || max <= 1}
+        onChange={(e) => onMuda(Number(e.target.value))}
+        aria-label="Quantidade"
+      />
+      <span className="contador-num mono">{preso}</span>
+      <button
+        type="button"
+        className="contador-btn"
+        disabled={disabled || preso >= max}
+        onClick={() => onMuda(preso + 1)}
+        aria-label="Mais um"
+      >
+        +
+      </button>
+      <button
+        type="button"
+        className="contador-tudo"
+        disabled={disabled || preso >= max}
+        onClick={() => onMuda(max)}
+      >
+        tudo
+      </button>
+    </div>
+  );
+}
+
+/** O registro: a partida contada em linhas curtas, a mais nova em cima. */
+function Registro({ log, nomes }: { log: LinhaLog[]; nomes: Record<number, string> }) {
+  if (log.length === 0) return null;
+  const quem = (s?: number) => (s === undefined ? "alguém" : (nomes[s] ?? `assento ${s}`));
+  const onde = (id?: string) => (id ? (POR_ID[id]?.nome ?? id) : "?");
+
+  function frase(l: LinhaLog): string {
+    switch (l.k) {
+      case "reforco":
+        return `${quem(l.seat)} reforçou ${onde(l.ter)} com ${l.n}`;
+      case "reforco-automatico":
+        return `o tempo acabou: o reforço de ${quem(l.seat)} caiu em ${onde(l.ter)}`;
+      case "conquista":
+        return `${quem(l.seat)} tomou ${onde(l.para)} de ${quem(l.vitima)}`;
+      case "avanco":
+        return `${quem(l.seat)} mandou ${l.n} de ${onde(l.de)} para ${onde(l.para)}`;
+      case "remanejo":
+        return `${quem(l.seat)} moveu ${l.n} de ${onde(l.de)} para ${onde(l.para)}`;
+      case "eliminado":
+        return `${quem(l.seat)} está fora — ${quem(l.por)} ficou com as cartas`;
+      case "troca":
+        return `${quem(l.seat)} trocou cartas por ${l.vale}${l.bonus ? ` (+${l.bonus} no mapa)` : ""}`;
+      case "carta":
+        return `${quem(l.seat)} pegou uma carta`;
+      case "vez":
+        return `vez de ${quem(l.seat)}`;
+      case "tempo-esgotado":
+        return `${quem(l.seat)} perdeu o turno no relógio`;
+      case "vitoria":
+        return `${quem(l.seat)} cumpriu o objetivo`;
+      default:
+        return l.k;
+    }
+  }
+
+  return (
+    <div className="panel dominio-log">
+      <p className="eyebrow">O que aconteceu</p>
+      <ol className="dominio-log-lista">
+        {log.slice(0, 14).map((l, i) => (
+          <li key={i} data-k={l.k}>
+            {frase(l)}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}

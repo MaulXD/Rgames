@@ -75,7 +75,9 @@ export function GameCard({ game }: { game: Game }) {
     "--c-glow": game.skin.glow,
   } as CSSProperties;
 
-  const isMvp = game.key === "letreiro";
+  // "jogável" e não "é o MVP": três jogos já rodam, e o selo tem de dizer o
+  // que a pessoa pode fazer AGORA, não em que fase do roadmap a coisa entrou.
+  const isMvp = game.seal === "Jogável";
 
   return (
     <article ref={ref} className="card" style={skin} onPointerMove={onMove} onPointerLeave={onLeave}>

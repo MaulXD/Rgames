@@ -32,7 +32,7 @@ export const GAMES: Game[] = [
     name: "Letreiro",
     ref: "a partir de Boggle",
     pitch:
-      "Dezesseis dados de letra caem na bandeja. Três minutos, todo mundo na mesma grade. No fim, o jogo mostra as palavras que ninguém viu.",
+      "Dados de letra caem na bandeja — dezesseis ou vinte e cinco, você escolhe. Todo mundo na mesma grade. No fim, o jogo mostra as palavras que ninguém viu.",
     players: "1–8",
     duration: "3–12 min",
     seal: "Jogável",
@@ -54,7 +54,7 @@ export const GAMES: Game[] = [
       "Quatro mundos no mesmo motor: uma mansão em 1953, uma boate em 1987, uma escavação no deserto e uma estação orbital. Cada um com sua regra.",
     players: "3–6",
     duration: "25–40 min",
-    seal: "Motor pronto",
+    seal: "Jogável",
     phase: "Fase 2",
     skin: {
       bg: "#8A48D6",
@@ -70,10 +70,10 @@ export const GAMES: Game[] = [
     name: "Domínio",
     ref: "a partir de WAR",
     pitch:
-      "Um mapa de 1936, 42 territórios e um objetivo secreto. Batalha em lote resolve vinte assaltos em quatro segundos — e a partida acaba na mesma noite.",
+      "Vantara: 42 territórios, seis continentes, um objetivo secreto por pessoa. Ataque em série resolve a briga inteira numa jogada — e a partida acaba na mesma noite.",
     players: "3–6",
     duration: "35–90 min",
-    seal: "Fase 3",
+    seal: "Jogável",
     phase: "Fase 3",
     skin: {
       bg: "#EA6A2A",

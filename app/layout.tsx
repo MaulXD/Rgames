@@ -7,6 +7,7 @@ import "./globals.css";
 import "./letreiro.css";
 import "./dossie.css";
 import "./gamificacao.css";
+import "./dominio.css";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",

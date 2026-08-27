@@ -96,3 +96,49 @@ export function reforcoDe(donos: Record<string, number>, assento: number): numbe
   if (meus === 0) return 0;
   return Math.max(3, Math.floor(meus / 2)) + bonusDe(donos, assento);
 }
+
+/**
+ * Todos os territórios de `assento` alcançáveis a partir de `de` passando SÓ
+ * por território dele. É a regra do remanejo, e existe aqui em cima também
+ * para a tela poder acender os destinos válidos antes de você tocar.
+ *
+ * A verdade continua sendo do servidor (`dominio_conectado`): esta função
+ * pinta a intenção, não autoriza a jogada. Se as duas discordarem, o servidor
+ * recusa — e é assim que tem de ser.
+ */
+export function conectados(
+  donos: Record<string, number>,
+  assento: number,
+  de: string,
+): Set<string> {
+  const visto = new Set<string>([de]);
+  const fila = [de];
+  while (fila.length) {
+    const atual = fila.shift()!;
+    for (const v of POR_ID[atual]?.vizinhos ?? []) {
+      if (!visto.has(v) && donos[v] === assento) {
+        visto.add(v);
+        fila.push(v);
+      }
+    }
+  }
+  visto.delete(de);
+  return visto;
+}
+
+/** Quantos territórios e quantos exércitos cada assento tem, de uma passada. */
+export function placar(
+  donos: Record<string, number>,
+  exercitos: Record<string, number>,
+): Map<number, { ters: number; forca: number }> {
+  const out = new Map<number, { ters: number; forca: number }>();
+  for (const t of TERRITORIOS) {
+    const d = donos[t.id];
+    if (d === undefined) continue;
+    const atual = out.get(d) ?? { ters: 0, forca: 0 };
+    atual.ters += 1;
+    atual.forca += exercitos[t.id] ?? 0;
+    out.set(d, atual);
+  }
+  return out;
+}

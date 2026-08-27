@@ -341,3 +341,89 @@ export function chegou() {
     { freq: semi(26), em: 0.07, dur: 0.13, vol: 0.14, tipo: "triangle" },
   ]);
 }
+
+/* ── Domínio ────────────────────────────────────────────────────────────────
+   Um vocabulário de MADEIRA e METAL, distinto do Letreiro (que é xilofone) e
+   do Dossiê (que é sino e passo). O dado é o som central do jogo, então ele
+   tem de aguentar tocar cem vezes numa partida sem cansar: ruído curto,
+   grave, sem nota definida — quase percussão. Uma melodia ali viraria tortura
+   no décimo ataque.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/** Dado rolando na mesa: três batidas secas, cada vez em altura diferente. */
+export function dado() {
+  const base = 92 + Math.random() * 26;
+  toca([
+    { freq: base, dur: 0.05, vol: 0.2, tipo: "square", corte: 900, para: base * 0.7 },
+    { freq: base * 1.3, em: 0.055, dur: 0.045, vol: 0.16, tipo: "square", corte: 1100, para: base },
+    { freq: base * 0.9, em: 0.11, dur: 0.06, vol: 0.13, tipo: "square", corte: 800, para: base * 0.6 },
+  ]);
+}
+
+/** O par foi meu: duas notas subindo, curtas. */
+export function avanca() {
+  toca([
+    { freq: semi(12), dur: 0.07, vol: 0.15, tipo: "triangle" },
+    { freq: semi(19), em: 0.06, dur: 0.1, vol: 0.15, tipo: "triangle" },
+  ]);
+}
+
+/** O par foi dele: a mesma figura, descendo. */
+export function recua() {
+  toca([
+    { freq: semi(12), dur: 0.07, vol: 0.14, tipo: "sawtooth", corte: 1600 },
+    { freq: semi(5), em: 0.06, dur: 0.12, vol: 0.14, tipo: "sawtooth", corte: 1300 },
+  ]);
+}
+
+/** Território tomado: fanfarra curta de três notas, com peso embaixo. */
+export function conquista() {
+  toca([
+    { freq: semi(12), dur: 0.1, vol: 0.18, tipo: "triangle" },
+    { freq: semi(16), em: 0.08, dur: 0.1, vol: 0.18, tipo: "triangle" },
+    { freq: semi(24), em: 0.16, dur: 0.22, vol: 0.2, tipo: "triangle" },
+    { freq: semi(0), em: 0.16, dur: 0.3, vol: 0.12, tipo: "sine", corte: 600 },
+  ]);
+}
+
+/** Exército colocado no mapa: um toque só, seco, de madeira. */
+export function planta() {
+  toca([{ freq: 150 + Math.random() * 40, dur: 0.05, vol: 0.15, tipo: "square", corte: 1000, para: 110 }]);
+}
+
+/** Passou a vez: virada de página. */
+export function vez() {
+  toca([
+    { freq: semi(9), dur: 0.09, vol: 0.13, tipo: "triangle" },
+    { freq: semi(14), em: 0.08, dur: 0.14, vol: 0.13, tipo: "triangle" },
+  ]);
+}
+
+/** Alguém saiu da partida: uma descida longa, e ninguém precisa de legenda. */
+export function eliminado() {
+  toca([
+    { freq: semi(21), dur: 0.5, vol: 0.16, tipo: "sawtooth", corte: 1500, para: semi(2) },
+    { freq: semi(9), em: 0.2, dur: 0.5, vol: 0.1, tipo: "sine", corte: 700, para: semi(-3) },
+  ]);
+}
+
+/** Troca de cartas: baralho batendo. */
+export function troca() {
+  toca([
+    { freq: 320, dur: 0.04, vol: 0.12, tipo: "square", corte: 2400, para: 240 },
+    { freq: 380, em: 0.05, dur: 0.04, vol: 0.12, tipo: "square", corte: 2600, para: 280 },
+    { freq: 440, em: 0.1, dur: 0.05, vol: 0.13, tipo: "square", corte: 2800, para: 320 },
+  ]);
+}
+
+/** Vitória da partida: a única fanfarra longa do jogo. */
+export function venceu() {
+  toca([
+    { freq: semi(12), dur: 0.14, vol: 0.18, tipo: "triangle" },
+    { freq: semi(16), em: 0.12, dur: 0.14, vol: 0.18, tipo: "triangle" },
+    { freq: semi(19), em: 0.24, dur: 0.14, vol: 0.18, tipo: "triangle" },
+    { freq: semi(24), em: 0.36, dur: 0.45, vol: 0.22, tipo: "triangle" },
+    { freq: semi(28), em: 0.36, dur: 0.45, vol: 0.12, tipo: "sine" },
+    { freq: semi(0), em: 0.36, dur: 0.6, vol: 0.13, tipo: "sine", corte: 600 },
+  ]);
+}

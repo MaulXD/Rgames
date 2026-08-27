@@ -334,6 +334,181 @@ ok(g5.rows[0].comuns?.length > 0, `a grade de 5×5 tem ${g5.rows[0].comuns?.leng
 const salaFim = (await get(A.token, `rooms?select=status&id=eq.${sala.id}`)).body?.[0];
 ok(salaFim?.status === "lobby", "sala voltou para o lobby");
 
+/* ══════════════════════════════════════════════════════════════════════════
+   O DESAFIO DIÁRIO
+
+   Uma grade por dia, a mesma para todo mundo, uma tentativa. O que mais importa
+   testar aqui é a DETERMINISMO da grade e a impossibilidade da segunda
+   tentativa — as duas coisas que, se falharem, tornam o placar do dia uma
+   ficção.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// a grade do dia é a mesma toda vez que se pergunta, e diferente entre dias
+const g1 = (await db.query("select (public.letreiro_grade_do_dia('2026-03-15')).id")).rows[0].id;
+const g2 = (await db.query("select (public.letreiro_grade_do_dia('2026-03-15')).id")).rows[0].id;
+ok(g1 === g2, `a grade de um dia é sempre a mesma (${g1})`);
+
+const dias = (
+  await db.query(
+    `select count(distinct (public.letreiro_grade_do_dia(d::date)).id) n
+       from generate_series('2026-01-01'::date, '2026-03-01'::date, '1 day') d`,
+  )
+).rows[0].n;
+ok(
+  Number(dias) >= 50,
+  `em 60 dias saíram ${dias} grades distintas — o dia de amanhã não repete o de hoje`,
+);
+
+const tamanho = (
+  await db.query("select (public.letreiro_grade_do_dia(current_date)).size s")
+).rows[0].s;
+ok(
+  Number(tamanho) === 4,
+  "o diário é sempre 4×4: comparar placar entre tamanhos diferentes não significaria nada",
+);
+
+// abrir
+const abriu = await rpc(A.token, "letreiro_diario_abrir", {});
+ok(abriu.status === 200, `A abre o desafio de hoje (${JSON.stringify(abriu.body).slice(0, 80)})`);
+const diario = abriu.body;
+ok(Array.isArray(diario?.grid) && diario.grid.length === 16, "a grade de 16 faces veio");
+ok(diario?.fechado === false && diario?.score === 0, "e a rodada está aberta, em zero");
+ok(
+  !JSON.stringify(diario).includes("solution"),
+  "o gabarito NÃO vem — a grade é pública, o gabarito nunca",
+);
+
+// abrir de novo devolve a MESMA rodada, com o mesmo relógio
+const abriu2 = await rpc(A.token, "letreiro_diario_abrir", {});
+ok(
+  abriu2.body?.termina_em === diario.termina_em,
+  "recarregar a página não dá tempo extra: o relógio é o mesmo",
+);
+
+// e a grade é a mesma para outra pessoa no mesmo dia
+const abriuB = await rpc(B.token, "letreiro_diario_abrir", {});
+ok(
+  JSON.stringify(abriuB.body?.grid) === JSON.stringify(diario.grid),
+  "e é a MESMA grade para outra pessoa — é o ponto do desafio diário",
+);
+
+// submeter, com o gabarito lido pelo caminho de serviço
+const gabaritoDia = (
+  await db.query(
+    `select b.solution, b.grid from public.letreiro_boards b
+      where b.id = (public.letreiro_grade_do_dia((now() at time zone 'America/Sao_Paulo')::date)).id`,
+  )
+).rows[0];
+const palavrasDia = Object.entries(gabaritoDia.solution).sort(
+  (a, b) => b[0].length - a[0].length,
+);
+const [dw1, dp1] = palavrasDia[0];
+const [dw2, dp2] = palavrasDia[1];
+
+const env1 = await rpc(A.token, "letreiro_diario_submeter", { p_word: dw1, p_path: dp1 });
+ok(env1.body?.ok === true, `A submete ${dw1} no diário (+${env1.body?.pts})`);
+const rep1 = await rpc(A.token, "letreiro_diario_submeter", { p_word: dw1, p_path: dp1 });
+ok(rep1.body?.reason === "REPEATED", "palavra repetida é recusada");
+const falsa = await rpc(A.token, "letreiro_diario_submeter", {
+  p_word: "ZZQXJ",
+  p_path: "0123",
+});
+ok(falsa.body?.reason === "NOT_A_WORD", "palavra inexistente dá NOT_A_WORD");
+const torto = await rpc(A.token, "letreiro_diario_submeter", { p_word: dw2, p_path: "0f" });
+ok(torto.body?.reason === "BAD_PATH", "palavra certa por caminho errado dá BAD_PATH");
+
+await rpc(A.token, "letreiro_diario_submeter", { p_word: dw2, p_path: dp2 });
+
+// o placar não mostra quem ainda está jogando
+const placarAberto = await rpc(A.token, "letreiro_diario_placar", {});
+ok(
+  Array.isArray(placarAberto.body) && placarAberto.body.length === 0,
+  "quem ainda está jogando NÃO aparece no placar — o número mudaria, e contaria demais a quem não jogou",
+);
+
+// fechar
+const fechou = await rpc(A.token, "letreiro_diario_fechar", {});
+ok(fechou.status === 200, "A fecha a rodada");
+const esperado = env1.body.pts + (await (async () => {
+  const r = await db.query("select public.letreiro_pontos_palavra($1) p", [dw2]);
+  return Number(r.rows[0].p);
+})());
+ok(
+  fechou.body?.score === esperado,
+  `o placar soma as duas palavras (${fechou.body?.score} = ${esperado})`,
+);
+ok(
+  Array.isArray(fechou.body?.perdidas),
+  `e a revelação traz as melhores comuns que escaparam (${(fechou.body?.perdidas ?? []).map((x) => x.w).join(", ")})`,
+);
+
+// fechar de novo não credita de novo
+const xp1 = (
+  await db.query("select stats -> 'diarios' n from profiles where id = $1", [A.id])
+).rows[0].n;
+await rpc(A.token, "letreiro_diario_fechar", {});
+const xp2 = (
+  await db.query("select stats -> 'diarios' n from profiles where id = $1", [A.id])
+).rows[0].n;
+ok(
+  Number(xp1) === Number(xp2) && Number(xp1) === 1,
+  `fechar duas vezes credita uma vez (diarios = ${xp2})`,
+);
+
+// e não se joga mais depois de fechado
+const depois = await rpc(A.token, "letreiro_diario_submeter", { p_word: dw2, p_path: dp2 });
+ok(
+  /ALREADY_CLOSED/.test(JSON.stringify(depois.body)),
+  "e não se submete mais nada depois de fechar — uma tentativa por dia",
+);
+
+// A SEGUNDA TENTATIVA É IMPOSSÍVEL DE GRAVAR, e não recusada por checagem
+const duplicata = await db
+  .query(
+    `insert into public.letreiro_diario (dia, user_id, board_id, termina_em)
+     values ((now() at time zone 'America/Sao_Paulo')::date, $1, $2, now())`,
+    [A.id, gabaritoDia.board_id ?? 1],
+  )
+  .then(() => null)
+  .catch((e) => e.code);
+ok(
+  duplicata === "23505",
+  "a chave primária (dia, jogador) torna a segunda tentativa impossível de gravar, não só recusada",
+);
+
+// o placar agora mostra A, e B não (ainda não fechou)
+const placarDia = await rpc(A.token, "letreiro_diario_placar", {});
+ok(
+  placarDia.body?.length === 1 && placarDia.body[0].score === esperado,
+  `o placar do dia tem uma linha, com ${esperado} pontos`,
+);
+ok(placarDia.body[0].eu === true, "e marca qual linha é a de quem pediu");
+ok(
+  !JSON.stringify(placarDia.body).includes(dw1),
+  "o placar NÃO contém as palavras de ninguém: ver as do outro tiraria a graça de quem ainda vai jogar",
+);
+
+// a tabela em si é inacessível ao cliente
+const direto = await get(A.token, "letreiro_diario?select=*");
+ok(
+  direto.status >= 400 || (Array.isArray(direto.body) && direto.body.length === 0),
+  `a tabela do diário não é legível pelo cliente (status ${direto.status})`,
+);
+
+// a faxina fecha quem estourou o relógio e não voltou
+await db.query(
+  `update public.letreiro_diario set termina_em = now() - interval '1 minute'
+    where user_id = $1`,
+  [B.id],
+);
+const varridos = (await db.query("select public.letreiro_diario_sweep() n")).rows[0].n;
+ok(Number(varridos) >= 1, `a faxina fechou ${varridos} rodada(s) abandonada(s)`);
+const placarFinal = await rpc(A.token, "letreiro_diario_placar", {});
+ok(
+  placarFinal.body?.length === 2,
+  "e quem fechou a aba aparece no placar do dia — placar com gente faltando é placar errado",
+);
+
 // faxina
 for (const u of [A, B]) await admin(`/admin/users/${u.id}`, { method: "DELETE" });
 await db.end();

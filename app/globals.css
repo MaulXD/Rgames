@@ -955,3 +955,32 @@ body::after {
 .regra-tempo[data-piora="true"] {
   background: var(--vivo-amarelo);
 }
+
+/* o atalho do desafio diário, no cabeçalho */
+.link-diario {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 0.9rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--vivo-turquesa);
+  color: var(--ink);
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+  box-shadow: 0 4px 0 #159384;
+  transition: transform var(--dur-instant) var(--ease-out);
+}
+.link-diario:active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 #159384;
+}
+@media (max-width: 30rem) {
+  /* no celular só o essencial: "do dia" ainda diz o que é */
+  .link-diario {
+    padding: 0 0.7rem;
+    font-size: 0.74rem;
+  }
+}

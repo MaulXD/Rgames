@@ -27,6 +27,13 @@ export function SiteHeader() {
       </Link>
 
       <div className="header-dir">
+        {/* O desafio diário fica no cabeçalho e não numa aba dentro do
+            Letreiro, porque ele é o motivo de abrir o site num dia em que não
+            há com quem jogar. Enterrado dentro de um jogo, ninguém acha. */}
+        <Link href="/diario" className="link-diario">
+          Desafio do dia
+        </Link>
+
         <div className="hidden sm:block" style={{ minWidth: "11rem" }}>
           <NivelBarra />
         </div>

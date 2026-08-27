@@ -180,6 +180,8 @@ const PERMITIDAS = [
   "set_ready", "set_room_settings", "touch_presence",
   // Letreiro
   "letreiro_start", "letreiro_submit",
+  "letreiro_diario_abrir", "letreiro_diario_submeter", "letreiro_diario_fechar",
+  "letreiro_diario_placar",
   // Dossiê
   "dossie_accuse", "dossie_end_turn", "dossie_move", "dossie_pad",
   "dossie_pass_refute", "dossie_refute", "dossie_start", "dossie_suggest",

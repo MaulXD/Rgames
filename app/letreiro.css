@@ -982,3 +982,96 @@
     stroke-dasharray: none;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DESAFIO DIÁRIO
+
+   A tela é mais nua que a da partida com amigos, e é escolha: não há barra de
+   rival nem contagem alheia. Você contra a grade. O placar só no fim, porque
+   ver o número do outro durante a rodada muda o que você tenta.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.diario {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.diario-topo {
+  text-align: center;
+}
+.diario-placar {
+  font-size: clamp(3.4rem, 16vw, 5.5rem);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--vivo-amarelo);
+  text-shadow: 0 6px 0 var(--sob-amarelo);
+  animation: pula var(--dur-slow) var(--ease-pop) both;
+}
+.diario-sub {
+  margin-top: 0.5rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+.diario-bloco {
+  padding: 1rem 1.1rem;
+}
+.diario-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.diario-linha {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  border: 2px solid transparent;
+  border-radius: var(--r-md);
+  font-size: 0.88rem;
+}
+/* a sua linha destacada: numa lista de cinquenta, achar a própria importa */
+.diario-linha[data-eu="true"] {
+  border-color: var(--vivo-amarelo);
+  background: #ffc42e14;
+}
+.diario-pos {
+  width: 30px;
+  height: 30px;
+  font-size: 0.78rem;
+}
+.diario-nome {
+  flex: 1;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.diario-palavras {
+  flex: none;
+  font-size: 0.76rem;
+}
+.diario-pts {
+  flex: none;
+  min-width: 3ch;
+  color: var(--vivo-amarelo);
+  font-size: 1.05rem;
+  font-weight: 700;
+  text-align: right;
+}
+.diario-volta {
+  font-size: 0.8rem;
+  line-height: 1.5;
+  text-align: center;
+}
+.reveal-missed-list-ul li {
+  background: var(--vivo-turquesa) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diario-placar {
+    animation: none;
+  }
+}

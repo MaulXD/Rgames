@@ -131,6 +131,13 @@ export const CONQUISTAS: Conquista[] = [
     cor: "#FF4D5E",
   },
   {
+    id: "dia-cheio",
+    nome: "Dia cheio",
+    como: "Achou quinze palavras ou mais num desafio diário.",
+    glifo: "estrela",
+    cor: "#2FD8C4",
+  },
+  {
     id: "prefeito",
     nome: "Prefeito",
     como: "Terminou a Metrópole com o maior patrimônio da cidade.",

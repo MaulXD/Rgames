@@ -746,6 +746,173 @@ for (const fn of ["dominio_venceu", "dominio_sweep", "dominio_carta", "dominio_t
   ok(r.status >= 400, `o cliente NÃO chama ${fn} (status ${r.status})`);
 }
 
+/* ── 13. propriedade: os auxiliares de mapa, contra outra implementação ────
+   `dominio_conectado` é uma busca em largura escrita em PL/pgSQL, com fatia de
+   array (`fila := fila[2:]`) fazendo o papel de fila. É exatamente o tipo de
+   código onde um erro de um passa despercebido por meses: funciona no caso
+   fácil e mente no caso raro.
+
+   Então aqui ele é comparado com uma implementação DIFERENTE — fechamento
+   transitivo por relaxamento repetido, sem fila nenhuma — sobre repartições
+   aleatórias do mapa. Duas rotas para a mesma resposta; se divergirem, uma das
+   duas está errada, e o teste diz em qual estado.
+
+   O mesmo vale para `dominio_reforco`, comparado com a conta feita direto do
+   JSON do mapa. */
+
+/** Alcançáveis por relaxamento: sem fila, sem recursão, sem BFS. */
+function alcancaveis(donos, assento, de) {
+  const meus = MAPA.territorios.filter((t) => donos[t.id] === assento).map((t) => t.id);
+  if (donos[de] !== assento) return new Set();
+  let dentro = new Set([de]);
+  let mudou = true;
+  while (mudou) {
+    mudou = false;
+    for (const t of meus) {
+      if (dentro.has(t)) continue;
+      if (VIZ[t].some((v) => dentro.has(v))) {
+        dentro.add(t);
+        mudou = true;
+      }
+    }
+  }
+  dentro.delete(de);
+  return dentro;
+}
+
+/** Reforço pela regra escrita, lida do JSON: territórios ÷ 2 (mín. 3) + bônus. */
+function reforcoEsperado(donos, assento) {
+  const meus = MAPA.territorios.filter((t) => donos[t.id] === assento).length;
+  if (meus === 0) return 0;
+  let extra = 0;
+  for (const c of MAPA.continentes) {
+    const dele = MAPA.territorios.filter((t) => t.continente === c.id);
+    if (dele.length > 0 && dele.every((t) => donos[t.id] === assento)) extra += c.bonus;
+  }
+  return Math.max(3, Math.floor(meus / 2)) + extra;
+}
+
+/** Gerador determinístico: o mesmo teste falha do mesmo jeito toda vez. */
+function mulberry32(a) {
+  return function () {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const rnd = mulberry32(20260827);
+let divCon = 0;
+let divRef = 0;
+let paresTestados = 0;
+let piorCaso = null;
+
+for (let rodada = 0; rodada < 14; rodada++) {
+  // reparte o mapa entre três assentos, com pesos diferentes a cada rodada
+  // para que apareçam desde mapas fragmentados até quase-monopólio
+  const viés = rodada / 13;
+  const donos = {};
+  for (const t of MAPA.territorios) {
+    const r = rnd();
+    donos[t.id] = r < 0.34 + viés * 0.5 ? 0 : r < 0.67 + viés * 0.25 ? 1 : 2;
+  }
+  const exercitos = Object.fromEntries(MAPA.territorios.map((t) => [t.id, 1]));
+  const estado = { donos, exercitos, abates: {} };
+
+  // reforço, os três assentos
+  for (const assento of [0, 1, 2]) {
+    const r = await db.query(
+      `select public.dominio_reforco(gt.data, $1::jsonb, $2::smallint) n
+         from public.game_themes gt where gt.id = 'vantara'`,
+      [JSON.stringify(estado), assento],
+    );
+    const esperado = reforcoEsperado(donos, assento);
+    if (Number(r.rows[0].n) !== esperado) {
+      divRef++;
+      piorCaso = `reforço assento ${assento}: servidor ${r.rows[0].n}, esperado ${esperado}`;
+    }
+  }
+
+  // conectividade: seis origens sorteadas por rodada, contra o conjunto todo
+  const origens = MAPA.territorios
+    .filter((t) => donos[t.id] === 0)
+    .sort(() => rnd() - 0.5)
+    .slice(0, 6);
+
+  for (const de of origens) {
+    const meu = alcancaveis(donos, 0, de.id);
+    // uma consulta só por origem: todos os destinos de uma vez
+    const r = await db.query(
+      `select t.id, public.dominio_conectado(gt.data, $1::jsonb, 0::smallint, $2, t.id) ok
+         from public.game_themes gt,
+              jsonb_to_recordset(gt.data -> 'territorios') as t(id text)
+        where gt.id = 'vantara'`,
+      [JSON.stringify(estado), de.id],
+    );
+    for (const linha of r.rows) {
+      if (linha.id === de.id) continue;
+      paresTestados++;
+      const servidor = linha.ok === true;
+      const nosso = meu.has(linha.id);
+      // o servidor não exige que o DESTINO seja seu; a nossa conta sim. Só
+      // comparamos onde as duas perguntas são a mesma pergunta.
+      if (donos[linha.id] !== 0) continue;
+      if (servidor !== nosso) {
+        divCon++;
+        piorCaso = `conectado ${de.id} → ${linha.id}: servidor ${servidor}, esperado ${nosso}`;
+      }
+    }
+  }
+}
+
+ok(
+  divRef === 0,
+  divRef === 0
+    ? "dominio_reforco bate com a regra escrita em 42 estados (14 repartições × 3 assentos)"
+    : `dominio_reforco divergiu ${divRef}x — ${piorCaso}`,
+);
+ok(
+  divCon === 0,
+  divCon === 0
+    ? `dominio_conectado bate com fechamento transitivo em ${paresTestados.toLocaleString("pt-BR")} pares`
+    : `dominio_conectado divergiu ${divCon}x — ${piorCaso}`,
+);
+
+/* vizinhança: o servidor lê o mesmo JSON, e ainda assim vale conferir que a
+   leitura não perde nem inventa aresta */
+const vizServidor = (
+  await db.query(
+    `select t.id, public.dominio_vizinhos(gt.data, t.id) v
+       from public.game_themes gt,
+            jsonb_to_recordset(gt.data -> 'territorios') as t(id text)
+      where gt.id = 'vantara'`,
+  )
+).rows;
+const vizIguais = vizServidor.every((r) => {
+  const a = [...r.v].sort();
+  const b = [...VIZ[r.id]].sort();
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+});
+ok(vizIguais, `dominio_vizinhos devolve exatamente a vizinhança do mapa nos 42 territórios`);
+
+/* e a propriedade que o mapa TEM de ter, senão o jogo trava: a vizinhança é
+   simétrica. Se "a" é vizinho de "b" mas "b" não é de "a", existe um ataque
+   possível numa direção e impossível na outra. */
+const assimetrias = [];
+for (const t of MAPA.territorios) {
+  for (const v of t.vizinhos) {
+    if (!VIZ[v]?.includes(t.id)) assimetrias.push(`${t.id}→${v}`);
+  }
+}
+ok(
+  assimetrias.length === 0,
+  assimetrias.length === 0
+    ? "a vizinhança é simétrica nas 83 fronteiras"
+    : `fronteira de mão única: ${assimetrias.join(", ")}`,
+);
+
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();
 

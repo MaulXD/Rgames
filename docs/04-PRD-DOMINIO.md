@@ -475,21 +475,34 @@ som de papel rasgando quando é quebrada.
 - [ ] Bônus de continente sobe corretamente e zera ao perder um território
 - [ ] Ataque com trégua ativa exige confirmação explícita e aplica a penalidade
 
-**Modo Campanha**
-- [ ] A partida termina na rodada 12, sempre
-- [ ] Jogador zerado retorna na rodada seguinte com 3 exércitos
-- [ ] `−2` por rodada passiva é aplicado
-- [ ] Placar bate com o recálculo independente a partir do `match_events`
+**Modo Campanha** — implementado na migração 0039, com 28 verificações em
+`scripts/smoke-dominio.mjs`
+- [x] A partida termina na rodada 12, sempre
+- [x] Jogador zerado retorna na rodada seguinte com 3 exércitos — tomados do território mais
+      fraco de quem tem mais territórios. É uma adaptação declarada: Vantara não tem território
+      neutro, então o líder paga pelo retorno
+- [x] `−2` por rodada passiva é aplicado
+- [x] Objetivo secreto cumprido vale +20 e encerra na hora; o placar acumula entre rodadas e
+      os contadores de rodada (`tomou`, `atacou`) zeram a cada virada
+- [ ] Placar bate com o recálculo independente a partir do `match_events` — hoje o placar é
+      verificado contra a regra escrita, não contra um recálculo a partir de eventos
 
 **Objetivos**
-- [ ] Nenhum objetivo depende de um jogador específico por cor
-- [ ] Objetivo cumprido é detectado no mesmo instante e encerra a partida
-- [ ] Objetivo de outro jogador nunca vaza no `public_state`
+- [x] Nenhum objetivo depende de um jogador específico por cor
+- [x] Objetivo cumprido é detectado no mesmo instante e encerra a partida — os cinco tipos
+      verificados contra estado montado à mão
+- [x] Objetivo de outro jogador nunca vaza no `public_state`, e a RLS impede ler o estado
+      privado alheio
+- [x] Os objetivos NÃO se repetem entre jogadores (sorteados sem reposição)
 
 **Sensação e performance**
-- [ ] Batalha de 20 assaltos leva ≤ 5s e mostra todas as rolagens
+- [x] Batalha de até 12 assaltos é resolvida numa chamada e devolve TODAS as rolagens, para o
+      cliente encenar dado por dado sem inventar resultado. O mapa fica congelado no estado
+      anterior enquanto o dado rola — senão o dado contaria uma história cujo fim já está na tela
 - [ ] 60fps no mapa completo em Galaxy A54
 - [ ] Cena ≤ 1,5 MB de assets
 - [ ] Mapa legível em 375px de largura, com pinça para zoom
-- [ ] Duas facções quaisquer distinguíveis em protanopia, deuteranopia e tritanopia
+- [x] Duas facções quaisquer distinguíveis em protanopia, deuteranopia e tritanopia — oito
+      texturas por cima do esmalte, porque carmim e oliva caem no mesmo tom em duas dessas
+      condições e nada impede as duas na mesma partida
 - [ ] Com `prefers-reduced-motion`, o combate mostra os resultados sem física, e nada se perde

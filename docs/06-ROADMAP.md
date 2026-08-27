@@ -35,21 +35,89 @@ fecha o navegador e volta, o host sai e outro assume — tudo sem recarregar a p
 
 ## Onde o projeto está de verdade
 
-Isto não é estimativa — é o que existe e roda:
+Isto não é estimativa — é o que existe e roda, medido no dia em que esta seção foi escrita.
+Números vêm de contar, não de lembrar: 40 migrações aplicadas, 13.600 linhas de SQL,
+31 componentes, e **514 verificações** em cinco suítes de fumaça que rodam contra o
+Supabase de verdade.
+
+### A plataforma
 
 | Entregue | Estado |
 |---|---|
 | Chassi Next 16 + Vercel `gru1` + Supabase São Paulo | ✅ no ar |
-| Sessão de convidado (nativa **e** por `/api/guest`, sem depender de toggle de painel) | ✅ |
-| Perfil persistido, avatar de esmalte e metal | ✅ |
+| Sessão de convidado, nativa **e** por `/api/guest` (sem depender de toggle de painel) | ✅ |
+| Perfil persistido, avatares animados (respiram e piscam, com compasso próprio por hash) | ✅ |
 | Salas: código, link, QR, lobby ao vivo, cor, pronto, migração de host | ✅ |
-| Dicionário PT-BR: 248.614 palavras em `dict_pt` | ✅ |
-| Pool de 1.500 grades aprovadas por solver | ✅ |
-| Motor do Letreiro: começar, submeter, apurar, varredura por `pg_cron` | ✅ |
-| Interface do Letreiro: bandeja, cronômetro, digitação e arraste, revelação em 3 atos | ✅ |
-| Testes de fumaça: 33 + 25 verificações contra o Supabase real | ✅ |
-| **Falta no Letreiro** | modo Relâmpago na interface, desafio diário, multiplicadores, estatísticas |
-| **Falta nos outros três** | tudo — Dossiê, Domínio e Metrópole são só documento |
+| XP, patente, 11 medalhas, confete | ✅ |
+| Som sintetizado por Web Audio nos quatro jogos, sem um único arquivo de áudio | ✅ |
+| Auditoria de privilégio no CI: a lista de funções chamáveis é conferida nos dois sentidos | ✅ |
+| Auth com Google, Discord e magic link | ⬜ só convidado e senha, por enquanto |
+| `axe-core`, `size-limit` e regressão visual no CI | ⬜ |
+
+### Os quatro jogos
+
+Todos os quatro **jogam**. Não é "o motor está pronto": é começar uma sala, convidar
+gente e terminar uma partida.
+
+| | Motor | Interface | Verificações | O que falta |
+|---|---|---|---|---|
+| **Letreiro** | ✅ | ✅ | 59 | desafio diário, estatísticas, as 4 bandejas temáticas |
+| **Dossiê** | ✅ | ✅ | 49 | os outros 3 temas (Neon 87, Escavação, Órbita) |
+| **Domínio** | ✅ | ✅ | 129 | trégua com preço, modo Relâmpago (falta o mapa de 24) |
+| **Metrópole** | ✅ | ✅ | 247 | peão andando casa a casa, animação de construção |
+
+**Letreiro** — dicionário de 248.632 palavras com frequência de fala, bandeja de 4×4 ou 5×5,
+1.801 grades aprovadas por solver, pontuação por letra, revelação em três atos que mostra só
+palavra que gente usa.
+
+**Dossiê** — caso narrado com chuva animada, planta baixa, refutação, caderno de dedução com
+três níveis de ajuda, e o desfecho.
+
+**Domínio** — Vantara com 42 territórios, combate com a matemática provada por enumeração de
+força bruta, ciclo de turno completo, e o modo **Campanha** (12 rodadas, placar, ninguém é
+eliminado) além do Clássico.
+
+**Metrópole** — Capibara com 40 casas, leilão obrigatório, contratos que o servidor cobra
+sozinho (parcelamento, isenção de aluguel, opção de compra), painel de fluxo de caixa com a
+distribuição estacionária do tabuleiro calculada de verdade, o Investidor, seis eventos da
+cidade, e quatro regras da casa com o custo em minutos na etiqueta.
+
+### O que a construção ensinou, e que não estava em nenhum PRD
+
+Cinco regras que saíram de defeitos reais, todas com o teste que as guarda:
+
+1. **Dinheiro não passa por ponto flutuante.** `Math.ceil(1300 * 1.1)` dá 1431 e o servidor
+   cobra 1430 — a tela prometia um real a mais em seis das treze faixas de hipoteca.
+   Porcentagem virou fração de inteiros em todo o projeto.
+
+2. **Em jsonb, ausência é NULL, e comparação com NULL é NULL.** Isso derrubou duas coisas:
+   o patrimônio contava toda propriedade sem dono para todos os jogadores, e a faxina do
+   Dossiê caía no ramo errado em toda partida fora de refutação — abortando a varredura
+   inteira, o que significava que ninguém nunca perdia o turno no relógio.
+
+3. **Revogar de PUBLIC não basta.** O projeto Supabase concede EXECUTE a `anon` e
+   `authenticated` por ALTER DEFAULT PRIVILEGES. Dezesseis funções internas ficaram abertas,
+   e uma delas recebia o estado da partida como argumento e gravava.
+
+4. **Teste de sorteio mede DISTRIBUIÇÃO, não "acontece pelo menos uma vez".** Um teste fraco
+   reprovou e revelou que `shuffle_text` — um Fisher-Yates com LCG lendo os bits baixos —
+   enviesava o culpado do Dossiê, a repartição do mapa do Domínio e os baralhos da Metrópole.
+   Dois dos seis eventos da cidade nunca saíam.
+
+5. **Dentro de PL/pgSQL, nome de variável e alias de subconsulta vivem no mesmo espaço.**
+   Uma variável com nome de coluna matou `dominio_start`; um alias com nome de variável matou
+   `met_bankrupt`.
+
+### Onde está a maior lacuna
+
+**Nenhuma tela foi vista.** Tudo aqui foi verificado por tipo, lint, build, 514 verificações
+contra o banco real e as páginas respondendo 200 num servidor de verdade — mas layout,
+contraste, o que cabe num celular e se a coisa é agradável de usar estão fundamentados no
+código, não observados. É a primeira coisa a fazer com olhos humanos.
+
+Depois disso, em ordem de valor: os temas que faltam (o sistema existe e está provado —
+cada tema novo é conteúdo, não engenharia), o desafio diário do Letreiro, e a trégua com
+preço do Domínio.
 
 ---
 

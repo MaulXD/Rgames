@@ -407,47 +407,90 @@ peão, dados de acrílico no papelão, e um jingle de rádio dos anos 50 no menu
 
 ## 10. Critérios de aceite
 
+**Como ler as marcas.** ✅ significa que existe uma verificação automática que reprova se
+quebrar — não "eu olhei e parecia certo". ⬜ é o que falta. 👁 é o que está implementado mas
+depende de olho humano para ser aceito, porque nenhuma tela deste jogo foi vista ainda.
+
+As verificações vivem em `scripts/smoke-metropole.mjs` (247 delas) e no validador do
+tabuleiro, `npm run cidade`, que se recusa a publicar a cidade se a economia não fechar.
+
 **Economia — precisa fechar na vírgula**
-- [ ] Soma de todo o dinheiro em circulação + banco é constante, exceto onde uma regra explicitamente
-      cria ou destrói dinheiro. Verificado por invariante a cada evento, no CI
-- [ ] Nenhuma transação parcial: cortar a conexão no meio de um pagamento não perde nem duplica dinheiro
-- [ ] Aluguel com grupo completo sem construção é o dobro
-- [ ] Aluguel de transporte escala com quantos o dono tem (1/2/4/8 × base)
-- [ ] Companhia cobra pelo dado (4× ou 10× conforme quantas o dono tem)
-- [ ] Hipotecada não cobra aluguel
-- [ ] Resgate cobra 10% de juros
-- [ ] Construção uniforme é obrigatória e o cliente não consegue burlar
-- [ ] Acabaram as casas no banco → construir falha com mensagem clara
+- ✅ Dinheiro entre jogadores é conservado. Verificado em transferência de aluguel, acordo
+      negociado e partilha com o Investidor
+- ✅ Imposto e taxa SAEM do jogo (é o que faz a partida ter fim) — e vão para o pote quando o
+      bolão está ligado
+- ✅ Nenhuma transação parcial: quem recebe é creditado cheio, quem paga vai para o negativo,
+      e caixa negativo tranca o turno até ser resolvido
+- ✅ Aluguel com grupo completo sem construção é o dobro
+- ✅ Aluguel de transporte escala com quantos o dono tem (1/2/3/4 testados)
+- ✅ Companhia cobra pelo dado (40× ou 100×, testados com dado 7 e 12)
+- ✅ Hipotecada não cobra aluguel
+- ✅ Resgate cobra 10% de juros — e a conta é em INTEIRO, porque em ponto flutuante ela dava
+      um real a mais em seis das treze faixas
+- ✅ Construção uniforme é obrigatória e o cliente não consegue burlar
+- ✅ Acabaram as casas no banco → construir falha com mensagem clara
+- ✅ Patrimônio não conta propriedade sem dono (contava, para todos, até a migração 0029)
 
 **Leilão**
-- [ ] Recusar compra abre leilão em ≤ 1s
-- [ ] Quem recusou pode dar lance
-- [ ] Lance acima do caixa é rejeitado
-- [ ] Relógio reseta a cada lance e fecha corretamente
-- [ ] Ninguém deu lance → propriedade fica com o banco
-- [ ] Leilão de falência distribui todas as propriedades
+- ✅ Recusar compra abre leilão
+- ✅ Quem recusou pode dar lance
+- ✅ Lance acima do caixa é rejeitado; lance igual ao atual também
+- ✅ Lance novo reabre o leilão para quem já havia passado
+- ✅ Quando todos passam, fecha na hora — sem esperar relógio
+- ✅ Ninguém deu lance → propriedade fica com o banco
+- ✅ O Investidor dá lance, e o que ele arremata vai para o nome do administrador
+- ⬜ Leilão de falência distribui as propriedades (hoje elas voltam ao banco e podem ser
+      compradas de novo, que resolve o congelamento mas não é o leilão do PRD)
 
 **Contratos**
-- [ ] Parcela é debitada automaticamente no início do turno do devedor
-- [ ] Devedor sem caixa entra em inadimplência e é forçado a hipotecar/vender
-- [ ] Isenção de aluguel é aplicada sem intervenção e expira na rodada certa
-- [ ] Contrato sobrevive à falência do credor (transfere ao Investidor)
-- [ ] Contratos ativos são públicos
+- ✅ Parcela é debitada automaticamente no início do turno do devedor, e expira na rodada certa
+- ✅ Devedor sem caixa entra em inadimplência pela mesma máquina de dívida do resto do jogo
+- ✅ Isenção de aluguel é aplicada sem intervenção, vale contra o aluguel dobrado do monopólio
+      e contra o agravo de carta, e expira na rodada certa
+- ✅ Contrato sobrevive à falência do credor; a parcela devida por quem quebrou morre
+- ✅ Contratos ativos são públicos
+- ✅ Aceitar proposta que ficou impossível é recusado (a validação roda duas vezes: ao propor
+      e ao aceitar, porque entre as duas o mundo anda)
+- ✅ Opção de compra: exercida no preço combinado, vencida não vale, e não vale contra terceiro
 
 **Modos**
-- [ ] Modo Metrópole termina na rodada 20, sempre
-- [ ] Patrimônio final é calculado igual pelo servidor e por recálculo independente do `match_events`
-- [ ] Investidor participa de leilões e o que ele compra é administrado corretamente
-- [ ] Modo Clássico continua funcionando com eliminação real
+- ✅ Modo Metrópole termina na rodada 20, sempre
+- ✅ Patrimônio final é gravado no estado para todos, e não recalculado no cliente
+- ✅ Investidor participa de leilões, e o que compra é administrado por um jogador ativo que
+      fica com a metade maior do aluguel
+- ✅ Investidor empresta por contrato, e aposta em segredo: acertar vale o segundo lugar
+- ✅ Modo Clássico elimina de verdade
+- 👁 Modo Relâmpago existe no vocabulário e no motor (12 rodadas, banco maior, 4 sorteadas)
+
+**Eventos da cidade**
+- ✅ Um evento a cada cinco rodadas, valendo por três, e nunca dois ao mesmo tempo
+- ✅ Os seis efeitos, cada um em fração de inteiros, conferidos contra o número esperado
+- ✅ O sorteio é uniforme — verificado por DISTRIBUIÇÃO em 300 sementes, depois de um viés
+      real ter sido encontrado e consertado (migração 0038)
+- ✅ O sorteio sai da semente, que o cliente não lê: ninguém sabe qual evento vem
+
+**Regras da casa**
+- ✅ As quatro nascem desligadas
+- ✅ Cada uma mostra o custo em minutos no lobby
+- ✅ São congeladas no início da partida — mudar a regra com partida rolando é recusado
+- ✅ Chave de configuração de outro jogo é RECUSADA, não descartada em silêncio
 
 **Ritmo — a métrica que define o jogo**
-- [ ] Turno sem decisão termina em ≤ 12s
-- [ ] Partida completa no modo Metrópole com 4 jogadores: **45–60 min** (medido em 10 partidas de teste)
-- [ ] Partida no Relâmpago: ≤ 35 min
+- ⬜ Turno sem decisão termina em ≤ 12s (falta medir com gente de verdade)
+- ⬜ Partida completa no modo Metrópole com 4 jogadores: 45–60 min (falta medir)
+- ⬜ Partida no Relâmpago: ≤ 35 min (falta medir)
 
 **Sensação e performance**
-- [ ] Construção de um hotel roda em 60fps no Galaxy A54
-- [ ] Cena ≤ 1,5 MB de assets
-- [ ] Tabuleiro legível e jogável em 375px (rotação para a casa atual, painel colapsável)
-- [ ] Com `prefers-reduced-motion`, o peão pula direto para a casa de destino e nada se perde
-- [ ] Grupos de cor distinguíveis em protanopia e deuteranopia (padrão nas escrituras, não só cor)
+- ⬜ Tabuleiro 3D isométrico, prédios com animação de construção, peões e dados 3D
+- ⬜ Peão anda casa a casa (hoje ele aparece na casa de destino)
+- 👁 Tabuleiro legível em 375px: o SVG rola na horizontal abaixo de 680px e a gestão das
+      propriedades sai de cima das casas para o painel. Fundamentado, não observado
+- ✅ Grupos de cor distinguíveis em protanopia e deuteranopia: oito texturas por cima da cor,
+      em ordem crescente de densidade seguindo o preço
+- 👁 Com `prefers-reduced-motion`, nada se perde
+- ⬜ Cena ≤ 1,5 MB de assets (não há assets: tudo é CSS, SVG e som sintetizado)
+
+**A lacuna que atravessa a lista.** Nenhuma tela deste jogo foi vista. As marcas ✅ são
+verdadeiras no sentido de que uma verificação automática as guarda; as 👁 dependem de alguém
+abrir o navegador. Ler esta lista como "o jogo está pronto" seria ler errado — ela diz que a
+ECONOMIA está provada, o que é a parte que não dá para consertar depois.

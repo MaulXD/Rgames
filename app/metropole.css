@@ -1611,3 +1611,148 @@
     grid-column: 2;
   }
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   A MANCHETE
+
+   O evento é anunciado como jornal, e não como aviso de sistema. A diferença
+   não é decorativa: aviso de sistema a pessoa fecha; manchete alguém LÊ EM VOZ
+   ALTA. E é a leitura em voz alta que faz o evento mudar a conversa da mesa,
+   que é para isso que ele existe.
+
+   Daí o papel creme, a serifa larga, o fio duplo e o nome do jornal em
+   caixa-alta espaçada. Nada disso é enfeite: é o que faz três linhas de texto
+   parecerem notícia.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.manchete {
+  padding: 0.8rem 1rem 0.9rem;
+  border: 3px solid var(--ink);
+  border-radius: var(--r-md);
+  background: var(--met-creme);
+  box-shadow: var(--shadow-rest);
+  color: var(--met-tinta);
+  animation: manchete-entra 0.5s var(--ease-pop) both;
+}
+@keyframes manchete-entra {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) rotate(-0.6deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.manchete-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 3px double #b9a983;
+}
+.manchete-jornal {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 40, "WONK" 1, "opsz" 96;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #6b6255;
+}
+.manchete-prazo {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #8a7f6a;
+}
+
+.manchete-titulo {
+  margin-top: 0.5rem;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 30, "WONK" 1, "opsz" 144;
+  font-size: clamp(1.15rem, 4.6vw, 1.7rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.manchete-corpo {
+  margin-top: 0.3rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #4a4238;
+}
+
+/* uma tarja de cor por tipo de efeito, na borda de baixo: dá para saber de
+   longe se a notícia é boa ou ruim para você sem reler */
+.manchete[data-efeito="aluguel-praia"] {
+  border-bottom-color: var(--met-piscina);
+  border-bottom-width: 7px;
+}
+.manchete[data-efeito="aluguel-grupo"],
+.manchete[data-efeito="aluguel-transporte"] {
+  border-bottom-color: var(--met-menta);
+  border-bottom-width: 7px;
+}
+.manchete[data-efeito="construcao"] {
+  border-bottom-color: var(--met-latao);
+  border-bottom-width: 7px;
+}
+.manchete[data-efeito="credito"] {
+  border-bottom-color: var(--met-terra);
+  border-bottom-width: 7px;
+}
+.manchete[data-efeito="salario"] {
+  border-bottom-color: var(--vivo-limao);
+  border-bottom-width: 7px;
+}
+
+/* o desconto do boom, ao lado do preço no botão de construir */
+.prop-desconto {
+  margin-left: 0.3rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: var(--met-latao);
+  color: var(--met-tinta);
+  font-size: 0.6rem;
+  font-weight: 800;
+}
+
+/* No desktop a manchete ganha a PRÓPRIA faixa, e não a do leilão: as duas
+   podem estar na tela ao mesmo tempo — um leilão durante a alta temporada é
+   exatamente o momento em que a manchete importa mais. */
+@media (min-width: 64rem) {
+  .met {
+    grid-template-areas:
+      "turno turno"
+      "manchete manchete"
+      "leilao leilao"
+      "tab lado"
+      "acao lado";
+  }
+  .manchete {
+    grid-area: manchete;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .manchete {
+    animation: none;
+  }
+}
+
+/* o aviso de que a escada de aluguel está sob efeito de evento */
+.tabela-evento {
+  margin-bottom: 0.35rem;
+  padding: 0.3rem 0.45rem;
+  border-left: 3px solid var(--met-latao);
+  border-radius: 0 5px 5px 0;
+  background: #c79a3e14;
+  color: var(--fg-dim);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}

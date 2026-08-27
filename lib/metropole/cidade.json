@@ -64,6 +64,59 @@
       "casa": 2000
     }
   ],
+  "eventos": [
+    {
+      "id": "obra",
+      "manchete": "Obra na avenida paralisa o bairro",
+      "corpo": "Um grupo de cor sorteado tem os alugueis reduzidos a metade enquanto a obra durar.",
+      "efeito": "aluguel-grupo",
+      "num": 1,
+      "den": 2,
+      "sorteiaGrupo": true
+    },
+    {
+      "id": "alta-temporada",
+      "manchete": "Alta temporada enche a orla",
+      "corpo": "Os bairros de praia cobram metade a mais de aluguel.",
+      "efeito": "aluguel-praia",
+      "num": 3,
+      "den": 2
+    },
+    {
+      "id": "greve",
+      "manchete": "Greve geral dos transportes",
+      "corpo": "Aeroporto, porto, estacao e ponte nao cobram aluguel nenhum.",
+      "efeito": "aluguel-transporte",
+      "num": 0,
+      "den": 1
+    },
+    {
+      "id": "boom",
+      "manchete": "Boom imobiliario derruba o preco da obra",
+      "corpo": "Construir custa trinta por cento menos.",
+      "efeito": "construcao",
+      "num": 7,
+      "den": 10
+    },
+    {
+      "id": "aperto",
+      "manchete": "Aperto de credito no sistema bancario",
+      "corpo": "Hipotecar rende vinte por cento menos, e resgatar custa vinte por cento de juros.",
+      "efeito": "credito",
+      "num": 4,
+      "den": 5,
+      "jurosNum": 6,
+      "jurosDen": 5
+    },
+    {
+      "id": "feriadao",
+      "manchete": "Feriadao prolongado movimenta a cidade",
+      "corpo": "O salario da Largada vale o dobro.",
+      "efeito": "salario",
+      "num": 2,
+      "den": 1
+    }
+  ],
   "casas": [
     {
       "pos": 0,
@@ -177,6 +230,7 @@
       "pos": 9,
       "t": "bairro",
       "id": "iracema",
+      "praia": true,
       "nome": "Praia de Iracema",
       "g": "azul-claro",
       "preco": 1200,
@@ -201,6 +255,7 @@
       "pos": 11,
       "t": "bairro",
       "id": "ponta-negra",
+      "praia": true,
       "nome": "Ponta Negra",
       "g": "rosa",
       "preco": 1400,
@@ -231,6 +286,7 @@
       "pos": 13,
       "t": "bairro",
       "id": "boa-viagem",
+      "praia": true,
       "nome": "Boa Viagem",
       "g": "rosa",
       "preco": 1400,
@@ -249,6 +305,7 @@
       "pos": 14,
       "t": "bairro",
       "id": "porto-da-barra",
+      "praia": true,
       "nome": "Porto da Barra",
       "g": "rosa",
       "preco": 1600,
@@ -387,6 +444,7 @@
       "pos": 24,
       "t": "bairro",
       "id": "beira-mar",
+      "praia": true,
       "nome": "Beira-Mar Norte",
       "g": "vermelho",
       "preco": 2400,
@@ -419,6 +477,7 @@
       "pos": 26,
       "t": "bairro",
       "id": "barra",
+      "praia": true,
       "nome": "Barra da Tijuca",
       "g": "amarelo",
       "preco": 2600,
@@ -467,6 +526,7 @@
       "pos": 29,
       "t": "bairro",
       "id": "meireles",
+      "praia": true,
       "nome": "Meireles",
       "g": "amarelo",
       "preco": 2800,
@@ -490,6 +550,7 @@
       "pos": 31,
       "t": "bairro",
       "id": "ipanema",
+      "praia": true,
       "nome": "Ipanema",
       "g": "verde",
       "preco": 3000,
@@ -568,6 +629,7 @@
       "pos": 37,
       "t": "bairro",
       "id": "leblon",
+      "praia": true,
       "nome": "Leblon",
       "g": "azul-escuro",
       "preco": 3500,

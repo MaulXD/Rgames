@@ -5,12 +5,15 @@ import {
   DO_GRUPO,
   GRUPOS,
   POR_ID,
-  REGRAS,
   aluguelAtual,
+  custoCasa,
   custoResgate,
   fluxo,
   grupoCompleto,
   reais,
+  rendeHipoteca,
+  salarioAgora,
+  type Evento,
   type GrupoId,
   type Props,
 } from "@/lib/metropole/cidade";
@@ -39,13 +42,15 @@ export function Fluxo({
   seat,
   cash,
   quantosJogam,
+  evento,
 }: {
   props: Props;
   seat: number;
   cash: number;
   quantosJogam: number;
+  evento?: Evento | null;
 }) {
-  const f = fluxo(props, seat, cash, quantosJogam);
+  const f = fluxo(props, seat, cash, quantosJogam, evento);
   const ruim = f.saldo < 0;
 
   return (
@@ -72,7 +77,7 @@ export function Fluxo({
       <ul className="fluxo-quebra">
         <li>
           <span>salário</span>
-          <span className="mono fluxo-mais">+{reais(REGRAS.salario).slice(1)}</span>
+          <span className="mono fluxo-mais">+{reais(salarioAgora(evento)).slice(1)}</span>
         </li>
         <li>
           <span>aluguel a receber</span>
@@ -125,6 +130,7 @@ export function MinhasProps({
   seat,
   cash,
   banco,
+  evento,
   podeAgir,
   onConstruir,
   onVender,
@@ -135,6 +141,7 @@ export function MinhasProps({
   seat: number;
   cash: number;
   banco: { casas: number; hoteis: number };
+  evento?: Evento | null;
   podeAgir: boolean;
   onConstruir: (prop: string, n: number) => void;
   onVender: (prop: string, n: number) => void;
@@ -207,8 +214,9 @@ export function MinhasProps({
                 .filter((c) => props[c.id!]?.owner === seat)
                 .map((c) => {
                   const e = props[c.id!];
+                  const custo = custoCasa(c.casa ?? 0, evento);
                   const podeConstruir =
-                    podeAgir && completo && !hipotecado && !e.hotel && cash >= (c.casa ?? 0);
+                    podeAgir && completo && !hipotecado && !e.hotel && cash >= custo;
                   return (
                     <li key={c.id} className="prop" data-aberta={aberto === c.id}>
                       <button
@@ -235,13 +243,13 @@ export function MinhasProps({
                           </span>
                         )}
                         <span className="prop-aluguel mono">
-                          {reais(aluguelAtual(props, c.id!))}
+                          {reais(aluguelAtual(props, c.id!, 7, evento))}
                         </span>
                       </button>
 
                       {aberto === c.id && (
                         <div className="prop-corpo">
-                          <TabelaAluguel prop={c.id!} props={props} seat={seat} />
+                          <TabelaAluguel prop={c.id!} props={props} seat={seat} evento={evento} />
 
                           <div className="prop-acoes">
                             {podeConstruir && (
@@ -250,7 +258,10 @@ export function MinhasProps({
                                   className="btn btn-brass prop-btn"
                                   onClick={() => onConstruir(c.id!, 1)}
                                 >
-                                  Construir · {reais(c.casa ?? 0)}
+                                  Construir · {reais(custo)}
+                                  {custo !== (c.casa ?? 0) && (
+                                    <span className="prop-desconto">no boom</span>
+                                  )}
                                 </button>
                                 {e.casas === 4 && banco.hoteis > 0 && (
                                   <span className="prop-dica">a próxima vira hotel</span>
@@ -270,7 +281,8 @@ export function MinhasProps({
                                 className="btn btn-ghost prop-btn"
                                 onClick={() => onHipotecar(c.id!)}
                               >
-                                Hipotecar · +{reais(c.hipoteca ?? 0).slice(3)}
+                                Hipotecar · +
+                                {reais(rendeHipoteca(c.hipoteca ?? 0, evento)).slice(3)}
                               </button>
                             )}
                             {podeAgir && e.hipotecada && (
@@ -278,8 +290,7 @@ export function MinhasProps({
                                 className="btn btn-ghost prop-btn"
                                 onClick={() => onResgatar(c.id!)}
                               >
-                                Resgatar ·{" "}
-                                {reais(custoResgate(c.hipoteca ?? 0))}
+                                Resgatar · {reais(custoResgate(c.hipoteca ?? 0, evento))}
                               </button>
                             )}
                           </div>
@@ -307,7 +318,9 @@ export function MinhasProps({
                   <div className="prop-linha">
                     <span className="prop-nome">{c.nome}</span>
                     {e.hipotecada && <span className="prop-hip">hipotecada</span>}
-                    <span className="prop-aluguel mono">{reais(aluguelAtual(props, c.id!))}</span>
+                    <span className="prop-aluguel mono">
+                      {reais(aluguelAtual(props, c.id!, 7, evento))}
+                    </span>
                   </div>
                   {podeAgir && (
                     <div className="prop-acoes">
@@ -316,15 +329,14 @@ export function MinhasProps({
                           className="btn btn-ghost prop-btn"
                           onClick={() => onHipotecar(c.id!)}
                         >
-                          Hipotecar · +{reais(c.hipoteca ?? 0).slice(3)}
+                          Hipotecar · +{reais(rendeHipoteca(c.hipoteca ?? 0, evento)).slice(3)}
                         </button>
                       ) : (
                         <button
                           className="btn btn-ghost prop-btn"
                           onClick={() => onResgatar(c.id!)}
                         >
-                          Resgatar ·{" "}
-                          {reais(custoResgate(c.hipoteca ?? 0))}
+                          Resgatar · {reais(custoResgate(c.hipoteca ?? 0, evento))}
                         </button>
                       )}
                     </div>
@@ -344,10 +356,12 @@ function TabelaAluguel({
   prop,
   props,
   seat,
+  evento,
 }: {
   prop: string;
   props: Props;
   seat: number;
+  evento?: Evento | null;
 }) {
   const c = POR_ID[prop];
   const e = props[prop];
@@ -357,17 +371,36 @@ function TabelaAluguel({
   const agora = e.hotel ? 5 : e.casas;
   const rotulos = ["sem casa", "1 casa", "2 casas", "3 casas", "4 casas", "hotel"];
 
+  /* A ESCADA TEM DE MOSTRAR O QUE VALE AGORA, evento incluído. É ela que
+     responde "quanto rende construir mais uma", e durante uma obra na avenida
+     a resposta é outra — mostrar os números de tabela aí seria convidar a
+     construir no pior momento. A conta é a mesma fração de inteiros do
+     servidor. */
+  const pega =
+    !!evento &&
+    ((evento.efeito === "aluguel-grupo" && c.g === evento.grupo) ||
+      (evento.efeito === "aluguel-praia" && !!c.praia));
+  const comEvento = (v: number) =>
+    pega ? Math.trunc((v * evento!.num) / evento!.den) : v;
+
   return (
-    <ul className="tabela">
-      {c.aluguel!.map((v, i) => (
-        <li key={i} data-agora={i === agora}>
-          <span>{rotulos[i]}</span>
-          <span className="mono">
-            {reais(i === 0 && completo ? v * 2 : v)}
-            {i === 0 && completo && <span className="tabela-dobro"> ×2</span>}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <>
+      {pega && (
+        <p className="tabela-evento">
+          Com {evento!.manchete.toLowerCase()}, estes são os valores em vigor — não os de tabela.
+        </p>
+      )}
+      <ul className="tabela">
+        {c.aluguel!.map((v, i) => (
+          <li key={i} data-agora={i === agora}>
+            <span>{rotulos[i]}</span>
+            <span className="mono">
+              {reais(comEvento(i === 0 && completo ? v * 2 : v))}
+              {i === 0 && completo && <span className="tabela-dobro"> ×2</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

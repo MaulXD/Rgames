@@ -15,7 +15,16 @@ import { Confete } from "@/components/confete";
 import { useSession } from "@/components/session";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { COLORS, parseAvatar, type ColorKey } from "@/lib/avatar";
-import { CASAS, POR_ID, REGRAS, patrimonio, reais, type Props } from "@/lib/metropole/cidade";
+import {
+  CASAS,
+  GRUPO_POR_ID,
+  POR_ID,
+  REGRAS,
+  patrimonio,
+  reais,
+  type Evento,
+  type Props,
+} from "@/lib/metropole/cidade";
 import * as sfx from "@/lib/sfx";
 
 /* ── o estado publicado pelo servidor ────────────────────────────────────── */
@@ -59,6 +68,8 @@ export type MetState = {
   } | null;
   /** reveladas só no fim: as apostas secretas dos Investidores */
   apostas?: { seat: number; em: number; acertou: boolean }[];
+  /** o evento da cidade em curso, ou nenhum */
+  evento?: Evento | null;
   devedores?: number[];
   ofertas?: Oferta[];
   contratos?: Contrato[];
@@ -375,6 +386,36 @@ export function MetropoleGame({
         </button>
       </div>
 
+      {/* ── A MANCHETE ───────────────────────────────────────────────────
+          O evento é anunciado como jornal, e não como aviso de sistema, porque
+          é assim que ele muda a conversa da mesa: alguém LÊ em voz alta. E o
+          efeito vem escrito embaixo, porque "alta temporada" não diz a ninguém
+          quanto o aluguel do Leblon passou a custar. */}
+      {st.evento && (
+        <div className="manchete" data-efeito={st.evento.efeito}>
+          <div className="manchete-topo">
+            <span className="manchete-jornal">A Gazeta de Capibara</span>
+            <span className="manchete-prazo mono">
+              até a rodada {st.evento.ate}
+            </span>
+          </div>
+          <p className="manchete-titulo">{st.evento.manchete}</p>
+          <p className="manchete-corpo">
+            {st.evento.corpo}
+            {st.evento.grupo && (
+              <>
+                {" "}
+                O grupo sorteado foi{" "}
+                <strong style={{ color: GRUPO_POR_ID[st.evento.grupo]?.cor }}>
+                  {GRUPO_POR_ID[st.evento.grupo]?.nome}
+                </strong>
+                .
+              </>
+            )}
+          </p>
+        </div>
+      )}
+
       {/* ── O LEILÃO, para todos ─────────────────────────────────────────
           Este bloco é o único do projeto que aparece igual para todo mundo,
           na vez de quem for. É o coração da correção deste jogo: sem leilão,
@@ -507,6 +548,7 @@ export function MetropoleGame({
         peoes={peoes}
         cores={cores}
         meuAssento={meuAssento}
+        evento={st.evento ?? null}
         destaque={
           st.phase === "leilao"
             ? (st.leilao?.prop ?? null)
@@ -734,6 +776,7 @@ export function MetropoleGame({
           seat={eu.seat}
           cash={eu.cash}
           quantosJogam={Math.max(ativos.length, 1)}
+          evento={st.evento ?? null}
         />
       )}
 
@@ -743,6 +786,7 @@ export function MetropoleGame({
           seat={eu.seat}
           cash={eu.cash}
           banco={st.bank}
+          evento={st.evento ?? null}
           podeAgir={podeAgir}
           onConstruir={(p, n) => void chama("met_build", { p_match: match.id, p_prop: p, p_n: n })}
           onVender={(p, n) => void chama("met_sell", { p_match: match.id, p_prop: p, p_n: n })}
@@ -889,6 +933,14 @@ function Registro({ log, nomes }: { log: LinhaLog[]; nomes: Record<number, strin
         return `${quem(l.seat)} arrematou ${onde(l.prop)} por ${reais(l.valor ?? 0)} — administrado por ${quem(l.para)}`;
       case "fim-sobrou-um":
         return `sobrou ${quem(l.seat)}`;
+      case "evento":
+        return `manchete: ${l.texto}`;
+      case "evento-fim":
+        return `passou: ${l.texto}`;
+      case "bolao":
+        return `${quem(l.seat)} parou na Praça e levou o bolão de ${reais(l.valor ?? 0)}`;
+      case "largada-dobrada":
+        return `${quem(l.seat)} parou exatamente na Largada e recebeu de novo`;
       case "leilao-vazio":
         return `ninguém deu lance em ${onde(l.prop)} — continua do banco`;
       case "carta":

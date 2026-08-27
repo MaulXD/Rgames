@@ -1743,6 +1743,285 @@ ok(
   `o XP foi creditado no fim por rodadas (${xpAntes} -> ${xpDepois}) — antes desta etapa este caminho não creditava nada`,
 );
 
+/* ══════════════════════════════════════════════════════════════════════════
+   9. OS EVENTOS DA CIDADE
+
+   Seis eventos, um a cada cinco rodadas, valendo por três. O que mais importa
+   testar não é se o efeito acontece — é se o efeito é EXATO e se o cliente
+   calcula o mesmo número que o servidor. Um evento que muda o aluguel e uma
+   tela que mostra o valor de tabela é pior que evento nenhum.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const EV = Object.fromEntries(CIDADE.eventos.map((e) => [e.id, e]));
+ok(Object.keys(EV).length === 6, `os 6 eventos chegaram no tabuleiro publicado`);
+
+/** Um estado com um evento em vigor. */
+function comEvento(id, extra = {}) {
+  const ev = { ...EV[id], desde: 5, ate: 7, ...extra };
+  return { ...estadoBase(), round: 5, evento: ev };
+}
+
+/* ── alta temporada: bairro de praia cobra metade a mais ────────────────── */
+
+const praiaBase = { ...estadoBase({ ipanema: 1 }) };
+const semTemporada = await aluguel(praiaBase, "ipanema");
+const temporada = { ...comEvento("alta-temporada"), props: praiaBase.props };
+const comTemporada = await aluguel(temporada, "ipanema");
+ok(
+  comTemporada === Math.trunc((semTemporada * 3) / 2),
+  `alta temporada: Ipanema de R$ ${semTemporada} para R$ ${comTemporada} (×3/2 exato)`,
+);
+ok(
+  comTemporada * 2 === semTemporada * 3,
+  "e a conta fecha sem sobra — fração de inteiros, não multiplicador decimal",
+);
+
+// bairro que não é de praia não muda
+const naoPraia = { ...comEvento("alta-temporada"), props: estadoBase({ caruaru: 1 }).props };
+ok(
+  (await aluguel(naoPraia, "caruaru")) === CASA.caruaru.aluguel[0],
+  "a alta temporada não mexe em quem não é de praia",
+);
+
+/* ── obra na avenida: o grupo sorteado paga metade ──────────────────────── */
+
+const obra = {
+  ...comEvento("obra", { grupo: "verde" }),
+  props: estadoBase({ ipanema: 1 }).props,
+};
+ok(
+  (await aluguel(obra, "ipanema")) === Math.trunc(CASA.ipanema.aluguel[0] / 2),
+  `obra no verde: Ipanema cai para R$ ${Math.trunc(CASA.ipanema.aluguel[0] / 2)}`,
+);
+const obraOutro = {
+  ...comEvento("obra", { grupo: "marrom" }),
+  props: estadoBase({ ipanema: 1 }).props,
+};
+ok(
+  (await aluguel(obraOutro, "ipanema")) === CASA.ipanema.aluguel[0],
+  "e não mexe nos outros grupos",
+);
+
+/* ── greve: transporte não cobra nada ──────────────────────────────────── */
+
+const greve = { ...comEvento("greve"), props: estadoBase({ congonhas: 1 }).props };
+ok((await aluguel(greve, "congonhas")) === 0, "greve: transporte não cobra aluguel nenhum");
+const greveBairro = { ...comEvento("greve"), props: estadoBase({ ipanema: 1 }).props };
+ok(
+  (await aluguel(greveBairro, "ipanema")) === CASA.ipanema.aluguel[0],
+  "e a greve não mexe em bairro",
+);
+
+/* ── feriadão: o salário dobra ─────────────────────────────────────────── */
+
+const salarioNormal = (
+  await db.query(
+    `select public.met_salario(gt.data, $1::jsonb) v from public.game_themes gt where gt.id = 'capibara'`,
+    [JSON.stringify(estadoBase())],
+  )
+).rows[0].v;
+ok(Number(salarioNormal) === CIDADE.regras.salario, "sem evento, o salário é o da regra");
+const salarioFeriado = (
+  await db.query(
+    `select public.met_salario(gt.data, $1::jsonb) v from public.game_themes gt where gt.id = 'capibara'`,
+    [JSON.stringify(comEvento("feriadao"))],
+  )
+).rows[0].v;
+ok(
+  Number(salarioFeriado) === CIDADE.regras.salario * 2,
+  `feriadão: o salário vai a R$ ${salarioFeriado}`,
+);
+
+/* ── o sorteio: a cada cinco rodadas, valendo por três ─────────────────── */
+
+async function sorteia(estado, rodada, seed = 4242) {
+  const r = await db.query(
+    `select public.met_evento(gt.data, $1::jsonb, $2::bigint, $3) v
+       from public.game_themes gt where gt.id = 'capibara'`,
+    [JSON.stringify(estado), seed, rodada],
+  );
+  return r.rows[0].v;
+}
+
+const semEvento = { ...estadoBase(), round: 3, evento: null };
+ok(
+  (await sorteia(semEvento, 3)).evento === null,
+  "na rodada 3 não há sorteio — é a cada cinco",
+);
+const na5 = await sorteia({ ...estadoBase(), round: 5, evento: null }, 5);
+ok(!!na5.evento, `na rodada 5 sai um evento (${na5.evento?.id})`);
+ok(na5.evento.desde === 5 && na5.evento.ate === 7, "e ele vale por três rodadas: 5, 6 e 7");
+ok(
+  na5.log.some((l) => l.k === "evento"),
+  "a manchete entra no registro",
+);
+
+// enquanto vale, não sorteia outro
+const na6 = await sorteia({ ...na5, round: 6 }, 6);
+ok(na6.evento?.id === na5.evento.id, "na rodada 6 o mesmo evento continua");
+
+// e expira na 8
+const na8 = await sorteia({ ...na5, round: 8 }, 8);
+ok(na8.evento === null, "na rodada 8 ele expirou");
+ok(
+  na8.log.some((l) => l.k === "evento-fim"),
+  "e o fim também entra no registro",
+);
+
+// o sorteio é da semente: a mesma semente e rodada dão o mesmo evento
+const outraVez = await sorteia({ ...estadoBase(), round: 5, evento: null }, 5);
+ok(
+  outraVez.evento?.id === na5.evento.id,
+  "o sorteio é reprodutível pela semente — e a semente o cliente não lê, então ninguém sabe o que vem",
+);
+const outraSemente = await sorteia({ ...estadoBase(), round: 5, evento: null }, 5, 99999);
+ok(
+  typeof outraSemente.evento?.id === "string",
+  `outra semente dá outro sorteio (${outraSemente.evento?.id})`,
+);
+
+/* ── O SORTEIO É JUSTO? ────────────────────────────────────────────────────
+   Este teste substituiu um fraco — "em quarenta sementes a obra sai pelo menos
+   uma vez" — e a substituição não foi cosmética: o teste fraco FALHOU, e a
+   causa era um viés grave no embaralhamento que decidia três jogos.
+
+   `shuffle_text` era um Fisher-Yates com gerador congruente linear de módulo
+   2^31, lendo os BITS BAIXOS (`s % i`). Nesses geradores os bits baixos têm
+   período curtíssimo, e para semente múltipla de mil o primeiro passo dava
+   sempre 1 módulo 8. Medido: dois dos seis eventos NUNCA saíam, e um saía em
+   52% das partidas. A mesma função sorteia o caso do Dossiê, a repartição de
+   territórios do Domínio e os dois baralhos da Metrópole.
+
+   A lição para o teste: verificar que "acontece pelo menos uma vez" não mede
+   sorteio. O que mede é a DISTRIBUIÇÃO, e é isso que está aqui. Se o viés
+   voltar, este teste reprova na hora. Ver a migração 0038. */
+const SORTEIOS = 300;
+const contagem = new Map();
+for (let seed = 1; seed <= SORTEIOS; seed++) {
+  const r = await sorteia({ ...estadoBase(), round: 5, evento: null }, 5, seed * 1000);
+  const id = r.evento?.id;
+  contagem.set(id, (contagem.get(id) ?? 0) + 1);
+}
+const justo = SORTEIOS / 6;
+const faltando = CIDADE.eventos.filter((e) => !contagem.has(e.id)).map((e) => e.id);
+ok(
+  faltando.length === 0,
+  faltando.length === 0
+    ? `os seis eventos aparecem em ${SORTEIOS} sementes espaçadas`
+    : `evento que NUNCA sai: ${faltando.join(", ")} — o embaralhamento está enviesado`,
+);
+const piorDesvio = Math.max(...[...contagem.values()].map((n) => Math.abs(n - justo)));
+ok(
+  piorDesvio <= justo * 0.45,
+  `a distribuição é plausível: esperado ${justo} de cada, pior desvio ${piorDesvio} ` +
+    `(${[...contagem.entries()].map(([k, v]) => `${k}=${v}`).join(" ")})`,
+);
+
+// a obra sorteia um grupo, e ele existe
+let achouObra = null;
+for (let seed = 1; seed <= 60 && !achouObra; seed++) {
+  const r = await sorteia({ ...estadoBase(), round: 5, evento: null }, 5, seed * 1000);
+  if (r.evento?.id === "obra") achouObra = r.evento;
+}
+ok(!!achouObra, "a obra na avenida sai, e ela é a que sorteia um grupo");
+if (achouObra) {
+  ok(
+    CIDADE.grupos.some((g) => g.id === achouObra.grupo),
+    `e o grupo sorteado existe no tabuleiro (${achouObra.grupo})`,
+  );
+}
+
+/* ── boom imobiliário e aperto de crédito, via RPC ─────────────────────── */
+
+const sala5 = (await rpc(P[0].token, "create_room", { p_game: "metropole" })).body;
+await rpc(P[1].token, "join_room", { p_code: sala5.code });
+const jogo5 = (await rpc(P[0].token, "met_start", { p_room: sala5.id })).body;
+const seat0de5 = (
+  await db.query("select user_id from match_players where match_id = $1 and seat = 0", [jogo5.id])
+).rows[0].user_id;
+const D = P.find((x) => x.id === seat0de5);
+
+/** o azul-escuro inteiro no assento 0, com caixa e a fase de agir */
+async function armaAzul(evento) {
+  const props = {};
+  for (const c of CIDADE.casas) {
+    if (!c.id) continue;
+    props[c.id] = { owner: null, casas: 0, hotel: false, hipotecada: false };
+  }
+  props["leblon"] = { owner: 0, casas: 0, hotel: false, hipotecada: false };
+  props["jardins"] = { owner: 0, casas: 0, hotel: false, hipotecada: false };
+  props["congonhas"] = { owner: 0, casas: 0, hotel: false, hipotecada: false };
+  const e5 = await leia(jogo5.id);
+  await poe(jogo5.id, {
+    props,
+    round: 5,
+    evento,
+    turnSeat: 0,
+    phase: "acao",
+    pendente: null,
+    leilao: null,
+    players: { ...e5.players, 0: { ...e5.players[0], cash: 60000 } },
+  });
+}
+
+await armaAzul(null);
+const custoNormal = await rpc(D.token, "met_build", {
+  p_match: jogo5.id,
+  p_prop: "leblon",
+  p_n: 1,
+});
+const caixaDepoisNormal = custoNormal.body.public_state.players[0].cash;
+ok(
+  caixaDepoisNormal === 60000 - CASA.leblon.casa,
+  `sem evento, a casa do azul-escuro custa R$ ${CASA.leblon.casa}`,
+);
+
+await armaAzul({ ...EV["boom"], desde: 5, ate: 7 });
+const comBoom = await rpc(D.token, "met_build", {
+  p_match: jogo5.id,
+  p_prop: "leblon",
+  p_n: 1,
+});
+const esperadoBoom = Math.trunc((CASA.leblon.casa * 7) / 10);
+ok(
+  comBoom.body.public_state.players[0].cash === 60000 - esperadoBoom,
+  `no boom imobiliário a mesma casa custa R$ ${esperadoBoom} (×7/10 exato)`,
+);
+
+await armaAzul({ ...EV["aperto"], desde: 5, ate: 7 });
+const hipAperto = await rpc(D.token, "met_mortgage", {
+  p_match: jogo5.id,
+  p_prop: "congonhas",
+});
+const rendeAperto = Math.trunc((CASA.congonhas.hipoteca * 4) / 5);
+ok(
+  hipAperto.body.public_state.players[0].cash === 60000 + rendeAperto,
+  `no aperto de crédito, hipotecar rende R$ ${rendeAperto} em vez de R$ ${CASA.congonhas.hipoteca} (×4/5)`,
+);
+const resgAperto = await rpc(D.token, "met_unmortgage", {
+  p_match: jogo5.id,
+  p_prop: "congonhas",
+});
+const custoAperto = Math.trunc((CASA.congonhas.hipoteca * 6) / 5);
+ok(
+  resgAperto.body.public_state.players[0].cash === 60000 + rendeAperto - custoAperto,
+  `e resgatar custa R$ ${custoAperto} — 20% de juros em vez de 10% (×6/5)`,
+);
+
+// sem o aperto, os 10% de sempre — e em conta INTEIRA
+await armaAzul(null);
+await rpc(D.token, "met_mortgage", { p_match: jogo5.id, p_prop: "congonhas" });
+const resgNormal = await rpc(D.token, "met_unmortgage", {
+  p_match: jogo5.id,
+  p_prop: "congonhas",
+});
+const custoNormal10 = Math.trunc((CASA.congonhas.hipoteca * 110) / 100);
+ok(
+  resgNormal.body.public_state.players[0].cash ===
+    60000 + CASA.congonhas.hipoteca - custoNormal10,
+  `fora do aperto, resgatar custa os 10% de sempre: R$ ${custoNormal10}`,
+);
+
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();
 

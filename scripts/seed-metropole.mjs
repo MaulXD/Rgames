@@ -94,12 +94,12 @@ const CASAS = [
   { t: "bairro", id: "pelourinho", nome: "Pelourinho", g: "azul-claro" },
   { t: "sorte", nome: "Sorte" },
   { t: "bairro", id: "olinda", nome: "Olinda", g: "azul-claro" },
-  { t: "bairro", id: "iracema", nome: "Praia de Iracema", g: "azul-claro" },
+  { t: "bairro", id: "iracema", praia: true, nome: "Praia de Iracema", g: "azul-claro" },
   { t: "cadeia", nome: "Cadeia", nota: "Só de passagem" },
-  { t: "bairro", id: "ponta-negra", nome: "Ponta Negra", g: "rosa" },
+  { t: "bairro", id: "ponta-negra", praia: true, nome: "Ponta Negra", g: "rosa" },
   { t: "companhia", id: "energia", nome: "Companhia de Energia" },
-  { t: "bairro", id: "boa-viagem", nome: "Boa Viagem", g: "rosa" },
-  { t: "bairro", id: "porto-da-barra", nome: "Porto da Barra", g: "rosa" },
+  { t: "bairro", id: "boa-viagem", praia: true, nome: "Boa Viagem", g: "rosa" },
+  { t: "bairro", id: "porto-da-barra", praia: true, nome: "Porto da Barra", g: "rosa" },
   { t: "transporte", id: "santos", nome: "Porto de Santos" },
   { t: "bairro", id: "pampulha", nome: "Pampulha", g: "laranja" },
   { t: "reves", nome: "Revés" },
@@ -109,20 +109,20 @@ const CASAS = [
   { t: "bairro", id: "batel", nome: "Batel", g: "vermelho" },
   { t: "sorte", nome: "Sorte" },
   { t: "bairro", id: "moinhos", nome: "Moinhos de Vento", g: "vermelho" },
-  { t: "bairro", id: "beira-mar", nome: "Beira-Mar Norte", g: "vermelho" },
+  { t: "bairro", id: "beira-mar", praia: true, nome: "Beira-Mar Norte", g: "vermelho" },
   { t: "transporte", id: "luz", nome: "Estação da Luz" },
-  { t: "bairro", id: "barra", nome: "Barra da Tijuca", g: "amarelo" },
+  { t: "bairro", id: "barra", praia: true, nome: "Barra da Tijuca", g: "amarelo" },
   { t: "bairro", id: "asa-sul", nome: "Asa Sul", g: "amarelo" },
   { t: "companhia", id: "saneamento", nome: "Companhia de Saneamento" },
-  { t: "bairro", id: "meireles", nome: "Meireles", g: "amarelo" },
+  { t: "bairro", id: "meireles", praia: true, nome: "Meireles", g: "amarelo" },
   { t: "va-cadeia", nome: "Vá para a Cadeia" },
-  { t: "bairro", id: "ipanema", nome: "Ipanema", g: "verde" },
+  { t: "bairro", id: "ipanema", praia: true, nome: "Ipanema", g: "verde" },
   { t: "bairro", id: "lago-sul", nome: "Lago Sul", g: "verde" },
   { t: "reves", nome: "Revés" },
   { t: "bairro", id: "vila-nova", nome: "Vila Nova Conceição", g: "verde" },
   { t: "transporte", id: "rio-niteroi", nome: "Ponte Rio–Niterói" },
   { t: "sorte", nome: "Sorte" },
-  { t: "bairro", id: "leblon", nome: "Leblon", g: "azul-escuro" },
+  { t: "bairro", id: "leblon", praia: true, nome: "Leblon", g: "azul-escuro" },
   { t: "taxa", nome: "Taxa de Luxo", valor: 1000 },
   { t: "bairro", id: "jardins", nome: "Jardins", g: "azul-escuro" },
 ];
@@ -226,6 +226,76 @@ const casas = CASAS.map((c, pos) => {
   return base;
 });
 
+/* ══════════════════════════════════════════════════════════════════════════
+   OS EVENTOS DA CIDADE
+
+   Um evento global a cada cinco rodadas, valendo por tres — anunciado como
+   manchete de jornal. Ver docs/05-PRD-METROPOLE.md §5.6.
+
+   O PROBLEMA QUE ELES RESOLVEM e o meio de jogo monotono: quarenta minutos de
+   "anda e paga" antes do desfecho. O evento muda a TEMPERATURA por tres
+   rodadas e cria janela de oportunidade que vale a pena esperar — hipotecar
+   agora ou depois do aperto de credito passa a ser uma decisao.
+
+   Cada efeito e uma FRACAO DE INTEIROS, nunca um multiplicador decimal:
+   dinheiro nao passa por ponto flutuante neste projeto. "-50%" e /2, "+50%" e
+   x3/2, "-30%" e x7/10. Com os precos na escala x10, todas as contas fecham
+   exatas.
+   ══════════════════════════════════════════════════════════════════════════ */
+const EVENTOS = [
+  {
+    id: "obra",
+    manchete: "Obra na avenida paralisa o bairro",
+    corpo: "Um grupo de cor sorteado tem os alugueis reduzidos a metade enquanto a obra durar.",
+    efeito: "aluguel-grupo",
+    num: 1,
+    den: 2,
+    sorteiaGrupo: true,
+  },
+  {
+    id: "alta-temporada",
+    manchete: "Alta temporada enche a orla",
+    corpo: "Os bairros de praia cobram metade a mais de aluguel.",
+    efeito: "aluguel-praia",
+    num: 3,
+    den: 2,
+  },
+  {
+    id: "greve",
+    manchete: "Greve geral dos transportes",
+    corpo: "Aeroporto, porto, estacao e ponte nao cobram aluguel nenhum.",
+    efeito: "aluguel-transporte",
+    num: 0,
+    den: 1,
+  },
+  {
+    id: "boom",
+    manchete: "Boom imobiliario derruba o preco da obra",
+    corpo: "Construir custa trinta por cento menos.",
+    efeito: "construcao",
+    num: 7,
+    den: 10,
+  },
+  {
+    id: "aperto",
+    manchete: "Aperto de credito no sistema bancario",
+    corpo: "Hipotecar rende vinte por cento menos, e resgatar custa vinte por cento de juros.",
+    efeito: "credito",
+    num: 4,
+    den: 5,
+    jurosNum: 6,
+    jurosDen: 5,
+  },
+  {
+    id: "feriadao",
+    manchete: "Feriadao prolongado movimenta a cidade",
+    corpo: "O salario da Largada vale o dobro.",
+    efeito: "salario",
+    num: 2,
+    den: 1,
+  },
+];
+
 const cidade = {
   id: "capibara",
   nome: "Capibara",
@@ -248,6 +318,7 @@ const cidade = {
     lanceMinimo: 100,
   },
   grupos: GRUPOS,
+  eventos: EVENTOS,
   casas,
   sorte: SORTE,
   reves: REVES,
@@ -443,6 +514,42 @@ ok(
 );
 console.log(
   `\n  a economia: volta sem casa ~R$ ${Math.round(semCasa)} · com hotel ~R$ ${Math.round(comHotel)} · salário R$ ${cidade.regras.salario}`,
+);
+
+// ── os eventos ─────────────────────────────────────────────────────────────
+
+ok(EVENTOS.length === 6, `6 eventos da cidade (${EVENTOS.length})`);
+ok(
+  EVENTOS.every((e) => e.manchete && e.corpo && e.efeito && e.den > 0),
+  "todo evento tem manchete, corpo, efeito e denominador",
+);
+ok(
+  new Set(EVENTOS.map((e) => e.id)).size === EVENTOS.length,
+  "nenhum id de evento repetido",
+);
+const EFEITOS = ["aluguel-grupo", "aluguel-praia", "aluguel-transporte", "construcao", "credito", "salario"];
+ok(
+  EVENTOS.every((e) => EFEITOS.includes(e.efeito)),
+  "todo efeito está no vocabulário fechado que o servidor entende",
+);
+ok(
+  EVENTOS.every((e) => Number.isInteger(e.num) && Number.isInteger(e.den)),
+  "todo efeito é fração de INTEIROS — dinheiro não passa por float",
+);
+
+const praias = bairros.filter((b) => b.praia);
+ok(praias.length >= 6, `${praias.length} bairros de praia marcados, para a Alta temporada`);
+ok(
+  praias.every((b) => (b.aluguel[0] * 3) % 2 === 0),
+  "o aluguel de todo bairro de praia sobe 50% em conta exata (×3/2 sem sobra)",
+);
+ok(
+  GRUPOS.every((g) => (g.casa * 7) % 10 === 0),
+  "o custo de casa de todo grupo cai 30% em conta exata (×7/10 sem sobra)",
+);
+ok(
+  bairros.every((b) => (b.hipoteca * 4) % 5 === 0 && (b.hipoteca * 6) % 5 === 0),
+  "a hipoteca de todo bairro suporta os ±20% do aperto de crédito em conta exata",
 );
 
 if (falhas > 0) {

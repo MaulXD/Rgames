@@ -43,6 +43,8 @@ export type Casa = {
   nota?: string;
   id?: string;
   g?: GrupoId;
+  /** bairro de praia — o evento "alta temporada" pega estes */
+  praia?: boolean;
   preco?: number;
   /** bairro: [base, 1 casa, 2, 3, 4, hotel] · transporte: por quantos o dono tem */
   aluguel?: number[];
@@ -54,6 +56,36 @@ export type Casa = {
 };
 
 export type Carta = { k: string; texto: string; casa?: number; n?: number; tipo?: string };
+
+/**
+ * O evento da cidade em curso, ou nenhum.
+ *
+ * `num`/`den` é a fração de inteiros do efeito — ×3/2, /2, ×7/10. Nunca um
+ * decimal: dinheiro não passa por ponto flutuante neste projeto, e o servidor
+ * faz a mesma conta com os mesmos inteiros. Se o cliente usasse 1,5 e o
+ * servidor 3/2, a tela mostraria um aluguel e o jogo cobraria outro.
+ */
+export type Evento = {
+  id: string;
+  manchete: string;
+  corpo: string;
+  efeito:
+    | "aluguel-grupo"
+    | "aluguel-praia"
+    | "aluguel-transporte"
+    | "construcao"
+    | "credito"
+    | "salario";
+  num: number;
+  den: number;
+  jurosNum?: number;
+  jurosDen?: number;
+  grupo?: GrupoId;
+  desde: number;
+  ate: number;
+};
+
+export const EVENTOS = dados.eventos as Omit<Evento, "desde" | "ate">[];
 
 export const REGRAS = dados.regras as {
   salario: number;
@@ -152,27 +184,41 @@ export function quantosDoTipo(props: Props, seat: number, tipo: Tipo): number {
  * Espelha `met_aluguel` no servidor. Se as duas divergirem, a tela promete um
  * número e o jogo cobra outro — então as duas mudam juntas, sempre.
  */
-export function aluguelAtual(props: Props, prop: string, soma = 7): number {
+export function aluguelAtual(
+  props: Props,
+  prop: string,
+  soma = 7,
+  evento?: Evento | null,
+): number {
   const casa = POR_ID[prop];
   const est = props[prop];
   if (!casa || !est || est.owner === null || est.hipotecada) return 0;
 
+  let bruto = 0;
   if (casa.t === "bairro") {
-    if (est.hotel) return casa.aluguel![5];
-    if (est.casas > 0) return casa.aluguel![est.casas];
-    return grupoCompleto(props, est.owner, casa.g!)
-      ? casa.aluguel![0] * 2
-      : casa.aluguel![0];
-  }
-  if (casa.t === "transporte") {
+    if (est.hotel) bruto = casa.aluguel![5];
+    else if (est.casas > 0) bruto = casa.aluguel![est.casas];
+    else
+      bruto = grupoCompleto(props, est.owner, casa.g!)
+        ? casa.aluguel![0] * 2
+        : casa.aluguel![0];
+  } else if (casa.t === "transporte") {
     const q = quantosDoTipo(props, est.owner, "transporte");
-    return casa.aluguel![Math.max(q - 1, 0)];
-  }
-  if (casa.t === "companhia") {
+    bruto = casa.aluguel![Math.max(q - 1, 0)];
+  } else if (casa.t === "companhia") {
     const q = quantosDoTipo(props, est.owner, "companhia");
-    return casa.multiplo![Math.min(Math.max(q - 1, 0), 1)] * soma;
+    bruto = casa.multiplo![Math.min(Math.max(q - 1, 0), 1)] * soma;
+  } else {
+    return 0;
   }
-  return 0;
+
+  // o evento entra por último, com a MESMA fração de inteiros do servidor
+  if (!evento) return bruto;
+  const pega =
+    (evento.efeito === "aluguel-grupo" && casa.g === evento.grupo) ||
+    (evento.efeito === "aluguel-praia" && !!casa.praia) ||
+    (evento.efeito === "aluguel-transporte" && casa.t === "transporte");
+  return pega ? Math.trunc((bruto * evento.num) / evento.den) : bruto;
 }
 
 /**
@@ -192,9 +238,37 @@ export function aluguelAtual(props: Props, prop: string, soma = 7): number {
  * Multiplicação de porcentagem vira fração de inteiros — `× 110 / 100`, nunca
  * `× 1.1`.
  */
-export function custoResgate(hipoteca: number): number {
+export function custoResgate(hipoteca: number, evento?: Evento | null): number {
+  // no aperto de crédito os juros sobem para 20%; fora dele são os 10% da regra
+  if (evento?.efeito === "credito" && evento.jurosNum && evento.jurosDen) {
+    return Math.trunc((hipoteca * evento.jurosNum) / evento.jurosDen);
+  }
   const pct = Math.round(REGRAS.jurosResgate * 100);
-  return Math.ceil((hipoteca * (100 + pct)) / 100);
+  return Math.trunc((hipoteca * (100 + pct)) / 100);
+}
+
+/** Quanto uma hipoteca RENDE agora: 20% menos no aperto de crédito. */
+export function rendeHipoteca(hipoteca: number, evento?: Evento | null): number {
+  if (evento?.efeito === "credito") {
+    return Math.trunc((hipoteca * evento.num) / evento.den);
+  }
+  return hipoteca;
+}
+
+/** O que custa construir uma casa agora: 30% menos no boom imobiliário. */
+export function custoCasa(casa: number, evento?: Evento | null): number {
+  if (evento?.efeito === "construcao") {
+    return Math.trunc((casa * evento.num) / evento.den);
+  }
+  return casa;
+}
+
+/** O salário da Largada agora: dobra no feriadão. */
+export function salarioAgora(evento?: Evento | null): number {
+  if (evento?.efeito === "salario") {
+    return Math.trunc((REGRAS.salario * evento.num) / evento.den);
+  }
+  return REGRAS.salario;
 }
 
 export function patrimonio(props: Props, seat: number, cash: number): number {
@@ -354,6 +428,7 @@ export function fluxo(
   seat: number,
   cash: number,
   quantosJogam: number,
+  evento?: Evento | null,
 ): {
   patrimonio: number;
   emPropriedades: number;
@@ -374,7 +449,10 @@ export function fluxo(
     const e = props[c.id];
     if (!e || e.owner === null) continue;
 
-    const esperado = chanceDeParar(c.id) * aluguelAtual(props, c.id) * PARADAS_POR_VOLTA;
+    // com o evento dentro da conta: durante a greve, transporte não entra na
+    // projeção, e é justamente nessas três rodadas que a projeção decide algo
+    const esperado =
+      chanceDeParar(c.id) * aluguelAtual(props, c.id, 7, evento) * PARADAS_POR_VOLTA;
 
     if (e.owner === seat) {
       emPropriedades += e.hipotecada ? c.preco! / 2 : c.preco!;
@@ -386,7 +464,7 @@ export function fluxo(
     }
   }
 
-  const saldo = REGRAS.salario + receber - pagar;
+  const saldo = salarioAgora(evento) + receber - pagar;
   return {
     patrimonio: cash + emPropriedades + emConstrucoes,
     emPropriedades,

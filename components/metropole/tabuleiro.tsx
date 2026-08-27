@@ -9,6 +9,7 @@ import {
   naGrade,
   reais,
   type Casa,
+  type Evento,
   type Props,
 } from "@/lib/metropole/cidade";
 
@@ -36,6 +37,7 @@ export function Tabuleiro({
   peoes,
   cores,
   meuAssento,
+  evento,
   destaque,
   onEscolher,
 }: {
@@ -44,6 +46,8 @@ export function Tabuleiro({
   /** assento → cor, para pintar a barra do dono mesmo sem ele estar na casa */
   cores: Record<number, ColorKey>;
   meuAssento: number | null;
+  /** o evento em curso: o número na casa tem de ser o que o servidor cobra */
+  evento?: Evento | null;
   /** a casa que a jogada em curso aponta — o resto apaga */
   destaque?: string | null;
   onEscolher?: (prop: string) => void;
@@ -59,6 +63,7 @@ export function Tabuleiro({
             peoes={peoes.filter((p) => p.pos === casa.pos)}
             cores={cores}
             meuAssento={meuAssento}
+            evento={evento}
             apagada={!!destaque && casa.id !== destaque}
             aceso={!!casa.id && casa.id === destaque}
             onEscolher={onEscolher}
@@ -81,6 +86,7 @@ function Quadro({
   peoes,
   cores,
   meuAssento,
+  evento,
   apagada,
   aceso,
   onEscolher,
@@ -90,6 +96,7 @@ function Quadro({
   peoes: Peao[];
   cores: Record<number, ColorKey>;
   meuAssento: number | null;
+  evento?: Evento | null;
   apagada: boolean;
   aceso: boolean;
   onEscolher?: (prop: string) => void;
@@ -106,7 +113,7 @@ function Quadro({
     casa.t === "bairro" || casa.t === "transporte" || casa.t === "companhia"
       ? dono === null
         ? casa.preco
-        : aluguelAtual(props, casa.id!)
+        : aluguelAtual(props, casa.id!, 7, evento)
       : casa.valor;
 
   const clicavel = !!casa.id && !!onEscolher;

@@ -48,6 +48,11 @@ const CIDADE = JSON.parse(await readFile(join(root, "lib", "metropole", "cidade.
 const CASA = Object.fromEntries(CIDADE.casas.filter((c) => c.id).map((c) => [c.id, c]));
 
 console.log("\nMetrópole — fumaça\n");
+/** Reais, só para as mensagens deste teste. */
+function reaisJs(n) {
+  return `R$ ${Math.round(n).toLocaleString("pt-BR")}`;
+}
+
 
 /* ══════════════════════════════════════════════════════════════════════════
    1. ALUGUEL — as três regras de cálculo, contra números conhecidos
@@ -1462,6 +1467,280 @@ const recusaCom = await rpc(donoSolto.token, "met_decline", { p_match: jogo3.id 
 ok(
   recusaCom.body.public_state.phase === "leilao",
   "com a regra desligada no ESTADO, recusar abre o leilão — a sala não tem voz aqui",
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   8. O INVESTIDOR
+
+   Quem quebra não sai: vira Investidor. O PRD diz que ele "é o oposto de
+   assistir" — e até esta etapa o código dizia o contrário, porque `met_bid`
+   recusava quem estava quebrado. Aqui se testa cada uma das quatro coisas que
+   ele passa a fazer, e a que mais importa é a MEIA-PARTE: a escritura fica no
+   nome do administrador para tudo (grupo de cor, construção), e o aluguel se
+   parte.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const sala4 = (await rpc(P[0].token, "create_room", { p_game: "metropole" })).body;
+await rpc(P[1].token, "join_room", { p_code: sala4.code });
+await rpc(P[2].token, "join_room", { p_code: sala4.code });
+const jogo4 = (await rpc(P[0].token, "met_start", { p_room: sala4.id })).body;
+ok(!!jogo4?.id, "quarta partida criada para testar o Investidor");
+
+const porSeat4 = {};
+for (const linha of (
+  await db.query("select user_id, seat from match_players where match_id = $1", [jogo4.id])
+).rows) {
+  porSeat4[linha.seat] = P.find((x) => x.id === linha.user_id);
+}
+const INV = porSeat4[0]; // vai quebrar e virar Investidor
+const ADM = porSeat4[1]; // vai administrar
+const OUT = porSeat4[2];
+
+/** Um estado limpo da quarta partida, com o assento 0 já Investidor. */
+function comInvestidor(extra = {}) {
+  const props = {};
+  for (const c of CIDADE.casas) {
+    if (!c.id) continue;
+    props[c.id] = { owner: null, casas: 0, hotel: false, hipotecada: false };
+  }
+  return {
+    ...jogo4.public_state,
+    props,
+    round: 4,
+    turnSeat: 1,
+    phase: "acao",
+    pendente: null,
+    leilao: null,
+    ofertas: [],
+    contratos: [],
+    devedores: [],
+    players: {
+      0: { ...jogo4.public_state.players[0], cash: 8000, quebrado: true, investidor: true },
+      1: { ...jogo4.public_state.players[1], cash: 10000, quebrado: false, investidor: false },
+      2: { ...jogo4.public_state.players[2], cash: 10000, quebrado: false, investidor: false },
+    },
+    ...extra,
+  };
+}
+
+/* ── 1. o Investidor dá lance ───────────────────────────────────────────── */
+
+await poe(jogo4.id, comInvestidor({
+  phase: "leilao",
+  leilao: { prop: "leblon", alto: 0, altoSeat: null, passou: [], abriuSeat: 1, admin: null },
+}));
+
+const semAdmin = await rpc(INV.token, "met_bid", { p_match: jogo4.id, p_valor: 3000 });
+ok(
+  /NEED_ADMIN/.test(JSON.stringify(semAdmin.body)),
+  "o lance do Investidor exige dizer quem administra — sem isso a propriedade não entra no jogo",
+);
+
+const adminQuebrado = await rpc(INV.token, "met_bid", {
+  p_match: jogo4.id,
+  p_valor: 3000,
+  p_admin: 0,
+});
+ok(
+  /BAD_ADMIN/.test(JSON.stringify(adminQuebrado.body)),
+  "o administrador tem de ser um jogador ATIVO — nem ele mesmo",
+);
+
+const lanceInv = await rpc(INV.token, "met_bid", {
+  p_match: jogo4.id,
+  p_valor: 3000,
+  p_admin: 1,
+});
+ok(
+  lanceInv.status === 200,
+  `o Investidor dá lance em leilão (${JSON.stringify(lanceInv.body).slice(0, 70)})`,
+);
+ok(lanceInv.body.public_state.leilao.altoSeat === 0, "e ele está na frente");
+ok(lanceInv.body.public_state.leilao.admin === 1, "com o administrador registrado no lance");
+
+/* ── 2. o leilão fecha: escritura no administrador ──────────────────────── */
+
+await rpc(ADM.token, "met_pass", { p_match: jogo4.id });
+const fechaInv = await rpc(OUT.token, "met_pass", { p_match: jogo4.id });
+let e4 = fechaInv.body.public_state;
+ok(
+  e4.props.leblon.owner === 1,
+  "a escritura vai para o NOME DO ADMINISTRADOR, não do Investidor",
+);
+ok(
+  e4.props.leblon.investidor === 0,
+  "e a meia-parte do Investidor fica registrada na propriedade",
+);
+ok(e4.players[0].cash === 8000 - 3000, "o dinheiro saiu do bolso do Investidor");
+ok(e4.players[1].cash === 10000, "e o administrador não pagou nada");
+ok(
+  e4.log.some((l) => l.k === "leilao-investidor"),
+  "o registro distingue o arremate do Investidor do arremate comum",
+);
+
+/* ── 3. o aluguel se parte ──────────────────────────────────────────────── */
+
+const comMeia = comInvestidor({
+  props: (() => {
+    const base = {};
+    for (const c of CIDADE.casas) {
+      if (!c.id) continue;
+      base[c.id] = { owner: null, casas: 0, hotel: false, hipotecada: false };
+    }
+    base["leblon"] = { owner: 1, casas: 0, hotel: false, hipotecada: false, investidor: 0 };
+    return base;
+  })(),
+});
+comMeia.players[2].pos = 37; // Leblon
+const partido = await pousa(comMeia, 2);
+const bruto = CASA.leblon.aluguel[0];
+const meia = Math.floor(bruto / 2);
+ok(
+  partido.players[2].cash === 10000 - bruto,
+  `quem parou pagou o aluguel cheio de R$ ${bruto} — a partilha é entre os outros dois`,
+);
+ok(
+  partido.players[1].cash === 10000 + (bruto - meia),
+  `o administrador ficou com R$ ${bruto - meia}`,
+);
+ok(
+  partido.players[0].cash === 8000 + meia,
+  `e o Investidor com R$ ${meia}`,
+);
+ok(
+  partido.players[0].cash + partido.players[1].cash + partido.players[2].cash === 28000,
+  "e o dinheiro total não mudou: a partilha não cria nem destrói nada",
+);
+ok(
+  partido.log.filter((l) => String(l.motivo ?? "").startsWith("aluguel")).length === 2,
+  "são duas transferências no registro, e não uma — ninguém precisa deduzir para onde foi",
+);
+
+// sem a meia-parte, o aluguel vai inteiro para o dono
+const semMeia = comInvestidor({
+  props: (() => {
+    const base = {};
+    for (const c of CIDADE.casas) {
+      if (!c.id) continue;
+      base[c.id] = { owner: null, casas: 0, hotel: false, hipotecada: false };
+    }
+    base["leblon"] = { owner: 1, casas: 0, hotel: false, hipotecada: false };
+    return base;
+  })(),
+});
+semMeia.players[2].pos = 37;
+const inteiro = await pousa(semMeia, 2);
+ok(
+  inteiro.players[1].cash === 10000 + bruto && inteiro.players[0].cash === 8000,
+  "propriedade sem Investidor por trás paga o aluguel inteiro ao dono",
+);
+
+/* ── 4. o Investidor empresta ───────────────────────────────────────────── */
+
+await poe(jogo4.id, comInvestidor());
+const emprestimo = await rpc(INV.token, "met_offer", {
+  p_match: jogo4.id,
+  p_para: 1,
+  p_da: { dinheiro: 3000 },
+  p_quer: { parcela: { valor: 500, rodadas: 8 } },
+});
+ok(
+  emprestimo.status === 200,
+  `o Investidor empresta: R$ 3.000 agora contra R$ 500 por rodada durante 8 (${JSON.stringify(emprestimo.body).slice(0, 60)})`,
+);
+const idEmp = emprestimo.body.public_state.ofertas[0].id;
+const aceitaEmp = await rpc(ADM.token, "met_offer_reply", {
+  p_match: jogo4.id,
+  p_id: idEmp,
+  p_aceita: true,
+});
+e4 = aceitaEmp.body.public_state;
+ok(e4.players[1].cash === 13000, "o dinheiro chegou na hora");
+ok(
+  e4.contratos.some((c) => c.tipo === "parcela" && c.de === 1 && c.para === 0 && c.rodadas === 8),
+  "e o contrato de oito parcelas ficou de pé, com o Investidor como credor",
+);
+
+/* ── 5. a aposta secreta ────────────────────────────────────────────────── */
+
+const naoInvestidor = await rpc(ADM.token, "met_aposta", { p_match: jogo4.id, p_em: 2 });
+ok(
+  /NOT_AN_INVESTOR/.test(JSON.stringify(naoInvestidor.body)),
+  "quem está jogando não aposta: só o Investidor",
+);
+
+const nelePropio = await rpc(INV.token, "met_aposta", { p_match: jogo4.id, p_em: 0 });
+ok(/SELF_BET/.test(JSON.stringify(nelePropio.body)), "e não aposta em si mesmo");
+
+const aposta = await rpc(INV.token, "met_aposta", { p_match: jogo4.id, p_em: 2 });
+ok(aposta.status === 200, "o Investidor aposta no assento 2");
+const guardada = (
+  await db.query(
+    `select data -> 'aposta' a from match_private_state where match_id = $1 and user_id = $2`,
+    [jogo4.id, INV.id],
+  )
+).rows[0].a;
+ok(Number(guardada) === 2, "a aposta ficou no estado PRIVADO");
+const noPublico = await leia(jogo4.id);
+ok(
+  !JSON.stringify(noPublico).includes('"aposta"'),
+  "e o estado público NÃO a contém: aposta revelada viraria aliança pública",
+);
+
+/* ── 6. o fim: apostas reveladas, patrimônio de todos, XP creditado ────── */
+
+const xpAntes = (
+  await db.query("select stats -> 'partidas' n from profiles where id = $1", [OUT.id])
+).rows[0].n;
+
+/* A vez tem de estar no ÚLTIMO assento ativo: a rodada só incrementa quando
+   a vez dá a volta, e é o incremento que cruza a rodada final. Com o turno no
+   assento do meio, `met_end_turn` só passa a vez — que é o certo. */
+await poe(jogo4.id, comInvestidor({
+  round: 20,
+  rodadaFinal: 20,
+  turnSeat: 2,
+  phase: "acao",
+  props: (() => {
+    const base = {};
+    for (const c of CIDADE.casas) {
+      if (!c.id) continue;
+      base[c.id] = { owner: null, casas: 0, hotel: false, hipotecada: false };
+    }
+    // o assento 2 fica com o azul-escuro: vence por patrimônio
+    base["leblon"] = { owner: 2, casas: 0, hotel: false, hipotecada: false };
+    base["jardins"] = { owner: 2, casas: 0, hotel: false, hipotecada: false };
+    return base;
+  })(),
+}));
+
+const acaba = await rpc(OUT.token, "met_end_turn", { p_match: jogo4.id });
+ok(acaba.status === 200, `a temporada acabou (${JSON.stringify(acaba.body).slice(0, 60)})`);
+e4 = acaba.body.public_state;
+ok(e4.phase === "fim", "a fase virou fim");
+ok(
+  e4.vencedor === 2,
+  `venceu quem tinha mais patrimônio: assento ${e4.vencedor} (${reaisJs(e4.players[2]?.patrimonio ?? 0)})`,
+);
+ok(
+  [0, 1, 2].every((k) => typeof e4.players[k].patrimonio === "number"),
+  "o patrimônio de TODOS foi gravado no estado — a tela final não recalcula",
+);
+ok(
+  Array.isArray(e4.apostas) && e4.apostas.length === 1,
+  "a aposta do Investidor foi revelada no fim",
+);
+ok(
+  e4.apostas[0].seat === 0 && e4.apostas[0].em === 2 && e4.apostas[0].acertou === true,
+  "e ela estava certa: o Investidor leva o segundo lugar",
+);
+
+const xpDepois = (
+  await db.query("select stats -> 'partidas' n from profiles where id = $1", [OUT.id])
+).rows[0].n;
+ok(
+  Number(xpDepois) === Number(xpAntes) + 1,
+  `o XP foi creditado no fim por rodadas (${xpAntes} -> ${xpDepois}) — antes desta etapa este caminho não creditava nada`,
 );
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });

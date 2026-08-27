@@ -54,7 +54,11 @@ export type MetState = {
     altoSeat: number | null;
     passou: number[];
     abriuSeat: number;
+    /** quem administra, quando quem lidera é um Investidor */
+    admin?: number | null;
   } | null;
+  /** reveladas só no fim: as apostas secretas dos Investidores */
+  apostas?: { seat: number; em: number; acertou: boolean }[];
   devedores?: number[];
   ofertas?: Oferta[];
   contratos?: Contrato[];
@@ -115,6 +119,10 @@ const RECADO: Record<string, string> = {
   AUCTION_OPEN: "Espere o leilão fechar.",
   BANKRUPT: "Você está fora da partida.",
   SELF_OFFER: "Não dá para negociar consigo mesmo.",
+  NEED_ADMIN: "Escolha quem vai administrar o que você arrematar.",
+  BAD_ADMIN: "O administrador tem de ser um jogador ativo.",
+  NOT_AN_INVESTOR: "Só o Investidor aposta.",
+  SELF_BET: "Não dá para apostar em si mesmo.",
   EMPTY_OFFER: "A proposta está vazia dos dois lados.",
   TOO_MANY_OFFERS: "Você já tem três propostas na mesa. Retire uma antes.",
   NO_SUCH_OFFER: "Essa proposta não está mais na mesa.",
@@ -155,6 +163,7 @@ export function MetropoleGame({
   const [resto, setResto] = useState(0);
   const [olhando, setOlhando] = useState<string | null>(null);
   const [negociando, setNegociando] = useState(false);
+  const [admin, setAdmin] = useState<number | null>(null);
   const ultimoLog = useRef("");
 
   const mudo = useSyncExternalStore(sfx.subscribe, sfx.getSnapshot, sfx.getServerSnapshot);
@@ -167,6 +176,9 @@ export function MetropoleGame({
   const eu = entradas.find((p) => p.userId === user?.id);
   const meuAssento = eu?.seat ?? null;
   const minhaVez = meuAssento !== null && st.turnSeat === meuAssento;
+  /* O INVESTIDOR não anda pelo tabuleiro e não tem turno, mas está em toda
+     disputa: o leilão e a mesa de negociação continuam abertos para ele. */
+  const souInvestidor = !!eu?.investidor;
   const acabou = st.phase === "fim" || match.status === "finished" || st.vencedor !== null;
   // papel picado é uma leitura do resultado, não um estado a sincronizar
   const festa = acabou && st.vencedor === meuAssento;
@@ -237,6 +249,11 @@ export function MetropoleGame({
      sem apagar nada e sem uma renderização a mais. */
   const minimoLance = Math.max((st.leilao?.alto ?? 0) + 1, REGRAS.lanceMinimo);
   const meuLance = Math.max(lance ?? 0, minimoLance);
+  /* O Investidor precisa nomear quem administra: sem administrador a
+     propriedade não teria como participar do jogo. Para quem está jogando, o
+     campo simplesmente não existe. */
+  const adminEfetivo = souInvestidor ? admin : null;
+  const faltaAdmin = souInvestidor && adminEfetivo === null;
 
   const chama = useCallback(async (fn: string, args: Record<string, unknown>) => {
     setErro(null);
@@ -252,12 +269,19 @@ export function MetropoleGame({
 
   /* ── fim ────────────────────────────────────────────────────────────── */
   if (acabou) {
+    /* A ORDEM FINAL não é só patrimônio.
+       O vencedor é o vencedor. Depois dele vem o Investidor que ACERTOU a
+       aposta — é a única coisa que ele ganha, e é o que dá a ele razão para ler
+       a mesa em vez de só emprestar a quem paga mais. O resto por patrimônio.
+       Ver §5.5 do PRD. */
+    const acertou = new Set((st.apostas ?? []).filter((a) => a.acertou).map((a) => a.seat));
     const ranking = entradas
       .map((p) => ({
         ...p,
         valor: p.patrimonio ?? patrimonio(st.props, p.seat, p.cash),
+        premio: p.seat === st.vencedor ? 0 : acertou.has(p.seat) ? 1 : 2,
       }))
-      .sort((a, b) => b.valor - a.valor);
+      .sort((a, b) => a.premio - b.premio || b.valor - a.valor);
     const souEu = st.vencedor === meuAssento;
 
     return (
@@ -283,7 +307,14 @@ export function MetropoleGame({
                 aria-hidden
               />
               <span className="met-podio-nome">{nomes[p.seat]}</span>
-              {p.quebrado && <span className="met-fora">{p.investidor ? "investidor" : "fora"}</span>}
+              {p.quebrado && (
+                <span className="met-fora">{p.investidor ? "investidor" : "fora"}</span>
+              )}
+              {acertou.has(p.seat) && (
+                <span className="met-acertou" title="acertou a aposta secreta">
+                  cravou a aposta
+                </span>
+              )}
               <span className="mono met-podio-valor">{reais(p.valor)}</span>
             </li>
           ))}
@@ -373,15 +404,53 @@ export function MetropoleGame({
             )}
           </p>
 
-          {meuAssento !== null && !eu?.quebrado && st.leilao.altoSeat !== meuAssento && (
+          {/* O ADMINISTRADOR, só para o Investidor. Aparece antes dos botões de
+              lance porque é pré-requisito: sem ele o lance não sai. */}
+          {souInvestidor && st.leilao.altoSeat !== meuAssento && (
+            <div className="leilao-admin">
+              <p className="leilao-admin-titulo">
+                Quem administra, se você levar?
+              </p>
+              <p className="leilao-admin-nota">
+                A escritura fica no nome dele — inclusive para fechar grupo de cor e construir. O
+                aluguel se parte no meio entre vocês dois.
+              </p>
+              <div className="leilao-admin-quem">
+                {ativos.map((j) => (
+                  <button
+                    key={j.seat}
+                    className="mesa-quem"
+                    data-on={admin === j.seat}
+                    onClick={() => setAdmin(j.seat)}
+                  >
+                    <span
+                      className="met-cor"
+                      style={{ background: COLORS[j.cor].enamel }}
+                      aria-hidden
+                    />
+                    {nomes[j.seat]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {meuAssento !== null && (!eu?.quebrado || souInvestidor) &&
+            st.leilao.altoSeat !== meuAssento && (
             <div className="leilao-acao">
               <div className="leilao-atalhos">
                 {[minimoLance, minimoLance + 200, minimoLance + 500].map((v) => (
                   <button
                     key={v}
                     className="btn btn-brass leilao-btn"
-                    disabled={ocupado || (eu?.cash ?? 0) < v}
-                    onClick={() => void chama("met_bid", { p_match: match.id, p_valor: v })}
+                    disabled={ocupado || faltaAdmin || (eu?.cash ?? 0) < v}
+                    onClick={() =>
+                      void chama("met_bid", {
+                        p_match: match.id,
+                        p_valor: v,
+                        p_admin: adminEfetivo,
+                      })
+                    }
                   >
                     {reais(v)}
                   </button>
@@ -399,9 +468,13 @@ export function MetropoleGame({
                 />
                 <button
                   className="btn btn-vivo leilao-btn"
-                  disabled={ocupado || (eu?.cash ?? 0) < meuLance}
+                  disabled={ocupado || faltaAdmin || (eu?.cash ?? 0) < meuLance}
                   onClick={() =>
-                    void chama("met_bid", { p_match: match.id, p_valor: meuLance })
+                    void chama("met_bid", {
+                      p_match: match.id,
+                      p_valor: meuLance,
+                      p_admin: adminEfetivo,
+                    })
                   }
                 >
                   Dar lance
@@ -446,7 +519,14 @@ export function MetropoleGame({
 
       {/* ── painel de ação ──────────────────────────────────────────── */}
       <div className="met-acao">
-        {!minhaVez && st.phase !== "leilao" && (
+        {souInvestidor && st.phase !== "leilao" && (
+          <p className="met-espera dim">
+            Você é Investidor. Não anda pelo tabuleiro e não tem turno — mas dá lance em todo
+            leilão, empresta a quem precisa, e a sua aposta secreta vale o segundo lugar.
+          </p>
+        )}
+
+        {!minhaVez && !souInvestidor && st.phase !== "leilao" && (
           <p className="met-espera dim">
             Esperando {nomes[st.turnSeat]}. O relógio passa a vez sozinho se ninguém jogar — e o
             leilão você pode disputar de qualquer jeito.
@@ -574,7 +654,7 @@ export function MetropoleGame({
             segunda ação do jogo que não espera turno, pelo mesmo motivo do
             leilão: metade das trocas boas nasce de ver o outro parar num lugar
             ruim e oferecer socorro na hora. */}
-        {meuAssento !== null && !eu?.quebrado && !acabou && (
+        {meuAssento !== null && (!eu?.quebrado || souInvestidor) && !acabou && (
           <button
             className="btn btn-ghost met-negociar"
             onClick={() => setNegociando((n) => !n)}
@@ -597,6 +677,16 @@ export function MetropoleGame({
 
       {/* ── a casa que você está olhando ───────────────────────────── */}
       {olhando && <FichaCasa prop={olhando} st={st} nomes={nomes} onFechar={() => setOlhando(null)} />}
+
+      {souInvestidor && !acabou && (
+        <Aposta
+          ativos={ativos.map((j) => ({ seat: j.seat, cor: j.cor }))}
+          nomes={nomes}
+          matchId={match.id}
+          ocupado={ocupado}
+          onApostar={(em) => void chama("met_aposta", { p_match: match.id, p_em: em })}
+        />
+      )}
 
       <Propostas
         ofertas={st.ofertas ?? []}
@@ -782,6 +872,8 @@ function Registro({ log, nomes }: { log: LinhaLog[]; nomes: Record<number, strin
       case "largada":
         return `${quem(l.seat)} passou pela Largada e recebeu ${reais(REGRAS.salario)}`;
       case "paga":
+        if (l.motivo?.startsWith("aluguel-investidor"))
+          return `meia-parte de ${reais(l.valor ?? 0)} para o Investidor ${quem(l.para)}`;
         return l.motivo?.startsWith("aluguel")
           ? `${quem(l.de)} pagou ${reais(l.valor ?? 0)} de aluguel em ${casaDe(l.motivo.split(":")[1])}`
           : `${quem(l.de)} pagou ${reais(l.valor ?? 0)} — ${l.motivo}`;
@@ -793,6 +885,10 @@ function Registro({ log, nomes }: { log: LinhaLog[]; nomes: Record<number, strin
         return `${quem(l.seat)} deu ${reais(l.valor ?? 0)} em ${onde(l.prop)}`;
       case "leilao-fecha":
         return `${quem(l.seat)} levou ${onde(l.prop)} por ${reais(l.valor ?? 0)} no leilão`;
+      case "leilao-investidor":
+        return `${quem(l.seat)} arrematou ${onde(l.prop)} por ${reais(l.valor ?? 0)} — administrado por ${quem(l.para)}`;
+      case "fim-sobrou-um":
+        return `sobrou ${quem(l.seat)}`;
       case "leilao-vazio":
         return `ninguém deu lance em ${onde(l.prop)} — continua do banco`;
       case "carta":
@@ -863,6 +959,82 @@ function Registro({ log, nomes }: { log: LinhaLog[]; nomes: Record<number, strin
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+/**
+ * A APOSTA SECRETA DO INVESTIDOR.
+ *
+ * A Metrópole é um jogo de informação aberta por desenho — o caixa de todos é
+ * público, os contratos são públicos, o tabuleiro é público. Esta é a única
+ * exceção, e ela se justifica: aposta revelada vira aliança pública, e o
+ * Investidor deixa de ser neutro na hora em que todos sabem em quem ele
+ * apostou.
+ *
+ * O texto embaixo não é enfeite: sem ele, o Investidor não tem como saber que
+ * a aposta vale alguma coisa, e uma aposta que não vale nada ninguém faz.
+ */
+function Aposta({
+  ativos,
+  nomes,
+  ocupado,
+  onApostar,
+}: {
+  ativos: { seat: number; cor: ColorKey }[];
+  nomes: Record<number, string>;
+  matchId: string;
+  ocupado: boolean;
+  onApostar: (em: number) => void;
+}) {
+  const [escolhido, setEscolhido] = useState<number | null>(null);
+  const [mandou, setMandou] = useState(false);
+
+  return (
+    <div className="panel aposta">
+      <p className="eyebrow">Sua aposta secreta</p>
+      <p className="dim aposta-nota">
+        Em quem você acha que vai vencer? Ninguém vê a sua escolha — nem no fim, se você errar.
+        Acertando, você fica em <strong>segundo lugar</strong> no placar final. É a única coisa
+        que o Investidor ganha, e vale mais que qualquer empréstimo.
+      </p>
+      <div className="aposta-quem">
+        {ativos.map((j) => (
+          <button
+            key={j.seat}
+            className="mesa-quem"
+            data-on={escolhido === j.seat}
+            disabled={ocupado}
+            onClick={() => {
+              setEscolhido(j.seat);
+              setMandou(false);
+            }}
+          >
+            <span className="met-cor" style={{ background: COLORS[j.cor].enamel }} aria-hidden />
+            {nomes[j.seat]}
+          </button>
+        ))}
+      </div>
+      <div className="aposta-acao">
+        <button
+          className="btn btn-brass"
+          disabled={ocupado || escolhido === null}
+          onClick={() => {
+            if (escolhido !== null) {
+              onApostar(escolhido);
+              setMandou(true);
+            }
+          }}
+        >
+          {mandou ? "Aposta trocada" : "Apostar"}
+        </button>
+        {mandou && (
+          <p className="aposta-feito dim">
+            Guardada. Dá para trocar quantas vezes quiser até a partida acabar — travar a troca
+            seria teatro, porque ninguém tem como saber quando você decidiu.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

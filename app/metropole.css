@@ -1499,3 +1499,115 @@
 .chip-prop[data-g="azul-claro"]::before {
   box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.7);
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   O INVESTIDOR
+
+   Quem quebra não sai da tela: sai do tabuleiro. Os blocos dele são roxos —
+   a única cor do jogo que não é do déco tropical nem de nenhum jogador — e é
+   de propósito: o Investidor não é mais um dos que jogam, e a cor diz isso
+   antes do texto.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.leilao-admin {
+  padding: 0.6rem 0.7rem;
+  border: 2.5px dashed rgb(0 0 0 / 0.28);
+  border-radius: var(--r-md);
+  background: rgb(0 0 0 / 0.14);
+}
+.leilao-admin-titulo {
+  color: #fff8f0;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.leilao-admin-nota {
+  margin-top: 0.2rem;
+  color: #ffdcc9;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+.leilao-admin-quem {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+/* dentro do leilão, o botão de escolher administrador inverte: fundo claro
+   sobre o terracota, senão desaparece */
+.leilao-admin-quem .mesa-quem {
+  border-color: rgb(0 0 0 / 0.3);
+  background: rgb(255 255 255 / 0.14);
+  color: #fff8f0;
+}
+.leilao-admin-quem .mesa-quem[data-on="true"] {
+  border-color: var(--ink);
+  background: var(--met-creme);
+  color: var(--met-tinta);
+}
+
+.aposta {
+  padding: 0.9rem 1rem;
+  border-color: var(--vivo-roxo);
+  background: linear-gradient(165deg, #241635, var(--felt-900));
+}
+.aposta .eyebrow {
+  color: var(--vivo-roxo);
+}
+.aposta-nota {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.aposta-nota strong {
+  color: var(--vivo-roxo);
+}
+.aposta-quem {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.7rem;
+}
+.aposta-quem .mesa-quem[data-on="true"] {
+  border-color: var(--vivo-roxo);
+  background: #b25cff1f;
+}
+.aposta-acao {
+  margin-top: 0.7rem;
+}
+.aposta-feito {
+  margin-top: 0.5rem;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+/* no pódio: quem cravou a aposta */
+.met-acertou {
+  flex: none;
+  padding: 0.1rem 0.5rem;
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  background: var(--vivo-roxo);
+  color: #fff;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+
+/* a propriedade com meia-parte de Investidor por trás: um V de sócio na
+   escritura, para o administrador não esquecer que metade não é dele */
+.prop-socio {
+  flex: none;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: var(--vivo-roxo);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+@media (min-width: 64rem) {
+  .met > .aposta {
+    grid-column: 2;
+  }
+}

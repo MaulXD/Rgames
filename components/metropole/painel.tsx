@@ -226,6 +226,14 @@ export function MinhasProps({
                           </span>
                         ) : null}
                         {e.hipotecada && <span className="prop-hip">hipotecada</span>}
+                        {/* metade do aluguel desta não é sua: o Investidor pôs
+                            o dinheiro e você pôs a mão. A etiqueta existe para
+                            o administrador não esquecer disso ao construir. */}
+                        {e.investidor !== undefined && (
+                          <span className="prop-socio" title="meia-parte de Investidor">
+                            ½
+                          </span>
+                        )}
                         <span className="prop-aluguel mono">
                           {reais(aluguelAtual(props, c.id!))}
                         </span>

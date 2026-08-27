@@ -126,6 +126,14 @@ export type PropEstado = {
   casas: number;
   hotel: boolean;
   hipotecada: boolean;
+  /**
+   * O assento do Investidor que arrematou esta propriedade, quando houver.
+   *
+   * A escritura é do `owner` para TUDO — grupo de cor, construção, hipoteca —
+   * e o aluguel se parte no meio com este sócio. Ver §5.5 do PRD e a migração
+   * 0036: o Investidor põe o dinheiro, o administrador põe a mão.
+   */
+  investidor?: number;
 };
 
 export type Props = Record<string, PropEstado>;

@@ -190,19 +190,27 @@ const minha = await get(A.token, `match_private_state?select=data&match_id=eq.${
 ok(minha.body?.[0]?.data?.words?.length === 3, "cada um lê a própria lista");
 
 // fim do tempo: o banco encerra, não o cliente
-await db.query("update matches set ends_at = now() - interval '1 second' where id = $1", [partida.id]);
-const tarde = await rpc(A.token, "letreiro_submit", { p_match: partida.id, p_word: w1, p_path: p1 });
-ok(tarde.status >= 400 && /TIME_OVER/.test(JSON.stringify(tarde.body)), "palavra depois do tempo é recusada");
+/* ESTA CHECAGEM VEM ANTES de forçar o fim da rodada, e a ordem é o conserto de
+   uma falha que aparecia uma vez a cada tantas execuções.
 
-const naoPode = await rpc(A.token, "letreiro_score", { p_match: partida.id });
-ok(naoPode.status >= 400, "cliente não consegue chamar letreiro_score");
-
+   `letreiro_sweep` roda por cron a cada dez segundos. Quando ela apura a
+   rodada, devolve a sala ao lobby — e aí mudar a regra da casa passa a ser
+   PERMITIDO, corretamente. Com a checagem depois do `ends_at` no passado, era
+   uma corrida: se o cron chegasse primeiro, o teste reprovava sem nada estar
+   errado. Aqui a partida ainda está rolando de verdade. */
 const regraDurante = await rpc(A.token, "set_room_settings", {
   p_room: sala.id,
   p_settings: { modo: "classico" },
 });
 ok(regraDurante.status >= 400 && /MATCH_IN_PROGRESS/.test(JSON.stringify(regraDurante.body)),
    "não muda as regras com partida rolando");
+
+await db.query("update matches set ends_at = now() - interval '1 second' where id = $1", [partida.id]);
+const tarde = await rpc(A.token, "letreiro_submit", { p_match: partida.id, p_word: w1, p_path: p1 });
+ok(tarde.status >= 400 && /TIME_OVER/.test(JSON.stringify(tarde.body)), "palavra depois do tempo é recusada");
+
+const naoPode = await rpc(A.token, "letreiro_score", { p_match: partida.id });
+ok(naoPode.status >= 400, "cliente não consegue chamar letreiro_score");
 
 // o pg_cron tambem varre a cada 10s: se ele chegou primeiro, o contador volta
 // 0 e esta tudo certo. O que importa e o ESTADO, nao quem varreu.

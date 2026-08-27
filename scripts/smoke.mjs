@@ -190,6 +190,7 @@ const PERMITIDAS = [
   "met_bankrupt", "met_bid", "met_build", "met_buy", "met_decline", "met_end_turn",
   "met_jail", "met_mortgage", "met_pass", "met_roll", "met_sell", "met_start",
   "met_unmortgage", "met_offer", "met_offer_reply", "met_offer_cancel", "met_exercer",
+  "met_aposta",
   // auxiliares que a RLS PRECISA executar: a expressão de uma policy roda com
   // o privilégio de quem consulta, então revogar estas mata o lobby inteiro
   "is_match_member", "is_room_member", "shares_room_with",

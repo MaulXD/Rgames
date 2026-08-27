@@ -527,6 +527,43 @@ ok(
   "as máquinas foram apuradas pela MESMA função que apura gente — nenhuma linha nova",
 );
 
+/* MÁQUINA NÃO SOBE DE NÍVEL.
+   `letreiro_premia` percorre `match_players` e dá XP a todos — e depois das
+   máquinas isso passou a incluir elas. Nestor chegou a xp=1228, com "partidas":3
+   e a conquista "cem-palavras". Três coisas erradas: ela conta em contagem de
+   gente, desbloqueia recompensa por esforço que não fez, e tem "melhor palavra
+   da vida", que é frase sobre uma pessoa.
+
+   O portão está em `dar_xp` e `melhor_palavra`, e não nas quatro funções de
+   prêmio: corrigir nos quatro chamadores é escolher esquecer no quinto. Este
+   teste guarda o portão, e vale para os quatro jogos. */
+const statsBots = (
+  await db.query(
+    `select p.display_name, coalesce(p.stats, '{}'::jsonb) stats
+       from match_players mp join profiles p on p.id = mp.user_id
+      where mp.match_id = $1 and p.is_bot`,
+    [partidaM.id],
+  )
+).rows;
+ok(
+  statsBots.length === 2 && statsBots.every((b) => Object.keys(b.stats).length === 0),
+  `nenhuma máquina ganhou XP, nível, conquista ou recorde: ${statsBots
+    .map((b) => b.display_name + "=" + JSON.stringify(b.stats))
+    .join(" ")}`,
+);
+const gentePremiada = (
+  await db.query(
+    `select coalesce((p.stats ->> 'xp')::int, 0) xp
+       from match_players mp join profiles p on p.id = mp.user_id
+      where mp.match_id = $1 and not p.is_bot`,
+    [partidaM.id],
+  )
+).rows;
+ok(
+  gentePremiada.every((g) => g.xp > 0),
+  `e a gente da mesma mesa ganhou normalmente (${gentePremiada.map((g) => g.xp).join(", ")} de XP) — o portão filtra máquina, não premiação`,
+);
+
 /* ── o nível significa alguma coisa? ──────────────────────────────────────
    Na MESMA grade, difícil tem de pontuar mais que médio, e médio mais que
    fácil. Sem isso, o nível é rótulo. */

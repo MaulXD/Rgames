@@ -16,7 +16,9 @@
     "smoke:letreiro": "node scripts/smoke-letreiro.mjs",
     "smoke:dossie": "node scripts/smoke-dossie.mjs",
     "mapa": "node scripts/seed-dominio.mjs",
-    "smoke:dominio": "node scripts/smoke-dominio.mjs"
+    "smoke:dominio": "node scripts/smoke-dominio.mjs",
+    "cidade": "node scripts/seed-metropole.mjs",
+    "smoke:metropole": "node scripts/smoke-metropole.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

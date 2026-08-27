@@ -1,0 +1,773 @@
+{
+  "id": "capibara",
+  "nome": "Capibara",
+  "regras": {
+    "salario": 2000,
+    "bancoInicial": 15000,
+    "fiancaCadeia": 500,
+    "casasNoBanco": 32,
+    "hoteisNoBanco": 12,
+    "jurosResgate": 0.1,
+    "rodadasMetropole": 20,
+    "rodadasRelampago": 12,
+    "sorteioMetropole": 3,
+    "sorteioRelampago": 4,
+    "lanceMinimo": 100
+  },
+  "grupos": [
+    {
+      "id": "marrom",
+      "nome": "Feira",
+      "cor": "#8A5A3C",
+      "casa": 500
+    },
+    {
+      "id": "azul-claro",
+      "nome": "Litoral colonial",
+      "cor": "#7FC8E8",
+      "casa": 500
+    },
+    {
+      "id": "rosa",
+      "nome": "Orla",
+      "cor": "#F27DA8",
+      "casa": 1000
+    },
+    {
+      "id": "laranja",
+      "nome": "Centro velho",
+      "cor": "#F08A34",
+      "casa": 1000
+    },
+    {
+      "id": "vermelho",
+      "nome": "Sul urbano",
+      "cor": "#E0483F",
+      "casa": 1500
+    },
+    {
+      "id": "amarelo",
+      "nome": "Planejada",
+      "cor": "#F2C14E",
+      "casa": 1500
+    },
+    {
+      "id": "verde",
+      "nome": "Nobre",
+      "cor": "#3FA96B",
+      "casa": 2000
+    },
+    {
+      "id": "azul-escuro",
+      "nome": "Cobiçada",
+      "cor": "#2B5FA8",
+      "casa": 2000
+    }
+  ],
+  "casas": [
+    {
+      "pos": 0,
+      "t": "largada",
+      "nome": "Largada",
+      "nota": "Receba R$ 2.000 ao passar"
+    },
+    {
+      "pos": 1,
+      "t": "bairro",
+      "id": "caruaru",
+      "nome": "Feira de Caruaru",
+      "g": "marrom",
+      "preco": 600,
+      "aluguel": [
+        20,
+        100,
+        300,
+        900,
+        1600,
+        2500
+      ],
+      "casa": 500,
+      "hipoteca": 300
+    },
+    {
+      "pos": 2,
+      "t": "reves",
+      "nome": "Revés"
+    },
+    {
+      "pos": 3,
+      "t": "bairro",
+      "id": "ver-o-peso",
+      "nome": "Ver-o-Peso",
+      "g": "marrom",
+      "preco": 600,
+      "aluguel": [
+        40,
+        200,
+        600,
+        1800,
+        3200,
+        4500
+      ],
+      "casa": 500,
+      "hipoteca": 300
+    },
+    {
+      "pos": 4,
+      "t": "imposto",
+      "nome": "Imposto de Renda",
+      "valor": 2000
+    },
+    {
+      "pos": 5,
+      "t": "transporte",
+      "id": "congonhas",
+      "nome": "Aeroporto de Congonhas",
+      "preco": 2000,
+      "aluguel": [
+        250,
+        500,
+        1000,
+        2000
+      ],
+      "hipoteca": 1000
+    },
+    {
+      "pos": 6,
+      "t": "bairro",
+      "id": "pelourinho",
+      "nome": "Pelourinho",
+      "g": "azul-claro",
+      "preco": 1000,
+      "aluguel": [
+        60,
+        300,
+        900,
+        2700,
+        4000,
+        5500
+      ],
+      "casa": 500,
+      "hipoteca": 500
+    },
+    {
+      "pos": 7,
+      "t": "sorte",
+      "nome": "Sorte"
+    },
+    {
+      "pos": 8,
+      "t": "bairro",
+      "id": "olinda",
+      "nome": "Olinda",
+      "g": "azul-claro",
+      "preco": 1000,
+      "aluguel": [
+        60,
+        300,
+        900,
+        2700,
+        4000,
+        5500
+      ],
+      "casa": 500,
+      "hipoteca": 500
+    },
+    {
+      "pos": 9,
+      "t": "bairro",
+      "id": "iracema",
+      "nome": "Praia de Iracema",
+      "g": "azul-claro",
+      "preco": 1200,
+      "aluguel": [
+        80,
+        400,
+        1000,
+        3000,
+        4500,
+        6000
+      ],
+      "casa": 500,
+      "hipoteca": 600
+    },
+    {
+      "pos": 10,
+      "t": "cadeia",
+      "nome": "Cadeia",
+      "nota": "Só de passagem"
+    },
+    {
+      "pos": 11,
+      "t": "bairro",
+      "id": "ponta-negra",
+      "nome": "Ponta Negra",
+      "g": "rosa",
+      "preco": 1400,
+      "aluguel": [
+        100,
+        500,
+        1500,
+        4500,
+        6250,
+        7500
+      ],
+      "casa": 1000,
+      "hipoteca": 700
+    },
+    {
+      "pos": 12,
+      "t": "companhia",
+      "id": "energia",
+      "nome": "Companhia de Energia",
+      "preco": 1500,
+      "multiplo": [
+        40,
+        100
+      ],
+      "hipoteca": 750
+    },
+    {
+      "pos": 13,
+      "t": "bairro",
+      "id": "boa-viagem",
+      "nome": "Boa Viagem",
+      "g": "rosa",
+      "preco": 1400,
+      "aluguel": [
+        100,
+        500,
+        1500,
+        4500,
+        6250,
+        7500
+      ],
+      "casa": 1000,
+      "hipoteca": 700
+    },
+    {
+      "pos": 14,
+      "t": "bairro",
+      "id": "porto-da-barra",
+      "nome": "Porto da Barra",
+      "g": "rosa",
+      "preco": 1600,
+      "aluguel": [
+        120,
+        600,
+        1800,
+        5000,
+        7000,
+        9000
+      ],
+      "casa": 1000,
+      "hipoteca": 800
+    },
+    {
+      "pos": 15,
+      "t": "transporte",
+      "id": "santos",
+      "nome": "Porto de Santos",
+      "preco": 2000,
+      "aluguel": [
+        250,
+        500,
+        1000,
+        2000
+      ],
+      "hipoteca": 1000
+    },
+    {
+      "pos": 16,
+      "t": "bairro",
+      "id": "pampulha",
+      "nome": "Pampulha",
+      "g": "laranja",
+      "preco": 1800,
+      "aluguel": [
+        140,
+        700,
+        2000,
+        5500,
+        7500,
+        9500
+      ],
+      "casa": 1000,
+      "hipoteca": 900
+    },
+    {
+      "pos": 17,
+      "t": "reves",
+      "nome": "Revés"
+    },
+    {
+      "pos": 18,
+      "t": "bairro",
+      "id": "liberdade",
+      "nome": "Praça da Liberdade",
+      "g": "laranja",
+      "preco": 1800,
+      "aluguel": [
+        140,
+        700,
+        2000,
+        5500,
+        7500,
+        9500
+      ],
+      "casa": 1000,
+      "hipoteca": 900
+    },
+    {
+      "pos": 19,
+      "t": "bairro",
+      "id": "mercado",
+      "nome": "Mercado Municipal",
+      "g": "laranja",
+      "preco": 2000,
+      "aluguel": [
+        160,
+        800,
+        2200,
+        6000,
+        8000,
+        10000
+      ],
+      "casa": 1000,
+      "hipoteca": 1000
+    },
+    {
+      "pos": 20,
+      "t": "praca",
+      "nome": "Praça Central",
+      "nota": "Descanso"
+    },
+    {
+      "pos": 21,
+      "t": "bairro",
+      "id": "batel",
+      "nome": "Batel",
+      "g": "vermelho",
+      "preco": 2200,
+      "aluguel": [
+        180,
+        900,
+        2500,
+        7000,
+        8750,
+        10500
+      ],
+      "casa": 1500,
+      "hipoteca": 1100
+    },
+    {
+      "pos": 22,
+      "t": "sorte",
+      "nome": "Sorte"
+    },
+    {
+      "pos": 23,
+      "t": "bairro",
+      "id": "moinhos",
+      "nome": "Moinhos de Vento",
+      "g": "vermelho",
+      "preco": 2200,
+      "aluguel": [
+        180,
+        900,
+        2500,
+        7000,
+        8750,
+        10500
+      ],
+      "casa": 1500,
+      "hipoteca": 1100
+    },
+    {
+      "pos": 24,
+      "t": "bairro",
+      "id": "beira-mar",
+      "nome": "Beira-Mar Norte",
+      "g": "vermelho",
+      "preco": 2400,
+      "aluguel": [
+        200,
+        1000,
+        3000,
+        7500,
+        9250,
+        11000
+      ],
+      "casa": 1500,
+      "hipoteca": 1200
+    },
+    {
+      "pos": 25,
+      "t": "transporte",
+      "id": "luz",
+      "nome": "Estação da Luz",
+      "preco": 2000,
+      "aluguel": [
+        250,
+        500,
+        1000,
+        2000
+      ],
+      "hipoteca": 1000
+    },
+    {
+      "pos": 26,
+      "t": "bairro",
+      "id": "barra",
+      "nome": "Barra da Tijuca",
+      "g": "amarelo",
+      "preco": 2600,
+      "aluguel": [
+        220,
+        1100,
+        3300,
+        8000,
+        9750,
+        11500
+      ],
+      "casa": 1500,
+      "hipoteca": 1300
+    },
+    {
+      "pos": 27,
+      "t": "bairro",
+      "id": "asa-sul",
+      "nome": "Asa Sul",
+      "g": "amarelo",
+      "preco": 2600,
+      "aluguel": [
+        220,
+        1100,
+        3300,
+        8000,
+        9750,
+        11500
+      ],
+      "casa": 1500,
+      "hipoteca": 1300
+    },
+    {
+      "pos": 28,
+      "t": "companhia",
+      "id": "saneamento",
+      "nome": "Companhia de Saneamento",
+      "preco": 1500,
+      "multiplo": [
+        40,
+        100
+      ],
+      "hipoteca": 750
+    },
+    {
+      "pos": 29,
+      "t": "bairro",
+      "id": "meireles",
+      "nome": "Meireles",
+      "g": "amarelo",
+      "preco": 2800,
+      "aluguel": [
+        240,
+        1200,
+        3600,
+        8500,
+        10250,
+        12000
+      ],
+      "casa": 1500,
+      "hipoteca": 1400
+    },
+    {
+      "pos": 30,
+      "t": "va-cadeia",
+      "nome": "Vá para a Cadeia"
+    },
+    {
+      "pos": 31,
+      "t": "bairro",
+      "id": "ipanema",
+      "nome": "Ipanema",
+      "g": "verde",
+      "preco": 3000,
+      "aluguel": [
+        260,
+        1300,
+        3900,
+        9000,
+        11000,
+        12750
+      ],
+      "casa": 2000,
+      "hipoteca": 1500
+    },
+    {
+      "pos": 32,
+      "t": "bairro",
+      "id": "lago-sul",
+      "nome": "Lago Sul",
+      "g": "verde",
+      "preco": 3000,
+      "aluguel": [
+        260,
+        1300,
+        3900,
+        9000,
+        11000,
+        12750
+      ],
+      "casa": 2000,
+      "hipoteca": 1500
+    },
+    {
+      "pos": 33,
+      "t": "reves",
+      "nome": "Revés"
+    },
+    {
+      "pos": 34,
+      "t": "bairro",
+      "id": "vila-nova",
+      "nome": "Vila Nova Conceição",
+      "g": "verde",
+      "preco": 3200,
+      "aluguel": [
+        280,
+        1500,
+        4500,
+        10000,
+        12000,
+        14000
+      ],
+      "casa": 2000,
+      "hipoteca": 1600
+    },
+    {
+      "pos": 35,
+      "t": "transporte",
+      "id": "rio-niteroi",
+      "nome": "Ponte Rio–Niterói",
+      "preco": 2000,
+      "aluguel": [
+        250,
+        500,
+        1000,
+        2000
+      ],
+      "hipoteca": 1000
+    },
+    {
+      "pos": 36,
+      "t": "sorte",
+      "nome": "Sorte"
+    },
+    {
+      "pos": 37,
+      "t": "bairro",
+      "id": "leblon",
+      "nome": "Leblon",
+      "g": "azul-escuro",
+      "preco": 3500,
+      "aluguel": [
+        350,
+        1750,
+        5000,
+        11000,
+        13000,
+        15000
+      ],
+      "casa": 2000,
+      "hipoteca": 1750
+    },
+    {
+      "pos": 38,
+      "t": "taxa",
+      "nome": "Taxa de Luxo",
+      "valor": 1000
+    },
+    {
+      "pos": 39,
+      "t": "bairro",
+      "id": "jardins",
+      "nome": "Jardins",
+      "g": "azul-escuro",
+      "preco": 4000,
+      "aluguel": [
+        500,
+        2000,
+        6000,
+        14000,
+        17000,
+        20000
+      ],
+      "casa": 2000,
+      "hipoteca": 2000
+    }
+  ],
+  "sorte": [
+    {
+      "k": "anda",
+      "casa": 0,
+      "texto": "A ponte nova abriu: siga direto para a Largada."
+    },
+    {
+      "k": "anda",
+      "casa": 19,
+      "texto": "Convite para a feira orgânica do Mercado Municipal. Vá até lá."
+    },
+    {
+      "k": "anda",
+      "casa": 37,
+      "texto": "Aluguel de temporada no Leblon fechado. Vá para o Leblon."
+    },
+    {
+      "k": "anda",
+      "casa": 11,
+      "texto": "Festival na beira do rio: siga para Ponta Negra."
+    },
+    {
+      "k": "proximo",
+      "tipo": "transporte",
+      "texto": "Passagem de graça: vá ao próximo transporte. Se tiver dono, pague o dobro."
+    },
+    {
+      "k": "proximo",
+      "tipo": "companhia",
+      "texto": "Vistoria de medidores: vá à próxima companhia. Se tiver dono, pague dez vezes o dado."
+    },
+    {
+      "k": "anda-tras",
+      "n": 3,
+      "texto": "Você esqueceu a carteira. Volte três casas."
+    },
+    {
+      "k": "cadeia",
+      "texto": "Multas acumuladas. Vá para a Cadeia, sem passar pela Largada."
+    },
+    {
+      "k": "livra",
+      "texto": "Um advogado amigo resolveu. Guarde esta carta: ela tira você da Cadeia."
+    },
+    {
+      "k": "dinheiro",
+      "valor": 1500,
+      "texto": "Restituição do imposto: receba R$ 1.500."
+    },
+    {
+      "k": "dinheiro",
+      "valor": 500,
+      "texto": "Venda de móveis usados: receba R$ 500."
+    },
+    {
+      "k": "dinheiro",
+      "valor": -1500,
+      "texto": "IPTU atrasado com juros: pague R$ 1.500."
+    },
+    {
+      "k": "dinheiro",
+      "valor": -500,
+      "texto": "Multa de trânsito na avenida: pague R$ 500."
+    },
+    {
+      "k": "cada",
+      "valor": 500,
+      "texto": "Você virou notícia boa: receba R$ 500 de cada jogador."
+    },
+    {
+      "k": "cada",
+      "valor": -500,
+      "texto": "Sua obra sujou a rua toda: pague R$ 500 a cada jogador."
+    },
+    {
+      "k": "obra",
+      "casa": 250,
+      "hotel": 1000,
+      "texto": "Reforma geral: pague R$ 250 por casa e R$ 1.000 por hotel que você tiver."
+    }
+  ],
+  "reves": [
+    {
+      "k": "anda",
+      "casa": 0,
+      "texto": "Recomeço: vá para a Largada e receba o salário."
+    },
+    {
+      "k": "anda",
+      "casa": 10,
+      "semSalario": true,
+      "texto": "Intimação. Vá até a Cadeia — só de passagem, você não está preso."
+    },
+    {
+      "k": "anda",
+      "casa": 5,
+      "texto": "Voo remarcado: vá ao Aeroporto de Congonhas."
+    },
+    {
+      "k": "anda",
+      "casa": 24,
+      "texto": "Vistoria na Beira-Mar Norte. Vá até lá."
+    },
+    {
+      "k": "anda-tras",
+      "n": 3,
+      "texto": "Engarrafamento: volte três casas."
+    },
+    {
+      "k": "cadeia",
+      "texto": "Fiscalização flagrou a obra sem alvará. Vá para a Cadeia."
+    },
+    {
+      "k": "livra",
+      "texto": "O processo caiu por falta de provas. Guarde: esta carta tira você da Cadeia."
+    },
+    {
+      "k": "dinheiro",
+      "valor": 2000,
+      "texto": "Herança de um tio distante: receba R$ 2.000."
+    },
+    {
+      "k": "dinheiro",
+      "valor": 1000,
+      "texto": "Aluguel atrasado que você já tinha esquecido: receba R$ 1.000."
+    },
+    {
+      "k": "dinheiro",
+      "valor": 500,
+      "texto": "Seguro reembolsado: receba R$ 500."
+    },
+    {
+      "k": "dinheiro",
+      "valor": -1000,
+      "texto": "Conta de luz de três meses: pague R$ 1.000."
+    },
+    {
+      "k": "dinheiro",
+      "valor": -2000,
+      "texto": "Reforma emergencial do telhado: pague R$ 2.000."
+    },
+    {
+      "k": "dinheiro",
+      "valor": -500,
+      "texto": "Taxa de condomínio extra: pague R$ 500."
+    },
+    {
+      "k": "cada",
+      "valor": -1000,
+      "texto": "Aniversário na laje: pague R$ 1.000 a cada jogador."
+    },
+    {
+      "k": "cada",
+      "valor": 1000,
+      "texto": "Vaquinha para o seu projeto: receba R$ 1.000 de cada jogador."
+    },
+    {
+      "k": "obra",
+      "casa": 400,
+      "hotel": 1150,
+      "texto": "Vistoria estrutural: pague R$ 400 por casa e R$ 1.150 por hotel."
+    }
+  ]
+}

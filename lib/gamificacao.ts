@@ -130,6 +130,13 @@ export const CONQUISTAS: Conquista[] = [
     glifo: "raio",
     cor: "#FF4D5E",
   },
+  {
+    id: "prefeito",
+    nome: "Prefeito",
+    como: "Terminou a Metrópole com o maior patrimônio da cidade.",
+    glifo: "coroa",
+    cor: "#F2C14E",
+  },
 ];
 
 export function parseStats(raw: unknown): Stats {

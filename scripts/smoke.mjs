@@ -178,6 +178,7 @@ const PERMITIDAS = [
   // plataforma
   "create_room", "join_room", "leave_room", "set_color", "set_profile",
   "set_ready", "set_room_settings", "touch_presence",
+  "adicionar_bot", "remover_bot",
   // Letreiro
   "letreiro_start", "letreiro_submit",
   "letreiro_diario_abrir", "letreiro_diario_submeter", "letreiro_diario_fechar",

@@ -247,6 +247,32 @@ a {
   transform: translateY(2px);
 }
 
+/* Botão de três linhas: nome do nível em cima, a promessa embaixo.
+   `.btn` põe `nowrap` e raio de pílula; aqui os dois são desfeitos, e por isso
+   esta regra tem de vir DEPOIS de `.btn` — a especificidade é a mesma. */
+.btn-nivel {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.22rem;
+  min-height: 0;
+  padding: 0.72rem 1rem;
+  border-radius: var(--r-md);
+  white-space: normal;
+  text-align: left;
+  line-height: 1.25;
+}
+
+/* Botão de canto, para a ação secundária que mora dentro de um cartão. */
+.btn-mini {
+  min-height: 34px;
+  padding: 0 0.8rem;
+  border-width: 2px;
+  font-size: 0.66rem;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
 /* ── plaquetas ────────────────────────────────────────────────────────── */
 
 .pill {
@@ -461,6 +487,17 @@ a {
 }
 .seat[data-away="true"] {
   opacity: 0.45;
+}
+
+/* UMA MÁQUINA SE DISTINGUE SEM COR.
+   Quem não separa verde de vermelho ainda vê a diferença: o assento da máquina
+   é o único com um talho tracejado na borda esquerda. A mesma decisão das
+   facções do Domínio — forma primeiro, cor como reforço. */
+.seat[data-bot="true"] {
+  background:
+    repeating-linear-gradient(to bottom, var(--line-strong) 0 5px, transparent 5px 11px) left /
+      4px 100% no-repeat,
+    rgb(7 28 26 / 0.34);
 }
 .seat-empty {
   border-style: dashed;

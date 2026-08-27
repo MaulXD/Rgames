@@ -323,6 +323,25 @@
   align-items: center;
   gap: 0.7rem;
 }
+/* O RIVAL QUE É MÁQUINA — e a pessoa tem direito de saber contra o quê joga.
+   Mesmo talho tracejado do assento no lobby: a mesma ideia dita do mesmo jeito
+   em dois lugares vale mais que dois símbolos diferentes. */
+.rival[data-bot="true"] .rival-name::after {
+  content: "máquina";
+  margin-left: 0.5rem;
+  padding: 0.08rem 0.4rem;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: 999px;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--fg-faint);
+  vertical-align: 0.1em;
+  white-space: nowrap;
+}
+
 .rival-name {
   flex: none;
   width: 6.2rem;

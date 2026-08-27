@@ -47,6 +47,16 @@ export type MatchRow = {
     scores?: Record<string, number>;
     maxScore?: number;
     wordCount?: number;
+    /**
+     * OS INSTANTES DE DESCOBERTA DE CADA MÁQUINA, em segundos do relógio da
+     * rodada. Só os instantes — nunca as palavras, que ficam no estado privado
+     * dela igual ao de qualquer pessoa.
+     *
+     * É exatamente a informação que `counts` dá sobre gente: quantas, nunca
+     * quais. E resolve a barra de tensão da máquina sem nenhum processo
+     * rodando ao lado: o cliente conta quantos instantes já passaram.
+     */
+    botTempos?: Record<string, number[]>;
   };
 };
 
@@ -54,6 +64,7 @@ export type Seat = {
   user_id: string;
   display_name: string;
   avatar: unknown;
+  is_bot?: boolean;
 };
 
 export function LetreiroGame({
@@ -290,7 +301,24 @@ export function LetreiroGame({
   const counts = match.public_state.counts ?? {};
   const meus = words.filter((w) => !w.rejected);
   const meuTotal = meus.reduce((s, w) => s + w.pts, 0);
-  const maxConta = Math.max(1, ...Object.values(counts), meus.length);
+
+  /* A CONTA DA MÁQUINA É DERIVADA DO RELóGIO, não vem por realtime.
+     O servidor decidiu no início da rodada em que segundo cada palavra dela
+     cai; aqui só se conta quantos desses segundos já passaram. Duas coisas boas
+     vieram de graça: a barra dela sobe suave a cada 250ms junto com o relógio,
+     e não existe processo nenhum rodando no servidor para manter isso. */
+  const botTempos = match.public_state.botTempos ?? {};
+  const decorrido = (match.public_state.seconds ?? 180) - left;
+  const contaBot = (id: string) => {
+    const t = botTempos[id];
+    if (!t) return 0;
+    let n = 0;
+    while (n < t.length && t[n] <= decorrido) n++;
+    return n;
+  };
+  const conta = (s: Seat) =>
+    s.user_id === user?.id ? meus.length : (botTempos[s.user_id] ? contaBot(s.user_id) : (counts[s.user_id] ?? 0));
+  const maxConta = Math.max(1, ...seats.map(conta), meus.length);
 
   if (revealing) {
     return (
@@ -430,9 +458,9 @@ export function LetreiroGame({
         <p className="eyebrow">Na mesa agora</p>
         <ul className="rivals">
           {seats.map((s) => {
-            const n = s.user_id === user?.id ? meus.length : (counts[s.user_id] ?? 0);
+            const n = conta(s);
             return (
-              <li key={s.user_id} className="rival">
+              <li key={s.user_id} className="rival" data-bot={s.is_bot === true}>
                 <Avatar spec={parseAvatar(s.avatar)} size={28} />
                 <span className="rival-name">{s.display_name}</span>
                 <span className="rival-bar">
@@ -444,7 +472,8 @@ export function LetreiroGame({
           })}
         </ul>
         <p className="rivals-note dim">
-          Só a quantidade aparece. Ninguém vê as palavras de ninguém até o fim.
+          Só a quantidade aparece. Ninguém vê as palavras de ninguém até o fim
+          {seats.some((s) => s.is_bot) ? " — nem as da máquina." : "."}
         </p>
       </div>
 

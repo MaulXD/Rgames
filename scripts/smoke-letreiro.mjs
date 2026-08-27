@@ -335,6 +335,237 @@ const salaFim = (await get(A.token, `rooms?select=status&id=eq.${sala.id}`)).bod
 ok(salaFim?.status === "lobby", "sala voltou para o lobby");
 
 /* ══════════════════════════════════════════════════════════════════════════
+   JOGADOR CONTRA A MÁQUINA
+
+   Uma máquina é um jogador de verdade: conta, perfil, assento, cor e linha em
+   `match_players`. A consequência que este teste tem de provar é que a
+   APURAÇÃO NÃO MUDOU — as palavras da máquina estão no estado privado dela, e
+   `letreiro_score_bruto` já sabia somar estado privado de todo mundo.
+
+   E a propriedade que decide se o adversário serve para alguma coisa: na MESMA
+   grade, difícil tem de pontuar mais que médio, e médio mais que fácil. Um
+   nível que não significa nada é pior que não ter nível.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const salaM = (await rpc(A.token, "create_room", { p_game: "letreiro" })).body;
+
+const botNaoHost = await rpc(B.token, "adicionar_bot", { p_room: salaM.id, p_nivel: "medio" });
+ok(
+  /NOT_HOST/.test(JSON.stringify(botNaoHost.body)),
+  "quem não é anfitrião não convida máquina",
+);
+
+const nivelRuim = await rpc(A.token, "adicionar_bot", { p_room: salaM.id, p_nivel: "impossivel" });
+ok(/BAD_LEVEL/.test(JSON.stringify(nivelRuim.body)), "nível fora do vocabulário é recusado");
+
+/* MÁQUINA SÓ ENTRA ONDE SABE JOGAR.
+   Uma máquina sem cérebro numa mesa de Domínio é pior que cadeira vazia: ocupa
+   assento, recebe territórios e objetivo, e perde a vez no relógio para sempre.
+   Os outros três jogariam contra um cadáver que segura um continente. */
+for (const jogo of ["dominio", "dossie", "metropole"]) {
+  const salaOutra = (await rpc(A.token, "create_room", { p_game: jogo })).body;
+  const recusa = await rpc(A.token, "adicionar_bot", { p_room: salaOutra.id, p_nivel: "medio" });
+  ok(
+    /BOT_NOT_READY/.test(JSON.stringify(recusa.body)),
+    `máquina é recusada no ${jogo}: assento ocupado por quem não joga é pior que assento vazio`,
+  );
+}
+
+const bot1 = await rpc(A.token, "adicionar_bot", { p_room: salaM.id, p_nivel: "facil" });
+ok(bot1.status === 200, `máquina convidada no fácil (assento ${bot1.body?.seat})`);
+ok(bot1.body?.is_ready === true, "e ela entra PRONTA: não há por que ela não estar");
+ok(bot1.body?.bot_nivel === "facil", "com o nível gravado na sala, não na conta");
+ok(bot1.body?.color !== null, "e com cor própria");
+
+const bot2 = await rpc(A.token, "adicionar_bot", { p_room: salaM.id, p_nivel: "dificil" });
+ok(bot2.status === 200, `segunda máquina, no difícil (assento ${bot2.body?.seat})`);
+ok(
+  bot2.body?.user_id !== bot1.body?.user_id,
+  "e é OUTRA máquina — a mesma não senta duas vezes na mesma mesa",
+);
+ok(bot2.body?.color !== bot1.body?.color, "com cor diferente da primeira");
+
+// a mesma máquina PODE estar em outra sala ao mesmo tempo
+const outraSala = (await rpc(A.token, "create_room", { p_game: "letreiro" })).body;
+const emDuas = await rpc(A.token, "adicionar_bot", { p_room: outraSala.id, p_nivel: "medio" });
+ok(emDuas.status === 200, "e a mesma máquina pode estar em várias salas ao mesmo tempo");
+
+// dispensar
+const naoBot = await rpc(A.token, "remover_bot", { p_room: salaM.id, p_seat: 0 });
+ok(
+  /NOT_A_BOT/.test(JSON.stringify(naoBot.body)),
+  "`remover_bot` NÃO dispensa gente: sair é decisão de quem entrou",
+);
+const dispensou = await rpc(A.token, "remover_bot", {
+  p_room: salaM.id,
+  p_seat: bot2.body.seat,
+});
+// `remover_bot` devolve void, e o PostgREST responde 204 sem corpo: exigir 200
+// aqui é exigir o que a função não promete
+ok(dispensou.status < 300, `a máquina é dispensada pelo assento (${dispensou.status})`);
+const assentosDepois = (
+  await db.query("select seat from room_members where room_id = $1 order by seat", [salaM.id])
+).rows.map((r) => r.seat);
+ok(
+  !assentosDepois.includes(bot2.body.seat),
+  `e o assento ${bot2.body.seat} de fato vagou: sobraram ${assentosDepois.join(", ")}`,
+);
+const voltou = await rpc(A.token, "adicionar_bot", { p_room: salaM.id, p_nivel: "dificil" });
+ok(voltou.status === 200, "e outra entra no lugar");
+
+/* ── a partida com máquina ────────────────────────────────────────────── */
+
+await rpc(A.token, "set_room_settings", {
+  p_room: salaM.id,
+  p_settings: { modo: "classico", anulacao: "gananciosa", tamanho: 4 },
+});
+const partidaM = (await rpc(A.token, "letreiro_start", { p_room: salaM.id })).body;
+ok(!!partidaM?.id, "a partida com máquinas começa");
+
+const jogadoresM = (
+  await db.query(
+    `select mp.user_id, mp.seat, p.is_bot, p.display_name, rm.bot_nivel
+       from match_players mp
+       join profiles p on p.id = mp.user_id
+       left join room_members rm on rm.room_id = $2 and rm.user_id = mp.user_id
+      where mp.match_id = $1 order by mp.seat`,
+    [partidaM.id, salaM.id],
+  )
+).rows;
+ok(
+  jogadoresM.length === 3,
+  `três na mesa: ${jogadoresM.map((j) => j.display_name + (j.is_bot ? " (máquina)" : "")).join(", ")}`,
+);
+ok(
+  jogadoresM.filter((j) => j.is_bot).length === 2,
+  "duas delas são máquina, e ocupam assento como qualquer um",
+);
+
+// as palavras das máquinas estão no estado privado, e são válidas
+const gradeM = (
+  await db.query(
+    `select b.comuns, b.solution, b.max_score_comum, b.grid, b.size
+       from letreiro_boards b join matches m on m.board_id = b.id where m.id = $1`,
+    [partidaM.id],
+  )
+).rows[0];
+
+for (const j of jogadoresM.filter((x) => x.is_bot)) {
+  const priv = (
+    await db.query(
+      "select data from match_private_state where match_id = $1 and user_id = $2",
+      [partidaM.id, j.user_id],
+    )
+  ).rows[0].data;
+  const ws = priv.words ?? [];
+  ok(ws.length > 0, `${j.display_name} (${j.bot_nivel}) recebeu ${ws.length} palavras`);
+  ok(
+    ws.every((w) => gradeM.comuns.includes(w.w)),
+    `${j.display_name}: toda palavra dela é COMUM — a máquina jamais acha "aalênio"`,
+  );
+  const caminhosOk = await db.query(
+    `select bool_and(public.letreiro_path_ok($1::text[], w ->> 'p', w ->> 'w', $2::int)) ok
+       from jsonb_array_elements($3::jsonb) w`,
+    [gradeM.grid, gradeM.size, JSON.stringify(ws)],
+  );
+  ok(
+    caminhosOk.rows[0].ok === true,
+    `${j.display_name}: todo caminho dela fecha na grade — a apuração não vai recusar nada`,
+  );
+  ok(
+    ws.every((w, i) => i === 0 || w.em >= ws[i - 1].em),
+    `${j.display_name}: as descobertas estão em ordem de tempo`,
+  );
+  ok(
+    ws[0].pts <= ws[ws.length - 1].pts,
+    `${j.display_name}: acha as fáceis primeiro (${ws[0].w} antes de ${ws[ws.length - 1].w})`,
+  );
+}
+
+// o estado público tem os TEMPOS e nenhuma palavra
+const publicoM = (
+  await db.query("select public_state from matches where id = $1", [partidaM.id])
+).rows[0].public_state;
+ok(
+  !!publicoM.botTempos && Object.keys(publicoM.botTempos).length === 2,
+  "o estado público traz os tempos das duas máquinas",
+);
+const algumaPalavra = gradeM.comuns[0];
+ok(
+  !JSON.stringify(publicoM.botTempos).includes(algumaPalavra),
+  "e NENHUMA palavra: o público sabe quantas, nunca quais — igual a uma pessoa",
+);
+
+// a pessoa joga também
+const todasM = Object.entries(gradeM.solution).sort((a, b) => b[0].length - a[0].length);
+await rpc(A.token, "letreiro_submit", {
+  p_match: partidaM.id,
+  p_word: todasM[0][0],
+  p_path: todasM[0][1],
+});
+
+// e a apuração conta todo mundo, sem uma linha nova
+await db.query("update matches set ends_at = now() - interval '1 second' where id = $1", [
+  partidaM.id,
+]);
+await db.query("select public.letreiro_sweep()");
+
+const placarM = (
+  await db.query(
+    `select mp.score, p.is_bot, p.display_name
+       from match_players mp join profiles p on p.id = mp.user_id
+      where mp.match_id = $1 order by mp.score desc`,
+    [partidaM.id],
+  )
+).rows;
+ok(
+  placarM.every((l) => l.score > 0),
+  `todos pontuaram: ${placarM.map((l) => l.display_name + "=" + l.score).join(", ")}`,
+);
+ok(
+  placarM.filter((l) => l.is_bot).every((l) => l.score > 0),
+  "as máquinas foram apuradas pela MESMA função que apura gente — nenhuma linha nova",
+);
+
+/* ── o nível significa alguma coisa? ──────────────────────────────────────
+   Na MESMA grade, difícil tem de pontuar mais que médio, e médio mais que
+   fácil. Sem isso, o nível é rótulo. */
+
+const alvo = (
+  await db.query(
+    `select
+       (select coalesce(sum((w ->> 'pts')::int), 0)
+          from jsonb_array_elements(public.letreiro_bot_palavras(b.id, 42::bigint, 'facil', 180)) w) facil,
+       (select coalesce(sum((w ->> 'pts')::int), 0)
+          from jsonb_array_elements(public.letreiro_bot_palavras(b.id, 42::bigint, 'medio', 180)) w) medio,
+       (select coalesce(sum((w ->> 'pts')::int), 0)
+          from jsonb_array_elements(public.letreiro_bot_palavras(b.id, 42::bigint, 'dificil', 180)) w) dificil,
+       b.max_score_comum teto
+     from letreiro_boards b join matches m on m.board_id = b.id where m.id = $1`,
+    [partidaM.id],
+  )
+).rows[0];
+ok(
+  Number(alvo.facil) < Number(alvo.medio) && Number(alvo.medio) < Number(alvo.dificil),
+  `o nível significa algo na mesma grade: fácil ${alvo.facil} < médio ${alvo.medio} < difícil ${alvo.dificil} (teto comum ${alvo.teto})`,
+);
+ok(
+  Number(alvo.dificil) < Number(alvo.teto),
+  "e nem a difícil acha tudo — máquina imbatível não é adversário, é parede",
+);
+
+// a mesma máquina na mesma partida acha sempre as mesmas palavras
+const repetivel = (
+  await db.query(
+    `select public.letreiro_bot_palavras(b.id, 7::bigint, 'medio', 180) =
+            public.letreiro_bot_palavras(b.id, 7::bigint, 'medio', 180) igual
+       from letreiro_boards b join matches m on m.board_id = b.id where m.id = $1`,
+    [partidaM.id],
+  )
+).rows[0].igual;
+ok(repetivel === true, "e o cérebro é determinístico: mesma semente, mesmas palavras");
+
+/* ══════════════════════════════════════════════════════════════════════════
    O DESAFIO DIÁRIO
 
    Uma grade por dia, a mesma para todo mundo, uma tentativa. O que mais importa

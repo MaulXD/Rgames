@@ -19,13 +19,38 @@ import type { Room } from "@/lib/supabase/types";
 const COLOR_KEYS = Object.keys(COLORS) as ColorKey[];
 const SEATS = 8;
 
+type NivelBot = "facil" | "medio" | "dificil";
+
 type Seat = {
   user_id: string;
   seat: number | null;
   color: ColorKey | null;
   role: "host" | "player" | "spectator";
   is_ready: boolean;
-  profiles: { display_name: string; avatar: unknown } | null;
+  bot_nivel: NivelBot | null;
+  profiles: { display_name: string; avatar: unknown; is_bot: boolean } | null;
+};
+
+/* Os tres niveis, com o nome que a pessoa ve e a promessa que cada um faz.
+   "Medio" sem explicacao nao quer dizer nada: quem escolhe precisa saber o que
+   vai encontrar do outro lado da mesa. */
+const NIVEIS: { chave: NivelBot; nome: string; promessa: string }[] = [
+  { chave: "facil", nome: "Tranquila", promessa: "joga devagar e deixa muita coisa passar" },
+  { chave: "medio", nome: "Firme", promessa: "acha boa parte do que da para achar" },
+  { chave: "dificil", nome: "Impiedosa", promessa: "vai doer, mas ainda e possivel ganhar" },
+];
+
+/* ONDE A MÁQUINA SABE JOGAR.
+   Espelha `bot_sabe_jogar` no banco, e a cópia é de propósito: o servidor
+   RECUSA (é ele a autoridade) e a interface NÃO OFERECE (botão que dá erro é
+   uma promessa quebrada). Quando o cérebro do Domínio existir, são duas linhas
+   — esta e a do banco. */
+const BOT_SABE_JOGAR = new Set(["letreiro"]);
+
+const NOME_NIVEL: Record<NivelBot, string> = {
+  facil: "tranquila",
+  medio: "firme",
+  dificil: "impiedosa",
 };
 
 export function Lobby({ code }: { code: string }) {
@@ -41,13 +66,16 @@ export function Lobby({ code }: { code: string }) {
   const [starting, setStarting] = useState(false);
   const [qr, setQr] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
+  const [convidando, setConvidando] = useState<NivelBot | null>(null);
   const roomIdRef = useRef<string | null>(null);
 
   const loadSeats = useCallback(async (roomId: string) => {
     const sb = supabaseBrowser();
     const { data, error } = await sb
       .from("room_members")
-      .select("user_id, seat, color, role, is_ready, profiles(display_name, avatar)")
+      .select(
+        "user_id, seat, color, role, is_ready, bot_nivel, profiles(display_name, avatar, is_bot)",
+      )
       .eq("room_id", roomId)
       .order("seat", { nullsFirst: false });
     if (error) return;
@@ -140,10 +168,36 @@ export function Lobby({ code }: { code: string }) {
     const { error } = await fn();
     if (error) {
       const msg = (error as { message?: string }).message ?? String(error);
-      setNote(/COLOR_TAKEN/.test(msg) ? "Essa cor já é de outra pessoa." : msg);
+      setNote(
+        /COLOR_TAKEN/.test(msg)
+          ? "Essa cor já é de outra pessoa."
+          : /ROOM_FULL/.test(msg)
+            ? "A mesa está cheia."
+            : /NO_BOT_AVAILABLE/.test(msg)
+              ? "Todas as máquinas já estão nesta mesa."
+              : /NOT_HOST/.test(msg)
+                ? "Só o anfitrião faz isso."
+                : /MATCH_IN_PROGRESS/.test(msg)
+                  ? "Com a partida rolando, não dá."
+                  : /BOT_NOT_READY/.test(msg)
+                    ? "A máquina ainda não aprendeu este jogo."
+                    : msg,
+      );
       return;
     }
     if (roomIdRef.current) await loadSeats(roomIdRef.current);
+  }
+
+  async function convidarMaquina(nivel: NivelBot) {
+    if (!room) return;
+    setConvidando(nivel);
+    try {
+      await act(async () =>
+        supabaseBrowser().rpc("adicionar_bot", { p_room: room.id, p_nivel: nivel }),
+      );
+    } finally {
+      setConvidando(null);
+    }
   }
 
   async function comecar() {
@@ -238,6 +292,8 @@ export function Lobby({ code }: { code: string }) {
   const iAmHost = room.host_id === user?.id;
   const takenColors = new Set(seats.filter((s) => s.user_id !== user?.id).map((s) => s.color));
   const players = seats.filter((s) => s.seat !== null).sort((a, b) => a.seat! - b.seat!);
+  const maquinas = players.filter((s) => s.profiles?.is_bot);
+  const mesaCheia = players.length >= SEATS;
   // os quatro jogam
   const jogavel = true;
 
@@ -247,6 +303,7 @@ export function Lobby({ code }: { code: string }) {
       user_id: p.user_id,
       display_name: p.profiles?.display_name ?? "Convidado",
       avatar: p.profiles?.avatar,
+      is_bot: p.profiles?.is_bot === true,
     }));
 
     if (room.game_key === "metropole") {
@@ -334,8 +391,17 @@ export function Lobby({ code }: { code: string }) {
           }
           const prof = s.profiles;
           const mine = s.user_id === user?.id;
+          const maquina = prof?.is_bot === true;
           return (
-            <div key={i} className="seat" data-me={mine} data-away={!online.has(s.user_id)}>
+            <div
+              key={i}
+              className="seat"
+              data-me={mine}
+              data-bot={maquina}
+              /* MÁQUINA NUNCA APARECE AUSENTE. Ela não tem aba para fechar nem
+                 sinal para cair — marcar de cinza seria mentir sobre ela. */
+              data-away={!maquina && !online.has(s.user_id)}
+            >
               <Avatar spec={parseAvatar(prof?.avatar)} size={40} />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">
@@ -346,18 +412,39 @@ export function Lobby({ code }: { code: string }) {
                   className="mono text-[0.66rem] tracking-[0.14em] uppercase"
                   style={{ color: "var(--fg-faint)" }}
                 >
-                  {s.role === "host" ? "anfitrião" : `assento ${i + 1}`}
+                  {maquina
+                    ? `máquina · ${NOME_NIVEL[s.bot_nivel ?? "medio"]}`
+                    : s.role === "host"
+                      ? "anfitrião"
+                      : `assento ${i + 1}`}
                   {s.color ? ` · ${COLORS[s.color].name}` : ""}
                 </p>
               </div>
-              <span
-                className="dot"
-                data-on={s.is_ready}
-                title={s.is_ready ? "Pronto" : "Ainda não"}
-                style={
-                  s.color ? { background: s.is_ready ? COLORS[s.color].enamel : undefined } : undefined
-                }
-              />
+              {maquina && iAmHost ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-mini"
+                  title={`Dispensar ${prof?.display_name}`}
+                  onClick={() =>
+                    act(async () =>
+                      supabaseBrowser().rpc("remover_bot", { p_room: room.id, p_seat: i }),
+                    )
+                  }
+                >
+                  dispensar
+                </button>
+              ) : (
+                <span
+                  className="dot"
+                  data-on={s.is_ready}
+                  title={s.is_ready ? "Pronto" : "Ainda não"}
+                  style={
+                    s.color
+                      ? { background: s.is_ready ? COLORS[s.color].enamel : undefined }
+                      : undefined
+                  }
+                />
+              )}
             </div>
           );
         })}
@@ -419,6 +506,40 @@ export function Lobby({ code }: { code: string }) {
               {note}
             </p>
           )}
+        </div>
+      )}
+
+      {/* NINGUÉM DEVE ESPERAR PARA JOGAR.
+          Uma mesa vazia às três da manhã é o motivo mais comum de fechar a aba.
+          O anfitrião completa a mesa em um toque — e escolhe o quanto quer
+          sofrer. */}
+      {iAmHost && BOT_SABE_JOGAR.has(room.game_key) && (
+        <div className="panel mt-4 p-5 sm:p-6">
+          <p className="eyebrow">Jogar contra a máquina</p>
+          <p className="mt-2 text-sm dim">
+            {maquinas.length === 0
+              ? "Sem gente para completar a mesa? Chame uma máquina. Ela senta, pega uma cor e joga como qualquer um."
+              : maquinas.length === 1
+                ? "Uma máquina na mesa. Ela não vê a sua mão — joga com o que o servidor deu a ela."
+                : `${maquinas.length} máquinas na mesa, cada uma com seu jeito. Nenhuma vê a sua mão.`}
+          </p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            {NIVEIS.map((n) => (
+              <button
+                key={n.chave}
+                type="button"
+                className="btn btn-ghost btn-nivel"
+                disabled={mesaCheia || convidando !== null}
+                title={mesaCheia ? "A mesa está cheia" : n.promessa}
+                onClick={() => convidarMaquina(n.chave)}
+              >
+                <span className="font-medium">
+                  {convidando === n.chave ? "Chamando…" : n.nome}
+                </span>
+                <span className="text-[0.7rem] leading-snug dim">{n.promessa}</span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

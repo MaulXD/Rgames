@@ -1756,3 +1756,17 @@
   font-size: 0.72rem;
   line-height: 1.35;
 }
+
+/* o peão em movimento: uma transição curta entre casas dá continuidade ao
+   passo sem borrar a leitura de onde ele está */
+.peao {
+  transition: transform 90ms var(--ease-out);
+}
+.quadro-peoes {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .peao {
+    transition: none;
+  }
+}

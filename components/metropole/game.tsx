@@ -174,8 +174,12 @@ export function MetropoleGame({
   const [resto, setResto] = useState(0);
   const [olhando, setOlhando] = useState<string | null>(null);
   const [negociando, setNegociando] = useState(false);
+  /* Onde o peão de cada assento está SENDO MOSTRADO, que não é onde ele está.
+     Ver `usePeaoAndando` no fim do arquivo. */
+  const [mostrada, setMostrada] = useState<Record<number, number>>({});
   const [admin, setAdmin] = useState<number | null>(null);
   const ultimoLog = useRef("");
+  const ultimoAnda = useRef("");
 
   const mudo = useSyncExternalStore(sfx.subscribe, sfx.getSnapshot, sfx.getServerSnapshot);
 
@@ -214,11 +218,12 @@ export function MetropoleGame({
         .map((p) => ({
           seat: p.seat,
           cor: p.cor,
-          pos: p.pos,
+          // a posição mostrada, que durante a caminhada fica atrás da real
+          pos: mostrada[p.seat] ?? p.pos,
           nome: nomes[p.seat],
           preso: p.jail > 0,
         })),
-    [entradas, nomes],
+    [entradas, nomes, mostrada],
   );
 
   /* ── relógio ────────────────────────────────────────────────────────── */
@@ -231,6 +236,63 @@ export function MetropoleGame({
     return () => clearInterval(id);
   }, [match.turn_deadline, acabou]);
 
+  /* ── O PEÃO ANDA ────────────────────────────────────────────────────
+     Teleportar o peão mata metade da sensação do jogo: andar doze casas tem
+     de PARECER doze casas. O PRD pede um passo por casa, acelerando — 140ms
+     nas primeiras, 60ms depois da quarta — e é isso.
+
+     A caminhada é encenação de um fato: o servidor já resolveu tudo, e a
+     linha `anda` do registro diz de onde para onde o DADO levou. O que vem
+     depois (uma carta que manda para o Leblon, "Vá para a Cadeia") é
+     teleporte também na história, então acontece de uma vez no fim.
+
+     O setState mora dentro dos temporizadores, que é onde ele é legítimo. */
+  useEffect(() => {
+    const nova = st.log?.find((l) => l.k === "anda");
+    const seat = nova?.seat;
+    const destino = nova?.para;
+    if (typeof seat !== "number" || typeof destino !== "number") return;
+
+    const chave = `${nova?.seq ?? ""}:${seat}:${destino}`;
+    if (chave === ultimoAnda.current) return;
+    ultimoAnda.current = chave;
+
+    const soma = (nova?.d?.[0] ?? 0) + (nova?.d?.[1] ?? 0);
+    const partida = (((destino - soma) % 40) + 40) % 40;
+    const real = st.players[String(seat)]?.pos ?? destino;
+
+    // quem pediu menos movimento recebe o resultado, sem a caminhada
+    const parado =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+    let vivo = true;
+    let id: ReturnType<typeof setTimeout>;
+    const passo = (i: number) => {
+      if (!vivo) return;
+      if (i > soma) {
+        // a caminhada acabou; o que a CASA fez com o peão é instantâneo
+        setMostrada((m) => ({ ...m, [seat]: real }));
+        return;
+      }
+      setMostrada((m) => ({ ...m, [seat]: (partida + i) % 40 }));
+      if (i > 0) sfx.passo("ladrilho");
+      // acelera depois da quarta casa: a distância se sente sem a espera doer
+      id = setTimeout(() => passo(i + 1), i < 4 ? 140 : 60);
+    };
+
+    /* Tudo — inclusive o caminho de movimento reduzido — entra por um
+       temporizador. Não é cerimônia: `setState` no corpo de um efeito encadeia
+       renderização, e o React pede para não fazer. Dentro do temporizador é
+       legítimo, porque ali o efeito está reagindo a um sistema externo. */
+    id = setTimeout(() => passo(parado || soma <= 0 ? soma + 1 : 0), 0);
+
+    return () => {
+      vivo = false;
+      clearTimeout(id);
+    };
+  }, [st.log, st.players]);
+
   /* ── som conforme o registro anda ───────────────────────────────────── */
   useEffect(() => {
     const nova = st.log?.[0];
@@ -238,8 +300,9 @@ export function MetropoleGame({
     const chave = JSON.stringify(nova);
     if (chave === ultimoLog.current) return;
     ultimoLog.current = chave;
-    if (nova.k === "anda") sfx.dado();
-    else if (nova.k === "compra" || nova.k === "leilao-fecha") sfx.conquista();
+    // o `anda` não toca mais aqui: quem faz som na caminhada é o passo, casa
+    // por casa, e o dado já tocou quando o botão foi apertado
+    if (nova.k === "compra" || nova.k === "leilao-fecha") sfx.conquista();
     else if (nova.k === "lance") sfx.clique();
     else if (nova.k === "carta") sfx.carta();
     else if (nova.k === "cadeia") sfx.eliminado();
@@ -674,7 +737,11 @@ export function MetropoleGame({
             <button
               className="btn btn-brass met-rolar"
               disabled={ocupado}
-              onClick={() => void chama("met_roll", { p_match: match.id })}
+              onClick={() => {
+                sfx.arm();
+                sfx.dado();
+                void chama("met_roll", { p_match: match.id });
+              }}
             >
               Rolar os dados
             </button>

@@ -88,6 +88,53 @@ export function MapaVantara({
         role="group"
         aria-label="Mapa de Vantara"
       >
+        {/* As tramas das facções, definidas uma vez e referenciadas por CSS.
+            `patternUnits="userSpaceOnUse"` mantém a trama do mesmo tamanho em
+            todas as peças — com `objectBoundingBox` ela esticaria junto com o
+            retângulo e duas facções ficariam parecidas de novo. */}
+        <defs>
+          <pattern id="tex-ponto" width="10" height="10" patternUnits="userSpaceOnUse">
+            <circle cx="5" cy="5" r="1.7" fill="#fff" fillOpacity="0.3" />
+          </pattern>
+          <pattern
+            id="tex-diag-d"
+            width="9"
+            height="9"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <rect width="3" height="9" fill="#fff" fillOpacity="0.22" />
+          </pattern>
+          <pattern
+            id="tex-diag-e"
+            width="9"
+            height="9"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(-45)"
+          >
+            <rect width="3" height="9" fill="#fff" fillOpacity="0.22" />
+          </pattern>
+          <pattern id="tex-vert" width="9" height="9" patternUnits="userSpaceOnUse">
+            <rect width="3" height="9" fill="#fff" fillOpacity="0.22" />
+          </pattern>
+          <pattern id="tex-horiz" width="9" height="9" patternUnits="userSpaceOnUse">
+            <rect width="9" height="3" fill="#fff" fillOpacity="0.22" />
+          </pattern>
+          <pattern
+            id="tex-xadrez"
+            width="9"
+            height="9"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <rect width="3" height="9" fill="#fff" fillOpacity="0.2" />
+            <rect width="9" height="3" fill="#fff" fillOpacity="0.2" />
+          </pattern>
+          <pattern id="tex-grade" width="11" height="11" patternUnits="userSpaceOnUse">
+            <rect width="11" height="2.5" fill="#fff" fillOpacity="0.26" />
+            <rect width="2.5" height="11" fill="#fff" fillOpacity="0.26" />
+          </pattern>
+        </defs>
         {/* ── placas de continente ────────────────────────────────────────
             Cada continente é um grupo com opacidade ÚNICA. Se a opacidade
             fosse por retângulo, as sobreposições entre células vizinhas
@@ -152,6 +199,7 @@ export function MapaVantara({
               data-alvo={ehAlvo}
               data-apagado={apagado}
               data-meu={meu}
+              data-cor={cores[dono] ?? "grafite"}
               data-mexeu={mexeuSet.has(t.id)}
               onClick={() => !disabled && onEscolher(t.id)}
               role="button"
@@ -185,6 +233,27 @@ export function MapaVantara({
                 height={PECA}
                 rx={16}
                 fill={cor.enamel}
+              />
+              {/* A TEXTURA DA FACÇÃO, por cima do esmalte.
+                  Critério de aceite do PRD: duas facções quaisquer têm de ser
+                  distinguíveis em protanopia, deuteranopia e tritanopia. As
+                  oito cores do projeto não garantem isso — vermelho e verde
+                  caem no mesmo tom em duas dessas condições, e o mapa pode ter
+                  as duas na mesma partida. Confundir facção num mapa de guerra
+                  é atacar o aliado.
+
+                  A solução não é trocar a paleta: a cor é como as pessoas
+                  falam ("o vermelho vai me atacar"). É somar uma textura, e
+                  oito texturas continuam sendo oito coisas em escala de cinza
+                  total. Ela é discreta de propósito — quem vê cor não deve
+                  notar; quem não vê, sim. */}
+              <rect
+                className="ter-textura"
+                x={x}
+                y={y}
+                width={PECA}
+                height={PECA}
+                rx={16}
               />
               <text className="ter-num" x={x + PECA / 2} y={y + PECA / 2 + 1} fill={cor.ink}>
                 {n}

@@ -913,6 +913,290 @@ ok(
     : `fronteira de mão única: ${assimetrias.join(", ")}`,
 );
 
+/* ══════════════════════════════════════════════════════════════════════════
+   14. O MODO CAMPANHA
+
+   O modo era gravado no estado e não era lido por nada. Agora vale, e é o
+   padrão. Três coisas para verificar, e nenhuma delas é o combate:
+
+     · o PLACAR soma o que o PRD manda somar, incluindo o −2 da passividade
+     · quem é ZERADO volta na rodada seguinte, e o líder paga por isso
+     · a partida ACABA na rodada 12, sempre
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const MAPA_C = MAPA; // já carregado acima
+
+/** Um estado de Campanha montado à mão, com os donos que eu quiser. */
+function campanha(donos, extra = {}) {
+  const exercitos = {};
+  for (const t of MAPA_C.territorios) exercitos[t.id] = 1;
+  return {
+    map: "vantara",
+    mode: "campanha",
+    round: 3,
+    rodadaFinal: 12,
+    phase: "ataque",
+    turnSeat: 0,
+    donos,
+    exercitos,
+    players: [
+      { seat: 0, userId: "x", cor: "carmim", cartas: 0, ativo: true },
+      { seat: 1, userId: "y", cor: "prussia", cartas: 0, ativo: true },
+      { seat: 2, userId: "z", cor: "oliva", cartas: 0, ativo: true },
+    ],
+    eliminados: [],
+    conquistou: false,
+    remanejou: false,
+    trocas: 0,
+    rolls: 0,
+    seq: 0,
+    pontos: {},
+    tomou: {},
+    atacou: {},
+    aguardando: {},
+    abates: {},
+    cartasDadas: 0,
+    avanco: null,
+    log: [],
+    vencedor: null,
+    ...extra,
+  };
+}
+
+async function pontua(estado) {
+  const r = await db.query(
+    `select public.dominio_pontua(gt.data, $1::jsonb) v
+       from public.game_themes gt where gt.id = 'vantara'`,
+    [JSON.stringify(estado)],
+  );
+  return r.rows[0].v;
+}
+
+/* ── o placar ───────────────────────────────────────────────────────────── */
+
+// reparte: 0 fica com Aurélia inteira (6 territórios, bônus 5), o resto para 1
+const aureliaC = {};
+for (const t of MAPA_C.territorios) {
+  aureliaC[t.id] = t.continente === "aurelia" ? 0 : 1;
+}
+const nAurelia = MAPA_C.territorios.filter((t) => t.continente === "aurelia").length;
+const bonusAurelia = MAPA_C.continentes.find((c) => c.id === "aurelia").bonus;
+
+let pc = await pontua(campanha(aureliaC, { atacou: { 0: true, 1: true, 2: true } }));
+ok(
+  Number(pc.pontos["0"]) === nAurelia + bonusAurelia * 2,
+  `território (${nAurelia}) + continente inteiro (${bonusAurelia}×2) = ${nAurelia + bonusAurelia * 2} pontos`,
+);
+/* Cuidado que a primeira versão deste teste não teve: dar a um jogador TUDO
+   menos Aurélia dá a ele CINCO continentes inteiros, e cada um vale o dobro do
+   bônus. O motor estava certo; a expectativa estava errada. */
+const outrosBonus = MAPA_C.continentes
+  .filter((c) => c.id !== "aurelia")
+  .reduce((soma, c) => soma + c.bonus * 2, 0);
+ok(
+  Number(pc.pontos["1"]) === 42 - nAurelia + outrosBonus,
+  `quem fica com o resto do mapa soma ${42 - nAurelia} territórios mais ${outrosBonus} dos cinco continentes que fechou`,
+);
+ok(Number(pc.pontos["2"]) === 0, "quem não tem nada e atacou fica em zero");
+
+// o −2 da passividade
+pc = await pontua(campanha(aureliaC, { atacou: { 0: true, 1: true } }));
+ok(
+  Number(pc.pontos["2"]) === -2,
+  "rodada inteira sem atacar ninguém custa −2 — é o dente do anti-passividade",
+);
+
+// território tomado nesta rodada vale +1 cada
+pc = await pontua(
+  campanha(aureliaC, { atacou: { 0: true, 1: true, 2: true }, tomou: { 0: 3 } }),
+);
+ok(
+  Number(pc.pontos["0"]) === nAurelia + bonusAurelia * 2 + 3,
+  "cada território tomado de outro nesta rodada vale +1",
+);
+
+// e os contadores da rodada zeram
+ok(
+  JSON.stringify(pc.tomou) === "{}" && JSON.stringify(pc.atacou) === "{}",
+  "`tomou` e `atacou` zeram depois de contar: valem por rodada, não pela partida",
+);
+
+// o placar ACUMULA entre rodadas
+const acumula = await pontua({
+  ...campanha(aureliaC, { atacou: { 0: true, 1: true, 2: true } }),
+  pontos: { 0: 100 },
+});
+ok(
+  Number(acumula.pontos["0"]) === 100 + nAurelia + bonusAurelia * 2,
+  "e soma sobre o que já havia: o placar é acumulado, não recalculado",
+);
+
+/* ── a volta de quem foi zerado ─────────────────────────────────────────── */
+
+async function restaura(estado, rodada, seed = 555) {
+  const r = await db.query(
+    `select public.dominio_restaura(gt.data, $1::jsonb, $2::bigint, $3) v
+       from public.game_themes gt where gt.id = 'vantara'`,
+    [JSON.stringify(estado), seed, rodada],
+  );
+  return r.rows[0].v;
+}
+
+// 1 tem tudo menos Aurélia; 2 foi zerado e volta na rodada 4
+const zerado = campanha(aureliaC, { aguardando: { 2: 4 } });
+// dá ao líder um território fraquinho, para conferir que é ele que sai
+const doLider = MAPA_C.territorios.find((t) => t.continente !== "aurelia").id;
+zerado.exercitos[doLider] = 1;
+for (const t of MAPA_C.territorios) {
+  if (t.continente !== "aurelia" && t.id !== doLider) zerado.exercitos[t.id] = 9;
+}
+
+const cedo = await restaura(zerado, 3);
+ok(
+  Number(cedo.aguardando["2"]) === 4,
+  "na rodada 3 ele ainda não volta — a volta é na rodada seguinte à queda",
+);
+
+const voltou = await restaura(zerado, 4);
+ok(
+  JSON.stringify(voltou.aguardando) === "{}",
+  "na rodada 4 ele volta e sai da lista de espera",
+);
+const meusAgora = Object.entries(voltou.donos).filter(([, s]) => s === 2);
+ok(meusAgora.length === 1, `e volta com exatamente um território (${meusAgora[0]?.[0]})`);
+ok(
+  Number(voltou.exercitos[meusAgora[0][0]]) === 3,
+  "com três exércitos — fraco, como o PRD manda",
+);
+ok(
+  meusAgora[0][0] === doLider,
+  `e o território saiu do MAIS FRACO de quem tinha MAIS: ${doLider}`,
+);
+ok(
+  voltou.log.some((l) => l.k === "volta"),
+  "e o registro conta de quem ele saiu",
+);
+
+// ninguém aguardando: a função não mexe em nada
+/* A comparação é por CONTEÚDO e não por string: o jsonb devolve as chaves na
+   ordem dele (por comprimento, depois por bytes), então `JSON.stringify` dos
+   dois lados nunca bate mesmo quando o conteúdo é idêntico. */
+const semNinguem = await restaura(campanha(aureliaC), 5);
+const iguais = Object.keys(aureliaC).every(
+  (k) => Number(semNinguem.donos[k]) === aureliaC[k],
+);
+ok(
+  iguais && Object.keys(semNinguem.donos).length === Object.keys(aureliaC).length,
+  "sem ninguém aguardando, a restauração não toca no mapa",
+);
+
+/* ── o vocabulário do modo ──────────────────────────────────────────────── */
+
+const salaC = (await rpc(P[0].token, "create_room", { p_game: "dominio" })).body;
+const modoRuimD = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaC.id,
+  p_settings: { modo: "relampago" },
+});
+ok(
+  /BAD_MODE/.test(JSON.stringify(modoRuimD.body)),
+  "o Relâmpago é RECUSADO: o PRD o define com um mapa de 24 territórios que não existe, e rótulo que o jogo não cumpre não entra",
+);
+
+const chaveRuimD = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaC.id,
+  p_settings: { bolao: true },
+});
+ok(
+  /UNKNOWN_SETTING_bolao/.test(JSON.stringify(chaveRuimD.body)),
+  "e chave de outro jogo também",
+);
+
+const classico = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaC.id,
+  p_settings: { modo: "classico" },
+});
+ok(classico.body?.settings?.modo === "classico", "o anfitrião escolhe o Clássico");
+
+const campanhaOk = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaC.id,
+  p_settings: { modo: "campanha" },
+});
+ok(campanhaOk.body?.settings?.modo === "campanha", "e a Campanha");
+
+/* ── uma partida em Campanha: o estado nasce certo ─────────────────────── */
+
+await rpc(P[1].token, "join_room", { p_code: salaC.code });
+await rpc(P[2].token, "join_room", { p_code: salaC.code });
+const jogoC = (await rpc(P[0].token, "dominio_start", { p_room: salaC.id })).body;
+ok(!!jogoC?.id, "partida em Campanha criada");
+if (jogoC?.public_state) {
+  const c = jogoC.public_state;
+  ok(c.mode === "campanha", "o modo ficou gravado como campanha");
+  ok(c.rodadaFinal === 12, "com doze rodadas de prazo");
+  ok(
+    JSON.stringify(c.pontos) === "{}" &&
+      JSON.stringify(c.tomou) === "{}" &&
+      JSON.stringify(c.aguardando) === "{}",
+    "e os contadores da Campanha nascem vazios",
+  );
+}
+
+/* ── o fim por pontos, e os vinte do objetivo ──────────────────────────── */
+
+const porPontos = await db.query(
+  `select public.dominio_termina_pontos($1::uuid, $2::jsonb) v`,
+  [
+    jogoC.id,
+    JSON.stringify({
+      ...campanha(aureliaC),
+      round: 13,
+      pontos: { 0: 40, 1: 55, 2: 12 },
+    }),
+  ],
+);
+ok(
+  porPontos.rows[0].v.vencedor === 1,
+  `venceu quem tinha mais pontos: assento ${porPontos.rows[0].v.vencedor} com 55`,
+);
+ok(
+  porPontos.rows[0].v.fimPor === "pontos",
+  "e a marca diz que acabou por rodadas, não por objetivo",
+);
+ok(
+  Number(porPontos.rows[0].v.pontos["1"]) === 55,
+  "sem os vinte do objetivo — ele não cumpriu objetivo nenhum",
+);
+
+// e o mesmo fim, mas por objetivo: vinte pontos entram
+const porObjetivo = await db.query(
+  `select public.dominio_termina($1::uuid, $2::jsonb, 0::smallint) v`,
+  [
+    jogoC.id,
+    JSON.stringify({ ...campanha(aureliaC), round: 5, pontos: { 0: 18 } }),
+  ],
+);
+ok(
+  Number(porObjetivo.rows[0].v.pontos["0"]) === 38,
+  "objetivo cumprido vale +20 no placar da Campanha (18 → 38)",
+);
+ok(
+  porObjetivo.rows[0].v.fimPor === "objetivo",
+  "e a marca distingue os dois caminhos de fim",
+);
+
+// no Clássico, os vinte não entram
+const noClassico = await db.query(
+  `select public.dominio_termina($1::uuid, $2::jsonb, 0::smallint) v`,
+  [
+    jogoC.id,
+    JSON.stringify({ ...campanha(aureliaC), mode: "classico", pontos: { 0: 18 } }),
+  ],
+);
+ok(
+  Number(noClassico.rows[0].v.pontos["0"]) === 18,
+  "no Clássico não há placar: os vinte pontos não existem lá",
+);
+
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();
 

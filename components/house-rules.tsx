@@ -140,6 +140,36 @@ const CASA_MET = [
   },
 ] as const;
 
+/* ══════════════════════════════════════════════════════════════════════════
+   OS MODOS DO DOMÍNIO
+
+   A Campanha é o padrão recomendado, e é ela que conserta os dois piores
+   problemas do WAR: a partida que não acaba e quem é eliminado cedo assistindo
+   uma hora. Doze rodadas, vitória por pontos, e ninguém sai.
+
+   O Clássico continua ali inteiro, com eliminação de verdade, para quem quer a
+   experiência original — e o texto diz o preço em vez de esconder.
+
+   O Relâmpago do PRD não está aqui: ele pede um mapa de 24 territórios que
+   ainda não existe, e um rótulo que o jogo não cumpre é pior que rótulo
+   nenhum. Quando o mapa existir, ele aparece.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const MODOS_DOM = [
+  {
+    id: "campanha",
+    nome: "Campanha",
+    nota: "Doze rodadas e ganha quem tem mais pontos. Ninguém é eliminado: quem é zerado volta na rodada seguinte com três exércitos, tomados do território mais fraco de quem está na frente. E rodada inteira sem atacar custa dois pontos.",
+    tempo: "45 a 60 min",
+  },
+  {
+    id: "classico",
+    nome: "Clássico",
+    nota: "Acaba quando alguém cumpre o objetivo secreto, e quem perde todos os territórios sai da partida. É a experiência original — inclusive a parte em que alguém assiste o resto da noite.",
+    tempo: "60 a 90 min",
+  },
+] as const;
+
 export function HouseRules({
   room,
   isHost,
@@ -152,7 +182,107 @@ export function HouseRules({
   if (room.game_key === "metropole") {
     return <RegrasMetropole room={room} isHost={isHost} onChanged={onChanged} />;
   }
+  if (room.game_key === "dominio") {
+    return <RegrasDominio room={room} isHost={isHost} onChanged={onChanged} />;
+  }
   return <RegrasLetreiro room={room} isHost={isHost} onChanged={onChanged} />;
+}
+
+function RegrasDominio({
+  room,
+  isHost,
+  onChanged,
+}: {
+  room: Room;
+  isHost: boolean;
+  onChanged: (r: Room) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const modo = (room.settings?.modo as string) ?? "campanha";
+  const oModo = MODOS_DOM.find((m) => m.id === modo);
+
+  async function salvar(id: string) {
+    setBusy(true);
+    setErro(null);
+    const { data, error } = await supabaseBrowser().rpc("set_room_settings", {
+      p_room: room.id,
+      p_settings: { modo: id },
+    });
+    setBusy(false);
+    if (error) {
+      const msg = error.message ?? String(error);
+      setErro(
+        /MATCH_IN_PROGRESS/.test(msg)
+          ? "Não dá para mudar com partida rolando."
+          : /NOT_HOST/.test(msg)
+            ? "Só o anfitrião muda as regras."
+            : msg,
+      );
+      return;
+    }
+    onChanged(data as unknown as Room);
+  }
+
+  return (
+    <div className="panel mt-4 p-5 sm:p-6">
+      <button
+        type="button"
+        className="flex w-full items-baseline justify-between gap-3 text-left"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span>
+          <span className="eyebrow">Regras da casa</span>
+          <span className="mt-1 block text-sm dim">
+            {oModo?.nome} · {oModo?.tempo}
+          </span>
+        </span>
+        <span className="mono text-xs" style={{ color: "var(--vivo-amarelo)" }}>
+          {open ? "fechar" : "mudar"}
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-5 flex flex-col gap-6">
+          {!isHost && (
+            <p className="text-sm dim">
+              Só o anfitrião muda as regras. Você está vendo o que valeu para esta sala.
+            </p>
+          )}
+
+          <fieldset disabled={!isHost || busy} style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="eyebrow mb-3">Modo</legend>
+            <div className="flex flex-col gap-2">
+              {MODOS_DOM.map((m) => (
+                <Opcao
+                  key={m.id}
+                  ativo={modo === m.id}
+                  nome={m.nome}
+                  nota={m.nota}
+                  previa={<span className="regra-tempo">{m.tempo}</span>}
+                  onClick={() => void salvar(m.id)}
+                />
+              ))}
+            </div>
+          </fieldset>
+
+          <p className="text-sm dim">
+            O Relâmpago ainda não está aqui: ele pede um mapa de 24 territórios que não existe, e
+            um rótulo que o jogo não cumpre é pior que rótulo nenhum.
+          </p>
+
+          {erro && (
+            <p className="text-sm" style={{ color: "#ffb3a7" }}>
+              {erro}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function RegrasMetropole({

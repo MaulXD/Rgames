@@ -17,7 +17,14 @@ import * as sfx from "@/lib/sfx";
 
 export type DominioState = {
   map: string;
+  mode?: "campanha" | "classico";
   round: number;
+  /** doze na Campanha; nulo no Clássico */
+  rodadaFinal?: number | null;
+  /** o placar da Campanha, acumulado a cada virada de rodada */
+  pontos?: Record<string, number>;
+  /** assento → rodada em que volta ao mapa (Campanha) */
+  aguardando?: Record<string, number>;
   phase: "reforco" | "ataque" | "remanejo" | "fim";
   turnSeat: number;
   donos: Record<string, number>;
@@ -38,6 +45,7 @@ type LinhaLog = {
   k: string;
   seat?: number;
   ter?: string;
+  /** território de origem, ou (na volta da Campanha) o assento de quem pagou */
   de?: string;
   para?: string;
   n?: number;
@@ -397,6 +405,10 @@ export function DominioGame({
 
   /* ── placar lateral ─────────────────────────────────────────────────── */
   const conta = useMemo(() => placar(visto.donos, visto.exercitos), [visto]);
+  const ehCampanha = (st.mode ?? "campanha") === "campanha";
+  const aguarda = (seat: number) =>
+    st.aguardando?.[String(seat)] !== undefined &&
+    st.aguardando[String(seat)] > st.round;
   const maiorForca = Math.max(1, ...[...conta.values()].map((x) => x.forca));
 
   const urgente = resto <= 20 && resto > 0 && minhaVez;
@@ -464,7 +476,10 @@ export function DominioGame({
           aria-hidden
         />
         <div className="turno-quem">
-          <p className="eyebrow">Rodada {st.round}</p>
+          <p className="eyebrow">
+            Rodada {st.round}
+            {st.rodadaFinal ? ` de ${st.rodadaFinal}` : ""}
+          </p>
           <p className="turno-nome">
             {minhaVez ? "Sua vez" : `Vez de ${nomePorAssento[st.turnSeat]}`}
           </p>
@@ -761,8 +776,17 @@ export function DominioGame({
                   aria-hidden
                 />
                 <span className="dominio-jogador-nome">{nomePorAssento[p.seat]}</span>
-                {p.ativo ? (
+                {aguarda(p.seat) ? (
+                  <span className="dominio-volta">
+                    volta na rodada {st.aguardando![String(p.seat)]}
+                  </span>
+                ) : p.ativo ? (
                   <>
+                    {ehCampanha && (
+                      <span className="mono dominio-pontos">
+                        {st.pontos?.[String(p.seat)] ?? 0}
+                      </span>
+                    )}
                     <span className="dominio-barra">
                       <span
                         style={{
@@ -784,8 +808,19 @@ export function DominioGame({
           })}
         </ul>
         <p className="dim dominio-mesa-nota">
-          A barra é a força total; o número é quantos territórios. A mão de cada um é pública em
-          quantidade e secreta em conteúdo.
+          {ehCampanha ? (
+            <>
+              O número em amarelo é o PLACAR. Ele soma, a cada virada de rodada: um por território,
+              o dobro do bônus por continente inteiro, um por território tomado de alguém — e{" "}
+              <strong>menos dois se você passou a rodada sem atacar ninguém</strong>. Cumprir o
+              objetivo secreto vale vinte e acaba a partida na hora.
+            </>
+          ) : (
+            <>
+              A barra é a força total; o número é quantos territórios. A mão de cada um é pública em
+              quantidade e secreta em conteúdo.
+            </>
+          )}
         </p>
       </div>
 
@@ -905,6 +940,16 @@ function Registro({ log, nomes }: { log: LinhaLog[]; nomes: Record<number, strin
         return `${quem(l.seat)} perdeu o turno no relógio`;
       case "vitoria":
         return `${quem(l.seat)} cumpriu o objetivo`;
+      case "placar":
+        return "fim da rodada: o placar foi somado";
+      case "zerado":
+        return `${quem(l.seat)} ficou sem território — volta na próxima rodada`;
+      case "volta":
+        return `${quem(l.seat)} voltou ao mapa em ${onde(l.ter)}, tomado de ${quem(l.de as unknown as number)}`;
+      case "objetivo-cumprido":
+        return `${quem(l.seat)} cumpriu o objetivo secreto: +${l.n} pontos`;
+      case "fim-rodadas":
+        return `acabaram as doze rodadas: ${quem(l.seat)} venceu com ${l.n} pontos`;
       default:
         return l.k;
     }

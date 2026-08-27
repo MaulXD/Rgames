@@ -952,3 +952,84 @@
     stroke-dasharray: none;
   }
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AS OITO FACÇÕES, DISTINGUÍVEIS SEM COR
+
+   Critério de aceite do PRD do Domínio: "duas facções quaisquer distinguíveis
+   em protanopia, deuteranopia e tritanopia".
+
+   As oito cores do projeto não garantem isso. Carmim e oliva — vermelho e
+   verde — caem praticamente no mesmo tom em deuteranopia e em protanopia, e
+   nada impede as duas de estarem na mesma partida. Num mapa de guerra,
+   confundir facção é atacar o aliado.
+
+   A textura resolve sem tocar na paleta, que é como as pessoas falam do jogo
+   ("o vermelho vai me atacar"). Cada assento tem uma trama distinta, em
+   branco de baixa opacidade sobre o esmalte: quem vê cor quase não nota; quem
+   não vê, distingue.
+
+   As tramas foram escolhidas para não se confundirem entre si nem em tamanho
+   pequeno: liso, ponto, três direções de listra, dois xadrezes e uma grade.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.ter-textura {
+  fill: none;
+  pointer-events: none;
+}
+
+/* carmim — liso (a facção de referência) */
+
+/* terracota — pontos */
+.ter[data-cor="terracota"] .ter-textura {
+  fill: url(#tex-ponto);
+}
+/* ocre — listra para a direita */
+.ter[data-cor="ocre"] .ter-textura {
+  fill: url(#tex-diag-d);
+}
+/* oliva — listra para a esquerda (o par do carmim, e o que mais precisava) */
+.ter[data-cor="oliva"] .ter-textura {
+  fill: url(#tex-diag-e);
+}
+/* jade — listra vertical */
+.ter[data-cor="jade"] .ter-textura {
+  fill: url(#tex-vert);
+}
+/* grafite — listra horizontal */
+.ter[data-cor="grafite"] .ter-textura {
+  fill: url(#tex-horiz);
+}
+/* prussia — xadrez diagonal */
+.ter[data-cor="prussia"] .ter-textura {
+  fill: url(#tex-xadrez);
+}
+/* vinho — grade */
+.ter[data-cor="vinho"] .ter-textura {
+  fill: url(#tex-grade);
+}
+
+/* o placar da Campanha, na linha de cada jogador */
+.dominio-pontos {
+  flex: none;
+  min-width: 2.6ch;
+  padding: 0.08rem 0.4rem;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--vivo-amarelo);
+  color: var(--ink);
+  font-size: 0.74rem;
+  font-weight: 800;
+  text-align: center;
+}
+/* e quem está fora do mapa esperando a volta */
+.dominio-volta {
+  flex: 1;
+  padding: 0.1rem 0.5rem;
+  border: 2px dashed var(--line-strong);
+  border-radius: 999px;
+  color: var(--fg-faint);
+  font-size: 0.7rem;
+  text-align: center;
+}

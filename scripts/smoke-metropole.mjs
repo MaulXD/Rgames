@@ -596,7 +596,11 @@ if (partida?.public_state) {
     ok(st.props[outraMinha].hipotecada === true, "a propriedade está marcada como hipotecada");
     ok((await aluguel(st, outraMinha)) === 0, "e enquanto hipotecada não cobra aluguel");
 
-    const juros = Math.ceil(CASA[outraMinha].hipoteca * 1.1);
+    /* A CONTA EM INTEIRO, e é ela que pegou o furo: `ceil(1300 * 1.1)` em
+       ponto flutuante dá 1431, porque o produto binário é 1430,0000000000002.
+       O servidor usa `numeric` e dá 1430. Seis das treze faixas de hipoteca do
+       tabuleiro divergiam, e a tela prometeria um real a mais que o cobrado. */
+    const juros = Math.ceil((CASA[outraMinha].hipoteca * 110) / 100);
     const resg = await rpc(donoAzul.token, "met_unmortgage", {
       p_match: partida.id,
       p_prop: outraMinha,
@@ -660,6 +664,568 @@ if (partida?.public_state) {
     ok(r.status >= 400, `o cliente NÃO chama ${fn} (status ${r.status})`);
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   6. A MESA DE NEGOCIAÇÃO E OS CONTRATOS
+
+   É a parte com mais jeito de criar dinheiro do nada, e por isso a mais
+   testada. Três furos possíveis, e cada um tem seu teste:
+
+     · aceitar uma proposta que ficou impossível (o mundo andou entre propor
+       e aceitar) — transferiria o que ninguém tem
+     · isenção que não expira — o aluguel simplesmente para de existir
+     · parcela cobrada na rodada errada, ou duas vezes
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Grava um estado inteiro na partida, para montar cenário.
+ *
+ * E EMPURRA O RELÓGIO. `met_sweep` roda por cron a cada minuto e passa a vez
+ * de quem estourou o prazo — o que é certo em partida e é uma corrida em
+ * teste: entre montar o cenário e agir, a faxina podia avançar o turno e o
+ * teste falhava sem nada estar errado. Uma execução falhou exatamente assim
+ * antes desta linha existir.
+ */
+async function poe(matchId, mudanca) {
+  const atual = (await db.query("select public_state from matches where id = $1", [matchId]))
+    .rows[0].public_state;
+  const novo = { ...atual, ...mudanca };
+  await db.query(
+    `update matches
+        set public_state = $2::jsonb,
+            turn_deadline = now() + interval '30 minutes'
+      where id = $1`,
+    [matchId, JSON.stringify(novo)],
+  );
+  return novo;
+}
+
+async function leia(matchId) {
+  return (await db.query("select public_state from matches where id = $1", [matchId])).rows[0]
+    .public_state;
+}
+
+/* ── uma partida limpa, com os três de novo ─────────────────────────────── */
+
+const sala2 = (await rpc(P[0].token, "create_room", { p_game: "metropole" })).body;
+await rpc(P[1].token, "join_room", { p_code: sala2.code });
+await rpc(P[2].token, "join_room", { p_code: sala2.code });
+const jogo2 = (await rpc(P[0].token, "met_start", { p_room: sala2.id })).body;
+ok(!!jogo2?.id, "segunda partida criada para testar negociação");
+
+// assento de cada jogador
+const assentoDe = {};
+for (const linha of (
+  await db.query("select user_id, seat from match_players where match_id = $1", [jogo2.id])
+).rows) {
+  assentoDe[linha.user_id] = linha.seat;
+}
+const A = P.find((x) => assentoDe[x.id] === 0);
+const B = P.find((x) => assentoDe[x.id] === 1);
+const C = P.find((x) => assentoDe[x.id] === 2);
+ok(!!A && !!B && !!C, "os três assentos identificados");
+
+// dá a A e a B uma propriedade conhecida cada, e caixa redondo
+let e2 = await leia(jogo2.id);
+const props2 = { ...e2.props };
+for (const id of Object.keys(props2)) {
+  props2[id] = { owner: null, casas: 0, hotel: false, hipotecada: false };
+}
+props2["ipanema"] = { owner: 0, casas: 0, hotel: false, hipotecada: false };
+props2["leblon"] = { owner: 1, casas: 0, hotel: false, hipotecada: false };
+props2["jardins"] = { owner: 1, casas: 0, hotel: false, hipotecada: false };
+e2 = await poe(jogo2.id, {
+  props: props2,
+  players: {
+    0: { ...e2.players[0], cash: 10000 },
+    1: { ...e2.players[1], cash: 10000 },
+    2: { ...e2.players[2], cash: 10000 },
+  },
+  ofertas: [],
+  contratos: [],
+  cSeq: 0,
+});
+
+/* ── validação da proposta ──────────────────────────────────────────────── */
+
+const propriaOferta = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 0,
+  p_da: {},
+  p_quer: {},
+});
+ok(/SELF_OFFER/.test(JSON.stringify(propriaOferta.body)), "ninguém negocia consigo mesmo");
+
+const vazia = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 1,
+  p_da: {},
+  p_quer: {},
+});
+ok(/EMPTY_OFFER/.test(JSON.stringify(vazia.body)), "proposta vazia dos dois lados é recusada");
+
+const semGrana = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 1,
+  p_da: { dinheiro: 99999 },
+  p_quer: { props: ["leblon"] },
+});
+ok(
+  /NOT_ENOUGH_CASH/.test(JSON.stringify(semGrana.body)),
+  "não se oferece dinheiro que não se tem",
+);
+
+const naoMinha = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 1,
+  p_da: { props: ["leblon"] },
+  p_quer: { dinheiro: 100 },
+});
+ok(/NOT_YOURS/.test(JSON.stringify(naoMinha.body)), "não se oferece escritura alheia");
+
+const naoDele = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 1,
+  p_da: { dinheiro: 100 },
+  p_quer: { props: ["ipanema"] },
+});
+ok(
+  /THEY_NOT_YOURS/.test(JSON.stringify(naoDele.body)),
+  "nem se pede o que o outro não tem — e o erro diz de que lado está o problema",
+);
+
+// com construção, a escritura não passa de mão
+await poe(jogo2.id, {
+  props: { ...props2, ipanema: { owner: 0, casas: 2, hotel: false, hipotecada: false } },
+});
+const comObra = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 1,
+  p_da: { props: ["ipanema"] },
+  p_quer: { dinheiro: 100 },
+});
+ok(
+  /BUILDINGS_ON_PROP/.test(JSON.stringify(comObra.body)),
+  "escritura com construção não passa de mão — venda as casas primeiro",
+);
+await poe(jogo2.id, { props: props2 });
+
+/* ── proposta aceita: dinheiro e escritura, numa transação ─────────────── */
+
+const antes0 = (await leia(jogo2.id)).players[0].cash;
+const antes1 = (await leia(jogo2.id)).players[1].cash;
+
+const oferta1 = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 1,
+  p_da: { dinheiro: 3000 },
+  p_quer: { props: ["leblon"] },
+});
+ok(oferta1.status === 200, "A propõe R$ 3.000 pelo Leblon");
+e2 = oferta1.body.public_state;
+ok(e2.ofertas.length === 1, "a proposta entrou na mesa");
+const idOferta = e2.ofertas[0].id;
+
+const naoParaMim = await rpc(C.token, "met_offer_reply", {
+  p_match: jogo2.id,
+  p_id: idOferta,
+  p_aceita: true,
+});
+ok(
+  /NOT_FOR_YOU/.test(JSON.stringify(naoParaMim.body)),
+  "quem não é o destinatário não responde pela proposta",
+);
+
+const aceita = await rpc(B.token, "met_offer_reply", {
+  p_match: jogo2.id,
+  p_id: idOferta,
+  p_aceita: true,
+});
+ok(aceita.status === 200, "B aceita");
+e2 = aceita.body.public_state;
+ok(e2.props.leblon.owner === 0, "o Leblon mudou de dono");
+ok(e2.players[0].cash === antes0 - 3000, "A pagou");
+ok(e2.players[1].cash === antes1 + 3000, "B recebeu");
+ok(
+  e2.players[0].cash + e2.players[1].cash + e2.players[2].cash === antes0 + antes1 + 10000,
+  "o dinheiro total da mesa não mudou no acordo",
+);
+ok(e2.ofertas.length === 0, "e a proposta saiu da mesa");
+
+/* ── recusar, retirar, e o teto de propostas ────────────────────────────── */
+
+await poe(jogo2.id, { props: props2, ofertas: [] });
+const of2 = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 1,
+  p_da: { dinheiro: 500 },
+  p_quer: { props: ["jardins"] },
+});
+const id2 = of2.body.public_state.ofertas[0].id;
+const recusa = await rpc(B.token, "met_offer_reply", {
+  p_match: jogo2.id,
+  p_id: id2,
+  p_aceita: false,
+});
+ok(recusa.status === 200, "B recusa");
+e2 = recusa.body.public_state;
+ok(e2.ofertas.length === 0 && e2.props.jardins.owner === 1, "recusar não move nada");
+
+const of3 = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 1,
+  p_da: { dinheiro: 100 },
+  p_quer: { props: ["jardins"] },
+});
+const id3 = of3.body.public_state.ofertas[0].id;
+const alheia = await rpc(B.token, "met_offer_cancel", { p_match: jogo2.id, p_id: id3 });
+ok(/NOT_YOURS/.test(JSON.stringify(alheia.body)), "só quem propôs retira a proposta");
+const retira = await rpc(A.token, "met_offer_cancel", { p_match: jogo2.id, p_id: id3 });
+ok(retira.body.public_state.ofertas.length === 0, "quem propôs retira");
+
+for (let i = 0; i < 3; i++) {
+  await rpc(A.token, "met_offer", {
+    p_match: jogo2.id,
+    p_para: 1,
+    p_da: { dinheiro: 100 + i },
+    p_quer: { props: ["jardins"] },
+  });
+}
+const quarta = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 1,
+  p_da: { dinheiro: 999 },
+  p_quer: { props: ["jardins"] },
+});
+ok(
+  /TOO_MANY_OFFERS/.test(JSON.stringify(quarta.body)),
+  "três propostas abertas por pessoa é o teto — sem isso dá para afogar a mesa",
+);
+
+/* ── A PROPOSTA QUE FICOU IMPOSSÍVEL ────────────────────────────────────
+   O furo mais perigoso: entre propor e aceitar, o mundo anda. */
+
+// o caixa precisa ser reposto: A gastou R$ 3.000 no acordo de antes
+e2 = await leia(jogo2.id);
+await poe(jogo2.id, {
+  props: props2,
+  ofertas: [],
+  players: {
+    0: { ...e2.players[0], cash: 10000 },
+    1: { ...e2.players[1], cash: 10000 },
+    2: { ...e2.players[2], cash: 10000 },
+  },
+});
+const ofStale = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 1,
+  p_da: { dinheiro: 9000 },
+  p_quer: { props: ["leblon"] },
+});
+const idStale = ofStale.body.public_state.ofertas[0].id;
+
+// A gasta o dinheiro depois de propor
+e2 = await leia(jogo2.id);
+await poe(jogo2.id, { players: { ...e2.players, 0: { ...e2.players[0], cash: 100 } } });
+
+const stale = await rpc(B.token, "met_offer_reply", {
+  p_match: jogo2.id,
+  p_id: idStale,
+  p_aceita: true,
+});
+ok(
+  /OFFER_STALE_NOT_ENOUGH_CASH/.test(JSON.stringify(stale.body)),
+  "aceitar proposta que ficou impossível é recusado, e o erro diz que ela venceu",
+);
+e2 = await leia(jogo2.id);
+ok(e2.props.leblon.owner === 1, "e nada mudou de mão");
+
+/* ── PARCELAMENTO: o servidor cobra sozinho ────────────────────────────── */
+
+await poe(jogo2.id, {
+  props: props2,
+  ofertas: [],
+  contratos: [],
+  players: {
+    0: { ...e2.players[0], cash: 10000 },
+    1: { ...e2.players[1], cash: 10000 },
+    2: { ...e2.players[2], cash: 10000 },
+  },
+});
+
+const ofParcela = await rpc(A.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 1,
+  p_da: { parcela: { valor: 500, rodadas: 3 } },
+  p_quer: { props: ["leblon"] },
+});
+ok(ofParcela.status === 200, "A oferece R$ 500 por rodada durante 3 rodadas pelo Leblon");
+const idParc = ofParcela.body.public_state.ofertas[0].id;
+const fechou = await rpc(B.token, "met_offer_reply", {
+  p_match: jogo2.id,
+  p_id: idParc,
+  p_aceita: true,
+});
+e2 = fechou.body.public_state;
+ok(e2.props.leblon.owner === 0, "o Leblon foi para A na hora — só o pagamento é parcelado");
+ok(e2.contratos.length === 1 && e2.contratos[0].tipo === "parcela", "o contrato existe");
+ok(
+  e2.contratos[0].de === 0 && e2.contratos[0].para === 1 && e2.contratos[0].rodadas === 3,
+  "com devedor, credor e prazo certos",
+);
+ok(
+  e2.players[0].cash === 10000,
+  "e NADA foi debitado ainda: a primeira parcela sai no próximo turno de A",
+);
+
+// cobra três vezes, direto na função, e confere que expira
+let estado = e2;
+for (let n = 3; n >= 1; n--) {
+  const r = await db.query("select public.met_cobra_contratos($1::jsonb, 0::smallint) v", [
+    JSON.stringify(estado),
+  ]);
+  estado = r.rows[0].v;
+  const esperado = 10000 - 500 * (4 - n);
+  ok(
+    estado.players[0].cash === esperado,
+    `parcela ${4 - n} debitada: A com ${estado.players[0].cash} (esperado ${esperado})`,
+  );
+  ok(
+    n === 1 ? estado.contratos.length === 0 : estado.contratos[0].rodadas === n - 1,
+    n === 1 ? "na terceira, o contrato acabou e saiu do estado" : `faltam ${n - 1} parcelas`,
+  );
+}
+const r4 = await db.query("select public.met_cobra_contratos($1::jsonb, 0::smallint) v", [
+  JSON.stringify(estado),
+]);
+ok(
+  r4.rows[0].v.players[0].cash === estado.players[0].cash,
+  "e uma quarta cobrança não tira mais nada — três rodadas são três",
+);
+
+// a parcela cobrada no turno do CREDOR não debita ninguém
+const noCredor = await db.query("select public.met_cobra_contratos($1::jsonb, 1::smallint) v", [
+  JSON.stringify(e2),
+]);
+ok(
+  noCredor.rows[0].v.players[0].cash === 10000,
+  "a parcela é cobrada no turno do DEVEDOR, não no do credor",
+);
+
+// e ela entra na máquina de dívida se o caixa não cobre
+const pobre = { ...e2, players: { ...e2.players, 0: { ...e2.players[0], cash: 100 } } };
+const inadim = await db.query("select public.met_cobra_contratos($1::jsonb, 0::smallint) v", [
+  JSON.stringify(pobre),
+]);
+ok(
+  inadim.rows[0].v.players[0].cash === -400,
+  "devedor sem caixa fica negativo (a inadimplência usa a mesma máquina de dívida)",
+);
+ok(
+  inadim.rows[0].v.players[1].cash === 10500,
+  "e o credor recebe o valor cheio de qualquer jeito",
+);
+
+/* ── ISENÇÃO DE ALUGUEL: aplicada sem pedir, e expira ──────────────────── */
+
+const comIsencao = {
+  ...e2,
+  turnSeat: 0,
+  props: { ...props2, jardins: { owner: 1, casas: 0, hotel: false, hipotecada: false } },
+  players: {
+    0: { ...e2.players[0], cash: 10000, pos: 39 },
+    1: { ...e2.players[1], cash: 10000 },
+    2: { ...e2.players[2], cash: 10000 },
+  },
+  contratos: [
+    {
+      id: "cx",
+      tipo: "isencao",
+      de: 1,
+      para: 0,
+      valor: 0,
+      rodadas: 2,
+      props: ["jardins"],
+      ate: null,
+    },
+  ],
+};
+const pousaIsento = await pousa(comIsencao, 0);
+ok(
+  pousaIsento.players[0].cash === 10000,
+  "com isenção, parar no Jardins do outro não cobra nada",
+);
+ok(
+  pousaIsento.log.some((l) => l.k === "isento"),
+  "e o registro diz que foi isenção, não que o aluguel é zero",
+);
+
+/* Sem a isenção, o mesmo estado cobra — e cobra o DOBRO, porque neste cenário
+   B tem Leblon e Jardins, que são o grupo azul-escuro inteiro. É de propósito:
+   a isenção tem de vencer o aluguel dobrado do monopólio, que é justamente o
+   aluguel por que valeria a pena negociar isenção. */
+const dobrado = CASA.jardins.aluguel[0] * 2;
+const semIsencao = { ...comIsencao, contratos: [] };
+const pousaCobra = await pousa(semIsencao, 0);
+ok(
+  pousaCobra.players[0].cash === 10000 - dobrado,
+  `sem isenção o Jardins cobra R$ ${dobrado} — o dobro, porque B tem o azul-escuro inteiro`,
+);
+
+// isenção de OUTRA propriedade não vale para esta
+const isencaoOutra = {
+  ...comIsencao,
+  contratos: [{ ...comIsencao.contratos[0], props: ["ipanema"] }],
+};
+ok(
+  (await pousa(isencaoOutra, 0)).players[0].cash === 10000 - dobrado,
+  "isenção é por propriedade: a de Ipanema não cobre o Jardins",
+);
+
+// isenção sem lista (props nulo) cobre tudo do credor
+const isencaoTotal = {
+  ...comIsencao,
+  contratos: [{ ...comIsencao.contratos[0], props: null }],
+};
+ok(
+  (await pousa(isencaoTotal, 0)).players[0].cash === 10000,
+  "isenção sem lista cobre TUDO daquele dono — é a isenção total",
+);
+
+// e ela expira: duas cobranças no turno do isentado
+let comoVai = comIsencao;
+for (let i = 0; i < 2; i++) {
+  comoVai = (
+    await db.query("select public.met_cobra_contratos($1::jsonb, 0::smallint) v", [
+      JSON.stringify(comoVai),
+    ])
+  ).rows[0].v;
+}
+ok(comoVai.contratos.length === 0, "duas rodadas depois, a isenção venceu e saiu do estado");
+ok(
+  (await pousa({ ...comoVai, players: { ...comIsencao.players } }, 0)).players[0].cash ===
+    10000 - dobrado,
+  "e o aluguel volta a ser cobrado",
+);
+
+/* ── OPÇÃO DE COMPRA ──────────────────────────────────────────────────── */
+
+await poe(jogo2.id, {
+  props: props2,
+  ofertas: [],
+  contratos: [],
+  round: 3,
+  players: {
+    0: { ...e2.players[0], cash: 10000 },
+    1: { ...e2.players[1], cash: 10000 },
+    2: { ...e2.players[2], cash: 10000 },
+  },
+});
+
+const ofOpcao = await rpc(B.token, "met_offer", {
+  p_match: jogo2.id,
+  p_para: 0,
+  p_da: { opcao: { prop: "leblon", preco: 5000, ate: 14 } },
+  p_quer: { dinheiro: 800 },
+});
+ok(ofOpcao.status === 200, "B vende a A o direito de comprar o Leblon por R$ 5.000 até a rodada 14");
+const idOp = ofOpcao.body.public_state.ofertas[0].id;
+const fechaOp = await rpc(A.token, "met_offer_reply", {
+  p_match: jogo2.id,
+  p_id: idOp,
+  p_aceita: true,
+});
+e2 = fechaOp.body.public_state;
+const contratoOp = e2.contratos.find((c) => c.tipo === "opcao");
+ok(!!contratoOp, "o contrato de opção existe");
+ok(e2.props.leblon.owner === 1, "e o Leblon CONTINUA de B — a opção não é a venda");
+ok(e2.players[1].cash === 10800, "B recebeu o prêmio de R$ 800 pela opção");
+
+const alheio = await rpc(C.token, "met_exercer", { p_match: jogo2.id, p_id: contratoOp.id });
+ok(/NOT_YOURS/.test(JSON.stringify(alheio.body)), "só o titular exerce a opção");
+
+const exerce = await rpc(A.token, "met_exercer", { p_match: jogo2.id, p_id: contratoOp.id });
+ok(exerce.status === 200, "A exerce a opção");
+e2 = exerce.body.public_state;
+ok(e2.props.leblon.owner === 0, "o Leblon passou para A");
+ok(e2.players[0].cash === 10000 - 800 - 5000, "A pagou o preço combinado, não o de tabela");
+ok(e2.contratos.filter((c) => c.tipo === "opcao").length === 0, "e a opção foi consumida");
+
+// opção vencida não vale
+const vencida = {
+  ...e2,
+  round: 20,
+  props: { ...props2 },
+  contratos: [
+    {
+      id: "cv",
+      tipo: "opcao",
+      de: 1,
+      para: 0,
+      valor: 5000,
+      rodadas: 0,
+      props: ["leblon"],
+      ate: 14,
+    },
+  ],
+};
+await poe(jogo2.id, vencida);
+const expirou = await rpc(A.token, "met_exercer", { p_match: jogo2.id, p_id: "cv" });
+ok(/OPTION_EXPIRED/.test(JSON.stringify(expirou.body)), "opção vencida não vale mais");
+
+// e se a propriedade trocou de dono, a opção não vale contra terceiro
+await poe(jogo2.id, {
+  ...vencida,
+  round: 5,
+  props: { ...props2, leblon: { owner: 2, casas: 0, hotel: false, hipotecada: false } },
+});
+const terceiro = await rpc(A.token, "met_exercer", { p_match: jogo2.id, p_id: "cv" });
+ok(
+  /OWNER_CHANGED/.test(JSON.stringify(terceiro.body)),
+  "a opção não vale contra terceiro: se o vendedor passou a escritura, ela cai",
+);
+
+/* ── FALÊNCIA: o contrato sobrevive ao credor, morre com o devedor ─────── */
+
+const paraQuebrar = {
+  ...e2,
+  round: 5,
+  turnSeat: 0,
+  phase: "resolve",
+  pendente: { k: "divida", quanto: 5000, para: 1, motivo: "teste" },
+  props: { ...props2, ipanema: { owner: 0, casas: 0, hotel: false, hipotecada: false } },
+  players: {
+    0: { ...e2.players[0], cash: -5000, quebrado: false, investidor: false },
+    1: { ...e2.players[1], cash: 10000 },
+    2: { ...e2.players[2], cash: 10000 },
+  },
+  contratos: [
+    { id: "cdeve", tipo: "parcela", de: 0, para: 1, valor: 300, rodadas: 5, props: null, ate: null },
+    { id: "crecebe", tipo: "parcela", de: 2, para: 0, valor: 400, rodadas: 5, props: null, ate: null },
+    { id: "cisenta", tipo: "isencao", de: 0, para: 2, valor: 0, rodadas: 4, props: null, ate: null },
+  ],
+  ofertas: [],
+};
+await poe(jogo2.id, paraQuebrar);
+
+const quebrou = await rpc(A.token, "met_bankrupt", { p_match: jogo2.id });
+ok(quebrou.status === 200, `A quebra (${JSON.stringify(quebrou.body).slice(0, 70)})`);
+e2 = quebrou.body.public_state;
+ok(e2.players[0].quebrado === true, "A está fora");
+ok(e2.players[0].investidor === true, "e virou Investidor, não foi eliminado (modo Metrópole)");
+ok(
+  !e2.contratos.some((c) => c.id === "cdeve"),
+  "a parcela que A DEVIA morreu — não se cobra de quem não tem nada",
+);
+ok(
+  e2.contratos.some((c) => c.id === "crecebe"),
+  "a parcela que A RECEBIA sobreviveu: o azar do credor não perdoa o devedor",
+);
+ok(
+  !e2.contratos.some((c) => c.id === "cisenta"),
+  "e a isenção que A concedia caiu, porque ele não tem mais propriedade nenhuma",
+);
+ok(e2.props.ipanema.owner === null, "as propriedades dele voltaram ao banco");
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();

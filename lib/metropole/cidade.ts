@@ -167,6 +167,28 @@ export function aluguelAtual(props: Props, prop: string, soma = 7): number {
   return 0;
 }
 
+/**
+ * Quanto custa resgatar uma hipoteca: o valor mais os juros.
+ *
+ * A CONTA É EM INTEIRO, e não é preciosismo. `Math.ceil(1300 * 1.1)` dá 1431,
+ * porque 1300 × 1,1 em ponto flutuante binário é 1430,0000000000002 e o
+ * arredondamento para cima sobe um real. O servidor faz a mesma conta em
+ * `numeric`, que é exato, e dá 1430.
+ *
+ * Um real de diferença não quebra nada — mas a tela estaria prometendo um
+ * número e o jogo cobrando outro, em SEIS das treze faixas de hipoteca do
+ * tabuleiro. É exatamente o tipo de furo que faz alguém achar que o jogo
+ * roubou, e não há como explicar depois.
+ *
+ * Regra que fica valendo para o projeto: dinheiro não passa por float.
+ * Multiplicação de porcentagem vira fração de inteiros — `× 110 / 100`, nunca
+ * `× 1.1`.
+ */
+export function custoResgate(hipoteca: number): number {
+  const pct = Math.round(REGRAS.jurosResgate * 100);
+  return Math.ceil((hipoteca * (100 + pct)) / 100);
+}
+
 export function patrimonio(props: Props, seat: number, cash: number): number {
   let total = cash;
   for (const c of CASAS) {

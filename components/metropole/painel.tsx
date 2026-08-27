@@ -7,6 +7,7 @@ import {
   POR_ID,
   REGRAS,
   aluguelAtual,
+  custoResgate,
   fluxo,
   grupoCompleto,
   reais,
@@ -270,7 +271,7 @@ export function MinhasProps({
                                 onClick={() => onResgatar(c.id!)}
                               >
                                 Resgatar ·{" "}
-                                {reais(Math.ceil((c.hipoteca ?? 0) * (1 + REGRAS.jurosResgate)))}
+                                {reais(custoResgate(c.hipoteca ?? 0))}
                               </button>
                             )}
                           </div>
@@ -315,7 +316,7 @@ export function MinhasProps({
                           onClick={() => onResgatar(c.id!)}
                         >
                           Resgatar ·{" "}
-                          {reais(Math.ceil((c.hipoteca ?? 0) * (1 + REGRAS.jurosResgate)))}
+                          {reais(custoResgate(c.hipoteca ?? 0))}
                         </button>
                       )}
                     </div>

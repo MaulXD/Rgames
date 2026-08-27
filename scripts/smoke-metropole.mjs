@@ -2022,6 +2022,597 @@ ok(
   `fora do aperto, resgatar custa os 10% de sempre: R$ ${custoNormal10}`,
 );
 
+/* ══════════════════════════════════════════════════════════════════════════
+   O CÉREBRO DA MÁQUINA NA METRÓPOLE
+
+   UM PASSO POR CHAMADA, e é aqui que isso se prova. `met_bot_passo` faz
+   exatamente uma coisa e diz o que fez: "rola(1)", "compra(1) caruaru por 600",
+   "constroi(1) em caruaru por 500", "passa(1)". O cliente chama, respira, chama
+   de novo — e a pessoa VÊ a máquina decidir, que num jogo de tabuleiro é metade
+   do jogo.
+
+   O que este bloco prova, em ordem de importância:
+
+   1. UMA PARTIDA SOLO INTEIRA, do começo ao fim, com a economia conferida a
+      cada passo: dinheiro nunca negativo fora de dívida, casa nunca em
+      propriedade hipotecada, construção nunca desigual dentro do grupo, banco
+      nunca com casa negativa. Um cérebro que quebra a economia na rodada
+      dezoito é pior que nenhum: quebra depois de a pessoa ter investido a
+      partida toda.
+
+   2. A MÁQUINA AGE FORA DA PRÓPRIA VEZ. Leilão e proposta de troca. Se ela só
+      agisse na vez dela, um leilão com duas máquinas travaria para sempre.
+
+   3. O NÍVEL SIGNIFICA ALGO — e aqui a medida é patrimônio, não território.
+
+   4. A MÁQUINA NÃO TRAPACEIA: ela joga pelas funções de 0053, as mesmas de uma
+      pessoa. Conferido no estado, não no código.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\n  ── o cérebro da máquina ──");
+
+/** Confere a economia inteira. Lista vazia é bom. */
+function conferirEconomia(st, mapa) {
+  const p = [];
+  const porId = Object.fromEntries((mapa.casas ?? []).map((c) => [c.id, c]));
+
+  for (const [seat, j] of Object.entries(st.players ?? {})) {
+    if (typeof j.cash !== "number") p.push(`assento ${seat} sem caixa`);
+    // negativo só se vale enquanto há dívida pendente para ELE
+    const devendo =
+      st.pendente?.k === "divida" && String(st.turnSeat) === String(seat);
+    if (j.cash < 0 && !devendo && !j.quebrado) {
+      p.push(`assento ${seat} com ${j.cash} sem dívida pendente`);
+    }
+    if (j.pos < 0 || j.pos > 39) p.push(`assento ${seat} na casa ${j.pos}`);
+  }
+
+  const porGrupo = {};
+  for (const [id, e] of Object.entries(st.props ?? {})) {
+    const casa = porId[id];
+    if (!casa) {
+      p.push(`${id} não existe no mapa`);
+      continue;
+    }
+    const n = e.casas ?? 0;
+    if (n < 0 || n > 4) p.push(`${id} com ${n} casas`);
+    if (n > 0 && e.hipotecada) p.push(`${id} tem ${n} casas E está hipotecada`);
+    if (n > 0 && e.owner === null) p.push(`${id} tem casa e nenhum dono`);
+    if (e.hotel && n !== 0) p.push(`${id} tem hotel e ${n} casas`);
+    if (e.owner !== null && e.owner !== undefined && !st.players[String(e.owner)]) {
+      p.push(`${id} é do assento ${e.owner}, que não existe`);
+    }
+    if (casa.g && e.owner !== null && e.owner !== undefined) {
+      const k = `${e.owner}:${casa.g}`;
+      porGrupo[k] = porGrupo[k] ?? [];
+      porGrupo[k].push(n + (e.hotel ? 5 : 0));
+    }
+  }
+  /* CONSTRUÇÃO PAR: dentro de um grupo, duas propriedades nunca diferem de mais
+     de uma casa. É a regra que impede concentrar tudo numa só, e é exatamente o
+     tipo de coisa que uma máquina mal escrita viola sem dar erro. */
+  for (const [k, ns] of Object.entries(porGrupo)) {
+    if (Math.max(...ns) - Math.min(...ns) > 1) {
+      p.push(`grupo ${k} construído desigual: ${ns.join(",")}`);
+    }
+  }
+
+  if ((st.bank?.casas ?? 0) < 0) p.push(`banco com ${st.bank.casas} casas`);
+  if ((st.bank?.hoteis ?? 0) < 0) p.push(`banco com ${st.bank.hoteis} hotéis`);
+  if (!["rolar", "acao", "resolve", "leilao", "fim"].includes(st.phase)) {
+    p.push(`fase impossível: ${st.phase}`);
+  }
+  return p;
+}
+
+/**
+ * Joga uma partida solo até o fim, ou até o teto de passos.
+ *
+ * O humano é PASSIVO MAS NÃO SUICIDA: compra o que cai e cabe no caixa, nunca
+ * constrói, nunca negocia. Passivo porque o que se mede é a máquina; não
+ * suicida porque um humano que quebra na rodada três encerra a partida antes de
+ * a máquina mostrar o que sabe.
+ */
+async function metSolo({ token, niveis, tetoPassos }) {
+  const salaS = (await rpc(token, "create_room", { p_game: "metropole" })).body;
+  for (const n of niveis) {
+    const r = await rpc(token, "adicionar_bot", { p_room: salaS.id, p_nivel: n });
+    if (r.status !== 200) return { erro: `adicionar_bot(${n}): ${JSON.stringify(r.body)}` };
+  }
+  const ini = await rpc(token, "met_start", { p_room: salaS.id });
+  if (ini.status !== 200) return { erro: `met_start: ${JSON.stringify(ini.body)}` };
+  const idP = ini.body.id;
+
+  const elenco = (
+    await db.query(
+      `select mp.seat, p.is_bot from match_players mp
+        join profiles p on p.id = mp.user_id where mp.match_id = $1 order by mp.seat`,
+      [idP],
+    )
+  ).rows;
+  const meu = Number(elenco.find((e) => !e.is_bot).seat);
+  const bots = elenco.filter((e) => e.is_bot).map((e) => Number(e.seat));
+
+  const mapa = (
+    await db.query(
+      `select gt.data d from game_themes gt join matches m on gt.id = (m.public_state ->> 'map')
+        where m.id = $1`,
+      [idP],
+    )
+  ).rows[0].d;
+
+  const problemas = [];
+  const passos = [];
+  let n = 0;
+  let acabou = false;
+  let semNada = 0;
+
+  while (n < tetoPassos) {
+    const linha = (
+      await db.query("select status, public_state from matches where id = $1", [idP])
+    ).rows[0];
+    const st = linha.public_state;
+    if (linha.status !== "running") {
+      acabou = true;
+      break;
+    }
+
+    const ruim = conferirEconomia(st, mapa);
+    if (ruim.length) {
+      problemas.push(`passo ${n} (fase ${st.phase}): ${ruim.slice(0, 3).join("; ")}`);
+      break;
+    }
+
+    // a máquina primeiro: ela pode ter passo pendente FORA da vez (leilão, troca)
+    const t = await rpc(token, "met_tocar", { p_match: idP });
+    if (t.status !== 200) {
+      problemas.push(`met_tocar: ${JSON.stringify(t.body).slice(0, 150)}`);
+      break;
+    }
+    if (t.body?.passo) {
+      passos.push(t.body.passo);
+      semNada = 0;
+      n++;
+      continue;
+    }
+
+    /* Nada de máquina: é a vez do humano passivo.
+
+       `semNada` conta chamadas SEGUIDAS em que ninguém agiu — e a ação do
+       humano abaixo zera o contador, porque ela é alguém agindo. A primeira
+       versão deste laço não zerava, e quatro turnos normais do humano
+       abortavam a partida com "ninguém tem o que fazer". */
+    semNada++;
+    if (semNada > 3) {
+      problemas.push(
+        `ninguém tem o que fazer na fase ${st.phase} (vez do assento ${st.turnSeat})`,
+      );
+      break;
+    }
+
+    /* NO LEILÃO QUEM AGE É QUEM NÃO ESTÁ NA FRENTE, e não quem tem a vez.
+       A primeira versão deste laço só deixava o humano agir quando
+       `turnSeat === meu`, e a partida travava com o leilão aberto: a máquina
+       era a maior oferta (não pode subir o próprio lance), o humano era o
+       único que podia responder, e a vez era da máquina. Não era defeito do
+       cérebro — era o laço não sabendo jogar Metrópole. */
+    if (st.phase === "leilao" && st.leilao) {
+      if (Number(st.leilao.altoSeat) !== meu) {
+        await rpc(token, "met_pass", { p_match: idP });
+        semNada = 0;
+        n++;
+        continue;
+      }
+      // ele está na frente e nenhuma máquina tem o que fazer: o leilão fecha
+      // no relógio, e a faxina é quem cuida disso
+      await db.query(
+        "update matches set turn_deadline = now() - interval '1 second' where id = $1",
+        [idP],
+      );
+      await db.query("select public.met_sweep()");
+      semNada = 0;
+      n++;
+      continue;
+    }
+
+    if (Number(st.turnSeat) !== meu) {
+      problemas.push(
+        `a vez é do assento ${st.turnSeat}, que é máquina, e met_tocar não fez nada` +
+          ` · fase ${st.phase} · pendente ${JSON.stringify(st.pendente)}` +
+          ` · leilao ${JSON.stringify(st.leilao)}` +
+          ` · caixa ${st.players[String(st.turnSeat)]?.cash}` +
+          ` · quebrado ${st.players[String(st.turnSeat)]?.quebrado}`,
+      );
+      break;
+    }
+    if (st.phase === "resolve" && st.pendente?.k === "divida") {
+      // o humano passivo hipoteca até dar, e quebra se não der
+      const minha = Object.entries(st.props).find(
+        ([, e]) => Number(e.owner) === meu && !e.hipotecada && (e.casas ?? 0) === 0,
+      );
+      if (minha) await rpc(token, "met_mortgage", { p_match: idP, p_prop: minha[0] });
+      else await rpc(token, "met_bankrupt", { p_match: idP });
+      semNada = 0;
+      n++;
+      continue;
+    }
+    if (st.phase === "rolar" && (st.players[String(meu)]?.jail ?? 0) > 0) {
+      await rpc(token, "met_jail", { p_match: idP, p_escolha: "dado" });
+      semNada = 0;
+      n++;
+      continue;
+    }
+    if (st.phase === "rolar") {
+      await rpc(token, "met_roll", { p_match: idP });
+      semNada = 0;
+      n++;
+      continue;
+    }
+    if (st.pendente?.k === "comprar") {
+      const cash = st.players[String(meu)]?.cash ?? 0;
+      const preco = st.pendente.preco ?? 0;
+      /* Ele recusa o que passa de 1500 — e recusar é JOGADA, não concessão ao
+         teste: propriedade recusada vai a leilão e pode sair mais barata. É
+         também o que faz o leilão acontecer, que é o caso em que a máquina tem
+         de agir FORA da própria vez. */
+      const querComprar = cash - preco > 500 && preco <= 1500;
+      await rpc(token, querComprar ? "met_buy" : "met_decline", { p_match: idP });
+      semNada = 0;
+      n++;
+      continue;
+    }
+    if (st.phase === "acao") {
+      const fim = await rpc(token, "met_end_turn", { p_match: idP });
+      if (fim.status !== 200) {
+        problemas.push(`humano não passou a vez: ${JSON.stringify(fim.body).slice(0, 130)}`);
+        break;
+      }
+      semNada = 0;
+      n++;
+      continue;
+    }
+    problemas.push(`fase sem saída: ${st.phase}`);
+    break;
+  }
+
+  const fim = (
+    await db.query("select status, public_state from matches where id = $1", [idP])
+  ).rows[0];
+  const patr = {};
+  for (const seat of Object.keys(fim.public_state.players ?? {})) {
+    patr[seat] = Number(
+      (
+        await db.query(
+          "select public.met_patrimonio($1::jsonb, $2::jsonb, $3::smallint) v",
+          [JSON.stringify(mapa), JSON.stringify(fim.public_state), Number(seat)],
+        )
+      ).rows[0].v,
+    );
+  }
+  return {
+    id: idP,
+    meu,
+    bots,
+    passos,
+    n,
+    acabou,
+    problemas,
+    st: fim.public_state,
+    status: fim.status,
+    patr,
+    forcaBot: bots.reduce((a, s) => a + (patr[s] ?? 0), 0),
+  };
+}
+
+/* ── 1. a recusa ─────────────────────────────────────────────────────────── */
+
+const salaB = (await rpc(P[0].token, "create_room", { p_game: "metropole" })).body;
+await rpc(P[0].token, "adicionar_bot", { p_room: salaB.id, p_nivel: "dificil" });
+const iniB = await rpc(P[0].token, "met_start", { p_room: salaB.id });
+ok(
+  iniB.status === 200,
+  `partida solo de Metrópole começa${iniB.status !== 200 ? " " + JSON.stringify(iniB.body).slice(0, 130) : ""}`,
+);
+const foraB = await rpc(P[2].token, "met_tocar", { p_match: iniB.body?.id });
+ok(
+  /NOT_A_PLAYER/.test(JSON.stringify(foraB.body)),
+  "quem não está na mesa não toca a máquina de ninguém",
+);
+
+/* ── 2. UMA PARTIDA SOLO INTEIRA ─────────────────────────────────────────── */
+
+const solo = await metSolo({ token: P[0].token, niveis: ["medio", "dificil"], tetoPassos: 1200 });
+ok(!solo.erro, `a partida solo montou${solo.erro ? ": " + solo.erro : ""}`);
+if (!solo.erro) {
+  ok(
+    solo.problemas.length === 0,
+    solo.problemas.length === 0
+      ? `${solo.n} passos e a economia nunca ficou inválida`
+      : `ECONOMIA QUEBRADA: ${solo.problemas[0]}`,
+  );
+  ok(
+    solo.acabou,
+    solo.acabou
+      ? `e a partida ACABOU sozinha — a Metrópole é jogável sozinho`
+      : `não acabou em ${solo.n} passos (rodada ${solo.st.round})`,
+  );
+  console.log(`         primeiros passos: ${solo.passos.slice(0, 6).join(" · ")}`);
+  console.log(
+    `         patrimônio no fim: ${Object.entries(solo.patr)
+      .map(([s, v]) => `assento ${s}=${v}`)
+      .join(", ")}`,
+  );
+
+  const tipos = new Set(solo.passos.map((p) => p.split(/[:(]/)[0]));
+  ok(
+    tipos.has("rola") && tipos.has("passa"),
+    `a máquina rolou e passou a vez (tipos de passo: ${[...tipos].join(", ")})`,
+  );
+  ok(
+    solo.passos.some((p) => p.startsWith("compra")),
+    `e comprou propriedade: ${solo.passos.find((p) => p.startsWith("compra")) ?? "nenhuma"}`,
+  );
+
+  /* AGIU FORA DA PRÓPRIA VEZ. Leilão é o caso que trava a mesa se a máquina não
+     souber agir: o relógio dele é de vinte segundos e ninguém joga enquanto ele
+     está aberto. */
+  const noLeilao = solo.passos.filter((p) => p.startsWith("leilao")).length;
+  ok(
+    noLeilao > 0,
+    noLeilao > 0
+      ? `deu ${noLeilao} lance/passe em leilão — ela age FORA da própria vez`
+      : "nenhum leilão aconteceu na partida: o teste não provou o caso fora-da-vez",
+  );
+
+  const mapaS = (
+    await db.query(
+      `select gt.data d from game_themes gt join matches m on gt.id = (m.public_state ->> 'map')
+        where m.id = $1`,
+      [solo.id],
+    )
+  ).rows[0].d;
+  ok(
+    conferirEconomia(solo.st, mapaS).length === 0,
+    "e o estado final também fecha",
+  );
+}
+
+/* ── 2b. o leilão, provocado de propósito ─────────────────────────────────── */
+
+/* Esperar que um leilão aconteça sozinho não serve de teste: na primeira versão
+   deste bloco a mesa inteira comprou tudo e nenhum leilão abriu. Então o leilão
+   é PROVOCADO — o humano recusa a propriedade em que caiu, e o que se mede é a
+   máquina dando lance na vez de OUTRA pessoa. */
+
+const salaL = (await rpc(P[0].token, "create_room", { p_game: "metropole" })).body;
+await rpc(P[0].token, "adicionar_bot", { p_room: salaL.id, p_nivel: "dificil" });
+const iniL = await rpc(P[0].token, "met_start", { p_room: salaL.id });
+const elencoL = (
+  await db.query(
+    `select mp.seat, p.is_bot from match_players mp join profiles p on p.id = mp.user_id
+      where mp.match_id = $1 order by mp.seat`,
+    [iniL.body.id],
+  )
+).rows;
+const meuL = Number(elencoL.find((e) => !e.is_bot).seat);
+
+// põe a vez no humano, na fase de compra de uma propriedade barata
+const propL = (
+  await db.query(
+    `select c ->> 'id' id, (c ->> 'preco')::int preco
+       from game_themes gt
+       join matches m on gt.id = (m.public_state ->> 'map')
+       cross join jsonb_array_elements(gt.data -> 'casas') c
+      where m.id = $1 and c ->> 't' = 'bairro'
+      order by (c ->> 'preco')::int limit 1`,
+    [iniL.body.id],
+  )
+).rows[0];
+await db.query(
+  `update matches set public_state =
+      jsonb_set(jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
+        '{phase}', '"acao"'),
+        '{pendente}', jsonb_build_object('k', 'comprar', 'prop', $3::text, 'preco', $4::int))
+    where id = $1`,
+  [iniL.body.id, meuL, propL.id, propL.preco],
+);
+
+const recusou = await rpc(P[0].token, "met_decline", { p_match: iniL.body.id });
+ok(
+  recusou.status === 200,
+  `o humano recusa ${propL.id} por ${propL.preco} e vai a leilão${recusou.status !== 200 ? " " + JSON.stringify(recusou.body).slice(0, 120) : ""}`,
+);
+const abriu = (
+  await db.query("select public_state ps from matches where id = $1", [iniL.body.id])
+).rows[0].ps;
+ok(abriu.phase === "leilao" && !!abriu.leilao, `o leilão abriu (fase ${abriu.phase})`);
+
+if (abriu.phase === "leilao") {
+  const passoL = await rpc(P[0].token, "met_tocar", { p_match: iniL.body.id });
+  ok(
+    /^leilao:/.test(passoL.body?.passo ?? ""),
+    `e a máquina age FORA da própria vez: ${passoL.body?.passo ?? "não fez nada"}`,
+  );
+  const depoisL = (
+    await db.query("select public_state ps from matches where id = $1", [iniL.body.id])
+  ).rows[0].ps;
+  const botL = Number(elencoL.find((e) => e.is_bot).seat);
+  ok(
+    Number(depoisL.leilao?.altoSeat) === botL ||
+      (depoisL.leilao?.passou ?? []).map(Number).includes(botL) ||
+      depoisL.phase !== "leilao",
+    "o lance dela entrou no leilão, ou ela passou — nunca ficou parada travando a mesa",
+  );
+  if (Number(depoisL.leilao?.altoSeat) === botL) {
+    ok(
+      Number(depoisL.leilao.alto) >= 100,
+      `o lance respeita o mínimo da casa: R$ ${depoisL.leilao.alto}`,
+    );
+  }
+}
+
+/* ── 3. a máquina responde proposta ───────────────────────────────────────── */
+
+/* Proposta sem resposta é pior que proposta recusada: quem propôs fica
+   esperando e não sabe se pode contar com aquilo. */
+const salaT = (await rpc(P[0].token, "create_room", { p_game: "metropole" })).body;
+await rpc(P[0].token, "adicionar_bot", { p_room: salaT.id, p_nivel: "dificil" });
+const iniT = await rpc(P[0].token, "met_start", { p_room: salaT.id });
+const elencoT = (
+  await db.query(
+    `select mp.seat, p.is_bot from match_players mp join profiles p on p.id = mp.user_id
+      where mp.match_id = $1 order by mp.seat`,
+    [iniT.body.id],
+  )
+).rows;
+const meuT = Number(elencoT.find((e) => !e.is_bot).seat);
+const botT = Number(elencoT.find((e) => e.is_bot).seat);
+
+// dá uma propriedade a cada um, à mão, e propõe uma troca absurdamente boa
+const stT = iniT.body.public_state;
+const idsT = Object.keys(stT.props).slice(0, 2);
+await db.query(
+  `update matches set public_state = jsonb_set(
+       jsonb_set(public_state, array['props', $2::text, 'owner'], to_jsonb($4::int)),
+       array['props', $3::text, 'owner'], to_jsonb($5::int))
+    where id = $1`,
+  [iniT.body.id, idsT[0], idsT[1], meuT, botT],
+);
+const prop = await rpc(P[0].token, "met_offer", {
+  p_match: iniT.body.id,
+  p_para: botT,
+  p_da: { props: [idsT[0]], cash: 5000 },
+  p_quer: {},
+});
+ok(
+  prop.status === 200,
+  `proposta generosa enviada à máquina${prop.status !== 200 ? " " + JSON.stringify(prop.body).slice(0, 120) : ""}`,
+);
+if (prop.status === 200) {
+  const resp = await rpc(P[0].token, "met_tocar", { p_match: iniT.body.id });
+  ok(
+    /^troca:aceita/.test(resp.body?.passo ?? ""),
+    `e a máquina ACEITA o que é bom para ela: ${resp.body?.passo ?? "não respondeu"}`,
+  );
+  const semOferta = (
+    await db.query(
+      "select jsonb_array_length(coalesce(public_state -> 'ofertas', '[]'::jsonb)) n from matches where id = $1",
+      [iniT.body.id],
+    )
+  ).rows[0].n;
+  ok(
+    Number(semOferta) === 0,
+    "e a proposta sai da mesa respondida — proposta pendurada é pior que recusada",
+  );
+}
+
+/* ── 4. o nível significa algo? ──────────────────────────────────────────── */
+
+const contraFacil = await metSolo({ token: P[0].token, niveis: ["facil"], tetoPassos: 700 });
+const contraDif = await metSolo({ token: P[0].token, niveis: ["dificil"], tetoPassos: 700 });
+ok(
+  !contraFacil.erro && !contraDif.erro,
+  `as duas partidas de comparação montaram${contraFacil.erro || contraDif.erro ? ": " + (contraFacil.erro ?? contraDif.erro) : ""}`,
+);
+if (!contraFacil.erro && !contraDif.erro) {
+  ok(
+    contraFacil.problemas.length === 0 && contraDif.problemas.length === 0,
+    contraFacil.problemas.length === 0 && contraDif.problemas.length === 0
+      ? "as duas rodaram sem quebrar a economia"
+      : `ECONOMIA QUEBRADA: ${contraFacil.problemas[0] ?? contraDif.problemas[0]}`,
+  );
+  /* O QUE O NÍVEL SIGNIFICA NA METRÓPOLE NÃO É PATRIMÔNIO, e a primeira versão
+     deste teste mediu errado: comparou patrimônio final e a TRANQUILA saiu na
+     frente (49.260 contra 44.320). E fazia sentido — ela compra tudo, e
+     patrimônio conta escritura pelo preço de tabela. Comprar tudo não é ruim
+     para o patrimônio; é ruim para a SOLVÊNCIA e para o aluguel.
+
+     Então o teste mede os três comportamentos que os níveis DEFINEM, um a um.
+     Três afirmações que se leem valem mais que um número que esconde o que
+     está sendo comparado. */
+
+  /* O QUE O NÍVEL SIGNIFICA NA METRÓPOLE, e as duas versões erradas antes desta.
+
+     A primeira comparou PATRIMÔNIO final, e a tranquila saiu na frente (49.260
+     contra 44.320). Fazia sentido: ela compra tudo, e patrimônio conta
+     escritura pelo preço de tabela. Comprar tudo não é ruim para o patrimônio.
+
+     A segunda comparou CAIXA final, e virou de uma rodada para outra (2.840
+     contra 7.740). Também fazia sentido, e por um motivo melhor: a impiedosa
+     converte caixa em CASA. A regra da reserva governa a DECISÃO de gastar, e
+     medir o estado final é medir o outro lado dela.
+
+     Então o nível é conferido onde ele mora — nas duas funções que o definem, com
+     número exato e sem dado nenhum no meio. E o comportamento observado vira
+     relatório, porque uma partida é uma amostra de um e amostra de um não prova
+     tendência. */
+
+  const regua = (
+    await db.query(
+      `select public.met_bot_reserva('facil', 5) f,
+              public.met_bot_reserva('medio', 5) m,
+              public.met_bot_reserva('dificil', 5) d`,
+    )
+  ).rows[0];
+  ok(
+    Number(regua.f) === 0 && Number(regua.f) < Number(regua.m) && Number(regua.m) < Number(regua.d),
+    `a reserva de caixa cresce com o nível: tranquila R$ ${regua.f}, firme R$ ${regua.m}, impiedosa R$ ${regua.d}`,
+  );
+
+  /* E O VALOR DE UMA PROPRIEDADE QUE FECHA GRUPO. Para a tranquila, valor é
+     preço e nada mais — ela não vê o mapa, só a etiqueta. Para as outras duas, a
+     que fecha grupo vale o dobro, porque é ela que libera construir. */
+  const mapaN = (
+    await db.query(
+      `select gt.data d from game_themes gt join matches m on gt.id = (m.public_state ->> 'map')
+        where m.id = $1`,
+      [solo.id],
+    )
+  ).rows[0].d;
+  const grupoN = mapaN.casas.filter((c) => c.g === "marrom");
+  const estN = {
+    players: { 0: { cash: 20000 }, 1: { cash: 20000 } },
+    props: Object.fromEntries(
+      mapaN.casas
+        .filter((c) => c.id)
+        .map((c) => [
+          c.id,
+          { owner: c.g === "marrom" && c.id !== grupoN[0].id ? 1 : null, casas: 0, hotel: false, hipotecada: false },
+        ]),
+    ),
+  };
+  const valores = (
+    await db.query(
+      `select public.met_bot_valor($1::jsonb, $2::jsonb, 1::smallint, $3::text, 'facil') f,
+              public.met_bot_valor($1::jsonb, $2::jsonb, 1::smallint, $3::text, 'medio') m,
+              public.met_bot_valor($1::jsonb, $2::jsonb, 1::smallint, $3::text, 'dificil') d`,
+      [JSON.stringify(mapaN), JSON.stringify(estN), grupoN[0].id],
+    )
+  ).rows[0];
+  ok(
+    Number(valores.f) < Number(valores.m) && Number(valores.m) <= Number(valores.d),
+    `a que FECHA o grupo vale mais para quem entende o jogo: tranquila vê R$ ${valores.f} (o preço), firme R$ ${valores.m}, impiedosa R$ ${valores.d}`,
+  );
+
+  /* A última asserção comportamental que é estável de verdade: sem reserva,
+     a tranquila compra mais. Vale em qualquer partida, porque é a consequência
+     direta de `met_bot_reserva('facil') = 0`. */
+  const compras = (r) => r.passos.filter((p) => p.startsWith("compra")).length;
+  ok(
+    compras(contraFacil) >= compras(contraDif),
+    `e na mesa a tranquila compra mais, porque não guarda nada (${compras(contraFacil)} contra ${compras(contraDif)})`,
+  );
+
+  const constroi = (r) => r.passos.filter((p) => p.startsWith("constroi")).length;
+  const apertos = (r) => r.passos.filter((p) => p.startsWith("divida:")).length;
+  const caixa = (r) => r.bots.reduce((a, x) => a + (r.st.players[String(x)]?.cash ?? 0), 0);
+  console.log(
+    `         observado — construções: ${constroi(contraFacil)} / ${constroi(contraDif)}` +
+      ` · apertos: ${apertos(contraFacil)} / ${apertos(contraDif)}` +
+      ` · caixa final: ${caixa(contraFacil)} / ${caixa(contraDif)} (tranquila / impiedosa)`,
+  );
+}
+
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();
 

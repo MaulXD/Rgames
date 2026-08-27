@@ -1770,3 +1770,15 @@
     transition: none;
   }
 }
+
+/* ── a máquina jogando ─────────────────────────────────────
+   Os mesmos três pontinhos do Domínio, e de propósito: a mesma ideia dita do
+   mesmo jeito nos dois jogos vale mais que dois símbolos diferentes. A classe
+   `.pensa-pontos` vive em globals.css desde o Domínio. */
+.met-pensando {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--fg);
+  flex-wrap: wrap;
+}

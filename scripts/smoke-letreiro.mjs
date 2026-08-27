@@ -472,7 +472,9 @@ ok(/BAD_LEVEL/.test(JSON.stringify(nivelRuim.body)), "nível fora do vocabulári
 // o Domínio saiu desta lista em 0048, quando ganhou cérebro. A lista É o
 // registro honesto de onde o trabalho chegou — e o teste do Domínio prova que
 // lá a máquina agora ENTRA e joga a partida inteira.
-for (const jogo of ["dossie", "metropole"]) {
+// a Metrópole saiu desta lista em 0055, e o Domínio em 0048. Sobrou o Dossiê,
+// e a lista É o registro honesto de onde o trabalho chegou.
+for (const jogo of ["dossie"]) {
   const salaOutra = (await rpc(A.token, "create_room", { p_game: jogo })).body;
   const recusa = await rpc(A.token, "adicionar_bot", { p_room: salaOutra.id, p_nivel: "medio" });
   ok(

@@ -195,6 +195,7 @@ const PERMITIDAS = [
   "met_jail", "met_mortgage", "met_pass", "met_roll", "met_sell", "met_start",
   "met_unmortgage", "met_offer", "met_offer_reply", "met_offer_cancel", "met_exercer",
   "met_aposta",
+  "met_tocar",
   // auxiliares que a RLS PRECISA executar: a expressão de uma policy roda com
   // o privilégio de quem consulta, então revogar estas mata o lobby inteiro
   "is_match_member", "is_room_member", "shares_room_with",
@@ -205,6 +206,45 @@ const db = new pg.Client({
     (process.env.POSTGRES_URL ?? process.env.DATABASE_URL) + "&uselibpqcompat=true",
 });
 await db.connect();
+
+/* ── a invariante das funções `_como` ─────────────────────────────
+
+   Toda função `_como` existe para uma coisa: RECEBER o ator em vez de
+   descobri-lo. É o que deixa a máquina jogar pelas mesmas regras que uma pessoa
+   sem duplicar uma linha de regra. Se uma delas olhar `auth.uid()`, ela age em
+   nome de quem CHAMOU e não de quem devia — e o contrato inteiro cai.
+
+   Isto não é hipótese: aconteceu. `met_aposta_como` gravava a aposta secreta da
+   máquina no estado privado da pessoa que tocou o passo dela. O gerador de 0053
+   fazia a troca mecânica certa; a premissa dele ("nenhuma dessas funções olha
+   auth.uid() no corpo") é que estava errada, e eu a havia conferido numa saída
+   de consulta que veio truncada.
+
+   Uma linha de teste guarda o contrato inteiro. */
+
+const comAuth = (
+  await db.query(`
+    select p.proname nome
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.proname like '%\\_como'
+       and pg_get_functiondef(p.oid) like '%auth.uid()%'
+     order by 1`)
+).rows.map((r) => r.nome);
+
+const quantasComo = (
+  await db.query(`
+    select count(*)::int n
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.proname like '%\\_como'`)
+).rows[0].n;
+
+ok(
+  comAuth.length === 0,
+  comAuth.length === 0
+    ? `as ${quantasComo} funções \`_como\` recebem o ator, nenhuma descobre por auth.uid()`
+    : `\`_como\` olhando quem chamou: ${comAuth.join(", ")} — age em nome da pessoa errada`,
+);
 
 const expostas = (
   await db.query(`

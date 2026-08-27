@@ -102,7 +102,79 @@ export type MetMatch = {
   public_state: MetState;
 };
 
-export type Assento = { user_id: string; display_name: string; avatar: unknown };
+export type Assento = {
+  user_id: string;
+  display_name: string;
+  avatar: unknown;
+  is_bot?: boolean;
+};
+
+/**
+ * O respiro entre um passo de máquina e o seguinte.
+ *
+ * NÃO É ENFEITE, e na Metrópole é ainda mais verdade que no Domínio. O servidor
+ * resolve um passo em milissegundos; sem pausa, a pessoa encerra o turno e
+ * recebe o tabuleiro com três propriedades vendidas, duas casas construídas e
+ * mil e duzentos reais a menos, sem ter visto nada acontecer. E o que ela
+ * precisava ver era justamente a máquina COMPRANDO a rua ao lado da dela.
+ *
+ * 900ms é curto para irritar e longo para ler o rótulo do passo. O passo de
+ * rolar dado é mais lento porque o peão ainda vai andar depois dele — a
+ * caminhada tem o tempo dela, e atropelar as duas coisas junta dá confusão.
+ */
+const RESPIRO_MS = 900;
+const RESPIRO_DADO_MS = 1700;
+
+/**
+ * O rótulo técnico de um passo de máquina virado frase.
+ *
+ * `met_bot_passo` devolve coisas como "compra(1) caruaru por 600 (vale 1050)" —
+ * bom para teste, ruim para tela. A tela recebe "comprou a Feira de Caruaru".
+ *
+ * Não é tradução por vaidade: sem a frase, a pessoa vê o tabuleiro mudar e não
+ * sabe por quê. E o que ela mais precisa saber é justamente que a máquina
+ * comprou a rua ao lado da dela.
+ */
+function frasePasso(passo: string): string {
+  const nomeDe = (id?: string) => (id ? (POR_ID[id]?.nome ?? id) : "");
+  const m = /^(\w+)(?::(\w+))?\((\d+)\)\s*(\S+)?/.exec(passo);
+  if (!m) return passo;
+  const [, k, sub, , alvo] = m;
+  switch (sub ? `${k}:${sub}` : k) {
+    case "rola":
+      return "rolou o dado";
+    case "compra":
+      return `comprou ${nomeDe(alvo)}`;
+    case "recusa":
+      return `deixou ${nomeDe(alvo)} ir a leilão`;
+    case "constroi":
+      return `construiu em ${nomeDe(alvo)}`;
+    case "passa":
+      return "passou a vez";
+    case "leilao:lance":
+      return `deu lance em ${nomeDe(alvo)}`;
+    case "leilao:passa":
+      return "saiu do leilão";
+    case "troca:aceita":
+      return "aceitou a proposta";
+    case "troca:recusa":
+      return "recusou a proposta";
+    case "cadeia:carta":
+      return "usou a carta e saiu da cadeia";
+    case "cadeia:paga":
+      return "pagou a fiança";
+    case "cadeia:dado":
+      return "tentou o dado na cadeia";
+    case "divida:vende":
+      return `vendeu uma casa de ${nomeDe(alvo)}`;
+    case "divida:hipoteca":
+      return `hipotecou ${nomeDe(alvo)}`;
+    case "divida:quebra":
+      return "quebrou";
+    default:
+      return passo;
+  }
+}
 
 const RECADO: Record<string, string> = {
   NOT_YOUR_TURN: "Não é a sua vez.",
@@ -198,6 +270,22 @@ export function MetropoleGame({
   // papel picado é uma leitura do resultado, não um estado a sincronizar
   const festa = acabou && st.vencedor === meuAssento;
   const ativos = entradas.filter((p) => !p.quebrado);
+
+  /* HÁ MÁQUINA NA MESA? e ela tem algo a fazer AGORA?
+
+     Na Metrópole a máquina age fora da própria vez — leilão e proposta de troca
+     —, então não basta olhar `turnSeat`. Mas o cliente também não precisa saber
+     QUAL passo está pendente: quem sabe é o servidor, e `met_tocar` devolve nulo
+     quando não há nada. Aqui basta a pergunta grossa: existe máquina viva nesta
+     mesa? Se existe, vale tentar tocar. */
+  const idsBot = useMemo(
+    () => new Set(assentos.filter((a) => a.is_bot).map((a) => a.user_id)),
+    [assentos],
+  );
+  const temMaquina = entradas.some((p) => idsBot.has(p.userId) && !p.quebrado);
+  const maquinaNaVez = entradas.some(
+    (p) => p.seat === st.turnSeat && idsBot.has(p.userId),
+  );
 
   const cores = useMemo(
     () => Object.fromEntries(entradas.map((p) => [p.seat, p.cor])) as Record<number, ColorKey>,
@@ -340,6 +428,75 @@ export function MetropoleGame({
     }
     return data;
   }, []);
+
+  /* ── a máquina joga, um passo por vez ──────────────────────────
+
+     `met_tocar` faz UM passo e diz o que fez: "rola(1)", "compra(1) caruaru por
+     600", "constroi(1) em caruaru por 500", "leilao:lance(1) leblon por 300".
+     Este efeito chama, espera o respiro, e chama de novo — e a pessoa vê a
+     máquina decidir, que num jogo de tabuleiro é metade do jogo.
+
+     O RÓTULO DO PASSO VAI PARA A TELA. É pouca coisa e muda tudo: "Creuza
+     comprou o Ver-o-Peso" é uma frase; um tabuleiro que muda de cor sozinho é
+     um bug com cara de recurso.
+
+     Numa mesa com duas pessoas, as duas chamam. A segunda encontra o passo já
+     feito e recebe `passo: null` — silêncio de propósito, porque a corrida foi
+     resolvida pelo `for update` do servidor e não há nada a contar. */
+  const tocando = useRef(false);
+  const falhas = useRef(0);
+  const [passoBot, setPassoBot] = useState<string | null>(null);
+  const [maquinaEmpacou, setMaquinaEmpacou] = useState(false);
+
+  const tocarMaquina = useCallback(async () => {
+    if (tocando.current) return null;
+    tocando.current = true;
+    try {
+      const { data, error } = await supabaseBrowser().rpc("met_tocar", {
+        p_match: match.id,
+      });
+      if (error) {
+        const msg = (error as { message?: string }).message ?? "";
+        if (/MATCH_NOT_RUNNING/.test(msg)) return null;
+        falhas.current += 1;
+        if (falhas.current >= 3) setMaquinaEmpacou(true);
+        return null;
+      }
+      falhas.current = 0;
+      const passo = (data as { passo?: string } | null)?.passo ?? null;
+      setPassoBot(passo);
+      return passo;
+    } finally {
+      tocando.current = false;
+    }
+  }, [match.id]);
+
+  // a primeira linha do registro muda a cada passo de máquina, e é o gatilho
+  // deste efeito. Extraída para variável porque expressão no array de
+  // dependência o lint não consegue conferir — e ele está certo
+  const ultimaLinha = st.log?.[0] ? JSON.stringify(st.log[0]) : null;
+
+  useEffect(() => {
+    if (!temMaquina || acabou || maquinaEmpacou) return;
+    /* O respiro maior quando a máquina acabou de rolar: o peão dela ainda vai
+       andar, e a caminhada tem o tempo dela. Atropelar as duas coisas dá
+       confusão na tela. */
+    const espera = passoBot?.startsWith("rola") ? RESPIRO_DADO_MS : RESPIRO_MS;
+    // o setState mora dentro do temporizador: no corpo do efeito seria
+    // renderização encadeada, e o lint deste projeto recusa — com razão
+    const id = setTimeout(() => void tocarMaquina(), espera);
+    return () => clearTimeout(id);
+  }, [
+    temMaquina,
+    acabou,
+    maquinaEmpacou,
+    tocarMaquina,
+    passoBot,
+    st.phase,
+    st.turnSeat,
+    st.round,
+    ultimaLinha,
+  ]);
 
   /* ── fim ────────────────────────────────────────────────────────────── */
   if (acabou) {
@@ -631,7 +788,40 @@ export function MetropoleGame({
           </p>
         )}
 
-        {!minhaVez && !souInvestidor && st.phase !== "leilao" && (
+        {!minhaVez && maquinaNaVez && !maquinaEmpacou && st.phase !== "leilao" && (
+          <p className="met-espera met-pensando">
+            <span className="pensa-pontos" aria-hidden>
+              <i />
+              <i />
+              <i />
+            </span>
+            <span>
+              {nomes[st.turnSeat]} está jogando
+              {passoBot ? <span className="dim"> · {frasePasso(passoBot)}</span> : null}
+            </span>
+          </p>
+        )}
+
+        {!minhaVez && maquinaNaVez && maquinaEmpacou && (
+          <div className="met-bloco">
+            <p className="met-titulo">A vez de {nomes[st.turnSeat]} empacou.</p>
+            <p className="met-nota dim">
+              Pode ser conexão. O relógio passa a vez sozinho de qualquer jeito — mas se
+              quiser empurrar, é aqui.
+            </p>
+            <button
+              className="btn btn-brass"
+              onClick={() => {
+                falhas.current = 0;
+                setMaquinaEmpacou(false);
+              }}
+            >
+              Tentar de novo
+            </button>
+          </div>
+        )}
+
+        {!minhaVez && !maquinaNaVez && !souInvestidor && st.phase !== "leilao" && (
           <p className="met-espera dim">
             Esperando {nomes[st.turnSeat]}. O relógio passa a vez sozinho se ninguém jogar — e o
             leilão você pode disputar de qualquer jeito.

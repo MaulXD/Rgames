@@ -330,6 +330,160 @@ const pad = await rpc(eu.token, "dossie_pad", {
 });
 ok(pad.body?.ok === true, "o caderno aceita anotação do dono");
 
+/* ══════════════════════════════════════════════════════════════════════════
+   ESCOLHER O CASO NO LOBBY
+
+   O vocabulário deste ajuste é DINÂMICO: em vez de listar os ids no SQL, a
+   validação pergunta ao banco se aquele tema existe. Então o teste tem de
+   provar as duas pontas — que um id que existe é aceito, e que um que não
+   existe é recusado — porque é essa pergunta ao banco que sustenta a promessa
+   de "tema novo é escolhível sem migração".
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const salaE = (await rpc(P[0].token, "create_room", { p_game: "dossie" })).body;
+
+const chaveErradaD = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaE.id,
+  p_settings: { modo: "classico" },
+});
+ok(
+  /UNKNOWN_SETTING_modo/.test(JSON.stringify(chaveErradaD.body)),
+  "o Dossiê não tem `modo`: a chave de outro jogo é recusada",
+);
+
+const temaInventado = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaE.id,
+  p_settings: { tema: "vila-que-nao-existe" },
+});
+ok(
+  /BAD_THEME/.test(JSON.stringify(temaInventado.body)),
+  "caso que não existe no banco é recusado",
+);
+
+const surpresa = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaE.id,
+  p_settings: { tema: "surpresa" },
+});
+ok(surpresa.body?.settings?.tema === "surpresa", "surpresa é o padrão e é aceito");
+
+const escolhido = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaE.id,
+  p_settings: { tema: "ras-zamir" },
+});
+ok(
+  escolhido.body?.settings?.tema === "ras-zamir",
+  "e um caso que existe no banco é aceito — sem o id estar escrito no SQL",
+);
+
+// e a partida respeita a escolha da sala, sem passar p_theme
+await rpc(P[1].token, "join_room", { p_code: salaE.code });
+await rpc(P[2].token, "join_room", { p_code: salaE.code });
+const comEscolha = await rpc(P[0].token, "dossie_start", { p_room: salaE.id });
+ok(comEscolha.status === 200, "a partida começa com o caso combinado no lobby");
+if (comEscolha.status === 200) {
+  const qual = (
+    await db.query("select public_state -> 'theme' t from matches where id = $1", [
+      comEscolha.body.id,
+    ])
+  ).rows[0].t;
+  ok(
+    qual === "ras-zamir",
+    `e é o caso escolhido, não um sorteado (${qual}) — a sala foi respeitada sem p_theme`,
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   OS QUATRO TEMAS
+
+   O motor do Dossiê não sabe o que é uma "biblioteca" nem um "Coronel". A
+   prova disso não é o comentário no código — é este teste: os quatro temas
+   começam uma partida de verdade, e o envelope de cada uma sai do elenco do
+   tema certo.
+
+   Se um dia alguém escrever "biblioteca" dentro do motor, este teste continua
+   passando para o Solar e reprova para os outros três. É o tipo de verificação
+   que só vale a pena depois que existe mais de um tema — e agora existem
+   quatro.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const temas = (
+  await db.query(
+    "select id, name, data from game_themes where game_key = 'dossie' order by id",
+  )
+).rows;
+ok(temas.length === 4, `quatro temas publicados (${temas.map((t) => t.id).join(", ")})`);
+
+for (const tema of temas) {
+  const salaT = (await rpc(P[0].token, "create_room", { p_game: "dossie" })).body;
+  await rpc(P[1].token, "join_room", { p_code: salaT.code });
+  await rpc(P[2].token, "join_room", { p_code: salaT.code });
+
+  const inicioT = await rpc(P[0].token, "dossie_start", {
+    p_room: salaT.id,
+    p_theme: tema.id,
+  });
+  ok(
+    inicioT.status === 200,
+    `${tema.name}: a partida começa (${JSON.stringify(inicioT.body).slice(0, 60)})`,
+  );
+  if (inicioT.status !== 200) continue;
+
+  const est = (
+    await db.query("select public_state, solution from matches where id = $1", [
+      inicioT.body.id,
+    ])
+  ).rows[0];
+
+  ok(est.public_state.theme === tema.id, `${tema.name}: o estado aponta para o tema certo`);
+
+  // o envelope sai do elenco DESTE tema
+  const sol = est.solution;
+  const suspeitos = tema.data.suspects.map((x) => x.id);
+  const objetos = tema.data.weapons.map((x) => x.id);
+  const lugares = tema.data.rooms.map((x) => x.id);
+  ok(
+    suspeitos.includes(sol.suspect) &&
+      objetos.includes(sol.weapon) &&
+      lugares.includes(sol.room),
+    `${tema.name}: o envelope (${sol.suspect}, ${sol.weapon}, ${sol.room}) sai do elenco deste tema`,
+  );
+
+  // os peões começam num lugar que existe neste tema
+  ok(
+    Object.values(est.public_state.positions).every((l) => lugares.includes(l)),
+    `${tema.name}: todo peão começa num lugar deste mapa`,
+  );
+
+  // e os suspeitos distribuídos são os deste tema
+  ok(
+    est.public_state.players.every((j) => suspeitos.includes(j.suspect)),
+    `${tema.name}: cada jogador recebeu um suspeito deste elenco`,
+  );
+
+  // as cartas na mão saem do baralho do tema, e o envelope não vaza para ninguém
+  const maos = (
+    await db.query(
+      "select data -> 'hand' h from match_private_state where match_id = $1",
+      [inicioT.body.id],
+    )
+  ).rows.map((r) => r.h);
+  const todasCartas = [...suspeitos, ...objetos, ...lugares];
+  ok(
+    maos.every((m) => m.every((c) => todasCartas.includes(c))),
+    `${tema.name}: toda carta distribuída pertence ao baralho do tema`,
+  );
+  ok(
+    maos.every((m) => !m.includes(sol.suspect) && !m.includes(sol.weapon) && !m.includes(sol.room)),
+    `${tema.name}: nenhuma carta do envelope foi distribuída`,
+  );
+
+  const total = maos.reduce((n, m) => n + m.length, 0);
+  ok(
+    total === 21 - 3,
+    `${tema.name}: as 18 cartas fora do envelope foram todas distribuídas (${total})`,
+  );
+}
+
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();
 

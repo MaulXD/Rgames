@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import type { Room } from "@/lib/supabase/types";
 
@@ -185,7 +185,151 @@ export function HouseRules({
   if (room.game_key === "dominio") {
     return <RegrasDominio room={room} isHost={isHost} onChanged={onChanged} />;
   }
+  if (room.game_key === "dossie") {
+    return <RegrasDossie room={room} isHost={isHost} onChanged={onChanged} />;
+  }
   return <RegrasLetreiro room={room} isHost={isHost} onChanged={onChanged} />;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   O CASO DO DOSSIÊ
+
+   A lista de casos NÃO está escrita aqui. Ela é lida do banco, de
+   `game_themes`, que é público de propósito: um tema novo aparece nesta tela
+   no instante em que `npm run dossie` o publica, sem uma linha de código.
+
+   É a mesma disciplina do motor do Dossiê, que não sabe o que é uma
+   "biblioteca". Se a lista estivesse cravada aqui, "tema é conteúdo e não
+   engenharia" seria verdade no servidor e mentira na interface — e a interface
+   é onde a pessoa vê.
+
+   Duas opções e só duas: escolher um caso, ou surpresa. O PRD lista quatro
+   modos, mas "aleatório" e "surpresa" só são diferentes se o lobby sortear
+   antes e mostrar o resultado, o que nada faz hoje. Dois rótulos para o mesmo
+   comportamento parece generosidade e é confusão.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+type CasoDisponivel = { id: string; name: string; era: string; tagline: string };
+
+function RegrasDossie({
+  room,
+  isHost,
+  onChanged,
+}: {
+  room: Room;
+  isHost: boolean;
+  onChanged: (r: Room) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [casos, setCasos] = useState<CasoDisponivel[]>([]);
+
+  const tema = (room.settings?.tema as string) ?? "surpresa";
+
+  useEffect(() => {
+    let vivo = true;
+    async function puxa() {
+      const { data } = await supabaseBrowser()
+        .from("game_themes")
+        .select("id, name, era, tagline")
+        .eq("game_key", "dossie")
+        .order("era");
+      if (vivo && data) setCasos(data as unknown as CasoDisponivel[]);
+    }
+    void puxa();
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  async function salvar(id: string) {
+    setBusy(true);
+    setErro(null);
+    const { data, error } = await supabaseBrowser().rpc("set_room_settings", {
+      p_room: room.id,
+      p_settings: { tema: id },
+    });
+    setBusy(false);
+    if (error) {
+      const msg = error.message ?? String(error);
+      setErro(
+        /MATCH_IN_PROGRESS/.test(msg)
+          ? "Não dá para mudar com partida rolando."
+          : /NOT_HOST/.test(msg)
+            ? "Só o anfitrião escolhe o caso."
+            : /BAD_THEME/.test(msg)
+              ? "Esse caso não existe mais."
+              : msg,
+      );
+      return;
+    }
+    onChanged(data as unknown as Room);
+  }
+
+  const escolhido = casos.find((c) => c.id === tema);
+  const resumo = escolhido ? `${escolhido.name} · ${escolhido.era}` : "Caso surpresa";
+
+  return (
+    <div className="panel mt-4 p-5 sm:p-6">
+      <button
+        type="button"
+        className="flex w-full items-baseline justify-between gap-3 text-left"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span>
+          <span className="eyebrow">O caso</span>
+          <span className="mt-1 block text-sm dim">{resumo}</span>
+        </span>
+        <span className="mono text-xs" style={{ color: "var(--vivo-amarelo)" }}>
+          {open ? "fechar" : "mudar"}
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-5 flex flex-col gap-6">
+          {!isHost && (
+            <p className="text-sm dim">
+              Só o anfitrião escolhe o caso. Você está vendo o que valeu para esta sala.
+            </p>
+          )}
+
+          <fieldset disabled={!isHost || busy} style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="eyebrow mb-3">Qual caso</legend>
+            <div className="flex flex-col gap-2">
+              <Opcao
+                ativo={tema === "surpresa"}
+                nome="Caso surpresa"
+                nota="O servidor sorteia na hora de começar. Ninguém na mesa sabe qual mundo vai abrir — nem o anfitrião."
+                previa={<span className="regra-tempo">sorteio</span>}
+                onClick={() => void salvar("surpresa")}
+              />
+              {casos.map((c) => (
+                <Opcao
+                  key={c.id}
+                  ativo={tema === c.id}
+                  nome={`${c.name} · ${c.era}`}
+                  nota={c.tagline}
+                  onClick={() => void salvar(c.id)}
+                />
+              ))}
+            </div>
+          </fieldset>
+
+          {casos.length === 0 && (
+            <p className="text-sm dim">Carregando os casos publicados…</p>
+          )}
+
+          {erro && (
+            <p className="text-sm" style={{ color: "#ffb3a7" }}>
+              {erro}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function RegrasDominio({

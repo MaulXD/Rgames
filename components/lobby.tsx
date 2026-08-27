@@ -422,9 +422,8 @@ export function Lobby({ code }: { code: string }) {
         </div>
       )}
 
-      {room.game_key !== "dossie" && (
-        <HouseRules room={room} isHost={iAmHost} onChanged={setRoom} />
-      )}
+      {/* os quatro jogos têm algo a combinar antes de começar */}
+      <HouseRules room={room} isHost={iAmHost} onChanged={setRoom} />
 
       <div className="panel mt-4 p-5 sm:p-6">
         <button

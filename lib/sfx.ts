@@ -295,11 +295,29 @@ export function fantasma() {
 let trilhaId: ReturnType<typeof setInterval> | null = null;
 let trilhaPasso = 0;
 
+/**
+ * Um clima por caso do Dossie, e a escala e o que faz o clima.
+ *
+ * Nao ha instrumento aqui, so intervalos: o `raiz` diz a altura, `graus` diz
+ * quais notas da escala entram, e `dur` diz o quanto cada uma se arrasta. Menor
+ * com setima que nao resolve soa a misterio; quintas vazias soam a deserto;
+ * segundas maiores empilhadas soam a espaco. E o mesmo motor de tres
+ * osciladores em todos.
+ *
+ * Se um tema pede um clima que nao esta aqui, `iniciaTrilha` cai no misterio em
+ * vez de quebrar — antes desta lista, um tema novo derrubava o som.
+ */
 const CLIMAS = {
   /** Dossie: menor, arrastado, com uma nota que nao resolve. */
   misterio: { raiz: 3, graus: [0, 3, 7, 10, 12, 15], dur: 2.6, vol: 0.05, tipo: "sine" as OscillatorType },
   /** Letreiro: maior, leve, quase infantil. */
   brincadeira: { raiz: 12, graus: [0, 4, 7, 9, 12, 16], dur: 1.7, vol: 0.04, tipo: "triangle" as OscillatorType },
+  /** Boate Aurora: menor com quarta aumentada, pulso curto. Sintetizador de 87. */
+  neon: { raiz: 8, graus: [0, 3, 6, 10, 12, 15], dur: 1.2, vol: 0.045, tipo: "sawtooth" as OscillatorType },
+  /** Ras Zamir: quintas vazias e uma segunda menor. Deserto e distancia. */
+  areia: { raiz: 5, graus: [0, 1, 7, 12, 13, 19], dur: 3.4, vol: 0.04, tipo: "triangle" as OscillatorType },
+  /** Meridiano-9: segundas maiores empilhadas, sem terca. Frio e sem centro. */
+  orbita: { raiz: 0, graus: [0, 2, 4, 7, 14, 16], dur: 4.2, vol: 0.035, tipo: "sine" as OscillatorType },
 } as const;
 
 export type Clima = keyof typeof CLIMAS;
@@ -308,7 +326,9 @@ export function iniciaTrilha(clima: Clima = "misterio") {
   carrega();
   if (typeof window === "undefined") return;
   paraTrilha();
-  const c = CLIMAS[clima];
+  // tema com clima desconhecido toca o misterio em vez de derrubar o som: o
+  // pacote de tema e conteudo, e conteudo nao pode quebrar o motor
+  const c = CLIMAS[clima] ?? CLIMAS.misterio;
   trilhaPasso = 0;
 
   const bater = () => {

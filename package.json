@@ -18,7 +18,8 @@
     "mapa": "node scripts/seed-dominio.mjs",
     "smoke:dominio": "node scripts/smoke-dominio.mjs",
     "cidade": "node scripts/seed-metropole.mjs",
-    "smoke:metropole": "node scripts/smoke-metropole.mjs"
+    "smoke:metropole": "node scripts/smoke-metropole.mjs",
+    "dossie": "node scripts/seed-dossie.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

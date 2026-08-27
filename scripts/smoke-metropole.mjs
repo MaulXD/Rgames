@@ -467,9 +467,6 @@ if (partida?.public_state) {
   const lance1 = await rpc(outro.token, "met_bid", { p_match: partida.id, p_valor: 300 });
   ok(lance1.status === 200, "quem NÃO está na vez dá lance — é o turno alheio com decisão");
   st = lance1.body.public_state;
-  const assentoOutro = Object.entries(st.players).find(
-    ([, v]) => v.userId === outro.id,
-  )?.[0];
   ok(st.leilao.alto === 300, "o lance foi registrado");
 
   const igual = await rpc(jogador.token, "met_bid", { p_match: partida.id, p_valor: 300 });
@@ -582,7 +579,7 @@ if (partida?.public_state) {
   );
 
   const outraMinha = Object.entries(hoteis.props).find(
-    ([id, v]) => v.owner === seatVez && !v.hotel && v.casas === 0,
+    ([, v]) => v.owner === seatVez && !v.hotel && v.casas === 0,
   )?.[0];
   if (outraMinha) {
     const caixaAntes = hoteis.players[seatVez].cash;

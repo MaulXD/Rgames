@@ -96,7 +96,11 @@ export function DominioGame({
   const st = match.public_state;
 
   const [origem, setOrigem] = useState<string | null>(null);
-  const [destino, setDestino] = useState<string | null>(null);
+  /* `destinoBruto` é o que foi tocado; `destino` é o que VALE — e sem origem
+     escolhida nenhum destino vale. Derivar em vez de limpar por efeito tira
+     uma renderização encadeada e, principalmente, tira a chance de a tela
+     mostrar por um quadro um destino órfão. */
+  const [destinoBruto, setDestinoBruto] = useState<string | null>(null);
   const [quanto, setQuanto] = useState(1);
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
@@ -108,9 +112,7 @@ export function DominioGame({
   } | null>(null);
   const [priv, setPriv] = useState<{ objetivo?: { texto: string }; cartas?: Carta[] }>({});
   const [resto, setResto] = useState<number>(0);
-  const [festa, setFesta] = useState(false);
   const [mexeu, setMexeu] = useState<string[]>([]);
-  const exAntes = useRef<Record<string, number>>({});
   const ultimoLog = useRef("");
 
   const mudo = useSyncExternalStore(sfx.subscribe, sfx.getSnapshot, sfx.getServerSnapshot);
@@ -119,6 +121,8 @@ export function DominioGame({
   const meuAssento = eu?.seat ?? null;
   const minhaVez = meuAssento !== null && st.turnSeat === meuAssento && st.phase !== "fim";
   const acabou = st.phase === "fim" || match.status === "finished" || st.vencedor !== null;
+  // papel picado não precisa de estado: é uma leitura do resultado
+  const festa = acabou && st.vencedor === meuAssento;
 
   const cores = useMemo(
     () => Object.fromEntries(st.players.map((p) => [p.seat, p.cor])) as Record<number, ColorKey>,
@@ -135,6 +139,7 @@ export function DominioGame({
   // durante a rolagem o mapa mostra o estado ANTERIOR: se ele já mudasse, o
   // dado estaria contando uma história cujo fim já está na tela
   const visto = briga ? briga.congelado : st;
+  const destino = origem ? destinoBruto : null;
 
   /**
    * Uma chave que muda a cada acontecimento da partida.
@@ -201,21 +206,29 @@ export function DominioGame({
     else if (nova.k === "vitoria") sfx.venceu();
   }, [st.log, briga]);
 
-  /* ── territórios que mudaram de exército: piscam ────────────────────── */
-  useEffect(() => {
-    const antes = exAntes.current;
-    const agora = st.exercitos;
-    const mudou = Object.keys(agora).filter((k) => antes[k] !== undefined && antes[k] !== agora[k]);
-    exAntes.current = { ...agora };
-    if (mudou.length === 0 || briga) return;
-    setMexeu(mudou);
-    const id = setTimeout(() => setMexeu([]), 700);
-    return () => clearTimeout(id);
-  }, [st.exercitos, briga]);
+  /* ── territórios que mudaram de exército: piscam ──────────────────────
+     O cálculo do que mudou é feito DURANTE a renderização, comparando com o
+     estado anterior guardado em estado — é o padrão que o React recomenda
+     para "ajustar estado quando a prop muda", e não um efeito. Um efeito aqui
+     encadearia uma renderização extra a cada mensagem do servidor, e numa
+     partida de seis pessoas isso é muita renderização por nada.
+
+     Só a LIMPEZA continua em efeito, porque ela depende de tempo passar — e
+     lá o setState mora dentro do temporizador, onde é legítimo. */
+  const [visto_ex, setVistoEx] = useState<Record<string, number>>(st.exercitos);
+  if (visto_ex !== st.exercitos) {
+    const mudou = Object.keys(st.exercitos).filter(
+      (k) => visto_ex[k] !== undefined && visto_ex[k] !== st.exercitos[k],
+    );
+    setVistoEx(st.exercitos);
+    if (mudou.length > 0 && !briga) setMexeu(mudou);
+  }
 
   useEffect(() => {
-    if (acabou && st.vencedor === meuAssento) setFesta(true);
-  }, [acabou, st.vencedor, meuAssento]);
+    if (mexeu.length === 0) return;
+    const id = setTimeout(() => setMexeu([]), 700);
+    return () => clearTimeout(id);
+  }, [mexeu]);
 
   /* ── chamar o servidor ──────────────────────────────────────────────── */
   const chama = useCallback(
@@ -321,14 +334,10 @@ export function DominioGame({
         );
         return;
       }
-      setDestino(ter);
+      setDestinoBruto(ter);
     },
     [minhaVez, ocupado, acabou, briga, visto, meuAssento, origem, alvos, podeAtacar],
   );
-
-  useEffect(() => {
-    if (!origem) setDestino(null);
-  }, [origem]);
 
   /* ── as ações ───────────────────────────────────────────────────────── */
 
@@ -355,7 +364,7 @@ export function DominioGame({
     if (!r?.assaltos?.length) return;
     setBriga({ assaltos: r.assaltos, de: origem, para: destino, congelado });
     setOrigem(null);
-    setDestino(null);
+    setDestinoBruto(null);
   }
 
   async function avancar(n: number) {
@@ -372,13 +381,13 @@ export function DominioGame({
     });
     if (r) {
       setOrigem(null);
-      setDestino(null);
+      setDestinoBruto(null);
     }
   }
 
   async function encerrar() {
     setOrigem(null);
-    setDestino(null);
+    setDestinoBruto(null);
     await chama("dominio_encerrar_turno", { p_match: match.id });
   }
 
@@ -661,7 +670,7 @@ export function DominioGame({
                     <button
                       type="button"
                       className="btn btn-ghost"
-                      onClick={() => setDestino(null)}
+                      onClick={() => setDestinoBruto(null)}
                     >
                       Outro alvo
                     </button>
@@ -696,7 +705,7 @@ export function DominioGame({
                     <button
                       type="button"
                       className="btn btn-ghost"
-                      onClick={() => setDestino(null)}
+                      onClick={() => setDestinoBruto(null)}
                     >
                       Cancelar
                     </button>

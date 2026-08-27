@@ -10,6 +10,7 @@ import { useSession } from "@/components/session";
 import { LetreiroGame, type MatchRow } from "@/components/letreiro/game";
 import { DossieGame, type DossieMatch } from "@/components/dossie/game";
 import { DominioGame, type DominioMatch } from "@/components/dominio/game";
+import { MetropoleGame, type MetMatch } from "@/components/metropole/game";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { COLORS, parseAvatar, type ColorKey } from "@/lib/avatar";
 import { GAMES } from "@/lib/games";
@@ -154,7 +155,9 @@ export function Lobby({ code }: { code: string }) {
         ? "dossie_start"
         : room.game_key === "dominio"
           ? "dominio_start"
-          : "letreiro_start";
+          : room.game_key === "metropole"
+            ? "met_start"
+            : "letreiro_start";
     const { error } = await supabaseBrowser().rpc(rpc, { p_room: room.id });
     setStarting(false);
     if (error) {
@@ -168,8 +171,10 @@ export function Lobby({ code }: { code: string }) {
               ? room.game_key === "dominio"
                 ? "O Domínio precisa de pelo menos três jogadores."
                 : "O Dossiê precisa de pelo menos três jogadores."
-              : /TOO_MANY/.test(msg)
-                ? "O Domínio vai até seis jogadores."
+              : /NEED_TWO/.test(msg)
+                ? "A Metrópole precisa de pelo menos dois jogadores."
+                : /TOO_MANY/.test(msg)
+                  ? "Este jogo vai até seis jogadores."
                 : /NO_MAP/.test(msg)
                   ? "O mapa de Vantara não está publicado. Rode `npm run mapa`."
                   : msg,
@@ -233,8 +238,8 @@ export function Lobby({ code }: { code: string }) {
   const iAmHost = room.host_id === user?.id;
   const takenColors = new Set(seats.filter((s) => s.user_id !== user?.id).map((s) => s.color));
   const players = seats.filter((s) => s.seat !== null).sort((a, b) => a.seat! - b.seat!);
-  const jogavel =
-    room.game_key === "letreiro" || room.game_key === "dossie" || room.game_key === "dominio";
+  // os quatro jogam
+  const jogavel = true;
 
   // ── partida em andamento ou recém-terminada: o jogo toma a tela ─────────
   if (match && !dismissed.has(match.id)) {
@@ -243,6 +248,16 @@ export function Lobby({ code }: { code: string }) {
       display_name: p.profiles?.display_name ?? "Convidado",
       avatar: p.profiles?.avatar,
     }));
+
+    if (room.game_key === "metropole") {
+      return (
+        <MetropoleGame
+          match={match as unknown as MetMatch}
+          assentos={naMesa}
+          onSair={() => setDismissed((d) => new Set(d).add(match.id))}
+        />
+      );
+    }
 
     if (room.game_key === "dominio") {
       return (
@@ -429,7 +444,13 @@ export function Lobby({ code }: { code: string }) {
         <p className="mt-3 text-sm dim">
           {jogavel ? (
             iAmHost ? (
-              room.game_key === "dominio" ? (
+              room.game_key === "metropole" ? (
+                <>
+                  Quarenta casas, vinte e oito propriedades e três delas já sorteadas para cada um
+                  — a negociação começa antes do primeiro dado. Vinte rodadas, e ganha quem tem
+                  mais patrimônio.
+                </>
+              ) : room.game_key === "dominio" ? (
                 <>
                   Quarenta e dois territórios, seis continentes, um objetivo secreto para cada um.
                   Precisa de três jogadores ou mais. Turno de dois minutos — quem sumir perde a vez,

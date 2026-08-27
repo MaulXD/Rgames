@@ -1,0 +1,999 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   METRÓPOLE — déco tropical
+
+   Cartão-postal brasileiro dos anos 50: creme, terracota, menta, latão, azul
+   de piscina. É a única paleta do projeto que não é a do feltro — o tabuleiro
+   é uma MAQUETE apoiada na mesa, e maquete tem cor de papel, não de feltro.
+
+   Duas decisões de leitura, e as duas são sobre densidade:
+
+   1. O tabuleiro é 11 × 11 com células IGUAIS. O tabuleiro de mesa tem as
+      casas da borda mais estreitas que os cantos, e copiar isso aqui deixaria
+      o nome do bairro em corpo 6. Célula igual é menos fiel e mais legível, e
+      entre as duas ganha a legível.
+
+   2. O tabuleiro rola na horizontal abaixo de 680px. Onze colunas num celular
+      de 360px dariam 32px por casa: caberia o nome do bairro em nenhuma
+      largura. A gestão das propriedades sai de cima das casas e vai para o
+      painel, onde há espaço — o tabuleiro responde "onde estou", o painel
+      responde "o que eu tenho".
+
+   Ver docs/01-DIRECAO-DE-ARTE.md §3.3 e docs/05-PRD-METROPOLE.md.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --met-creme: #f6efdf;
+  --met-papel: #efe4cc;
+  --met-tinta: #23201c;
+  --met-terra: #d9683c;
+  --met-menta: #3fb392;
+  --met-latao: #c79a3e;
+  --met-piscina: #2f9fc4;
+}
+
+.met {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+/* ── barra de turno ───────────────────────────────────────────────────── */
+
+.met-turno {
+  position: sticky;
+  top: 0.4rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--felt-900);
+  box-shadow: var(--shadow-rest);
+}
+.met-turno[data-minha="true"] {
+  background: var(--met-latao);
+  box-shadow: 0 5px 0 #8a6a1f;
+}
+.met-turno[data-minha="true"] .met-turno-nome,
+.met-turno[data-minha="true"] .met-caixa,
+.met-turno[data-minha="true"] .met-relogio,
+.met-turno[data-minha="true"] .met-dados,
+.met-turno[data-minha="true"] .eyebrow {
+  color: var(--met-tinta);
+}
+
+.met-cor {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid var(--ink);
+  border-radius: 50%;
+}
+.met-turno-cor {
+  width: 24px;
+  height: 24px;
+}
+.met-turno-quem {
+  flex: 1;
+  min-width: 0;
+}
+.met-turno-nome {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.met-caixa {
+  flex: none;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--vivo-limao);
+  font-variant-numeric: tabular-nums;
+}
+.met-dados {
+  flex: none;
+  padding: 0.15rem 0.5rem;
+  border: 2.5px solid var(--ink);
+  border-radius: 8px;
+  background: var(--met-creme);
+  color: var(--met-tinta);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.met-relogio {
+  flex: none;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.met-relogio[data-urgente="true"] {
+  color: var(--vivo-vermelho);
+  animation: bate 0.6s var(--ease-pop) infinite alternate;
+}
+
+/* ── o tabuleiro ──────────────────────────────────────────────────────── */
+
+.tab-rolo {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  padding: 0.45rem;
+  border: 3px solid var(--ink);
+  border-radius: var(--r-lg);
+  background: linear-gradient(150deg, #1a4f4a, #0d3a30);
+  box-shadow: inset 0 5px 0 rgb(0 0 0 / 0.3), var(--shadow-rest);
+}
+
+.tab {
+  display: grid;
+  grid-template-columns: repeat(11, 1fr);
+  grid-template-rows: repeat(11, 1fr);
+  gap: 2px;
+  width: 100%;
+  min-width: 680px;
+  aspect-ratio: 1;
+  padding: 3px;
+  border-radius: var(--r-md);
+  background: var(--met-papel);
+  box-shadow: inset 0 0 0 3px var(--ink);
+}
+
+.tab-miolo {
+  display: grid;
+  grid-column: 2 / 11;
+  grid-row: 2 / 11;
+  place-content: center;
+  gap: 0.2rem;
+  border-radius: var(--r-md);
+  /* o azulejo do miolo: losango de Athos Bulcão em duas cores, em CSS puro */
+  background:
+    repeating-linear-gradient(
+        45deg,
+        rgb(63 179 146 / 0.16) 0 14px,
+        transparent 14px 28px
+      ),
+    repeating-linear-gradient(
+        -45deg,
+        rgb(47 159 196 / 0.14) 0 14px,
+        transparent 14px 28px
+      ),
+    var(--met-creme);
+  text-align: center;
+}
+.tab-marca {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 60, "WONK" 1, "opsz" 144;
+  font-size: clamp(1.6rem, 5vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--met-terra);
+}
+.tab-lema {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #8a7f6a;
+}
+
+/* ── uma casa ─────────────────────────────────────────────────────────── */
+
+.quadro {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 3px 2px 2px;
+  border: 1.5px solid #b9a983;
+  border-radius: 3px;
+  background: var(--met-creme);
+  overflow: hidden;
+  transition:
+    opacity var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-pop);
+}
+.quadro[data-tipo="largada"],
+.quadro[data-tipo="cadeia"],
+.quadro[data-tipo="praca"],
+.quadro[data-tipo="va-cadeia"] {
+  background: var(--met-papel);
+  border-color: #a3906b;
+}
+.quadro[data-tipo="sorte"] {
+  background: #fdf3d6;
+}
+.quadro[data-tipo="reves"] {
+  background: #f3e6e0;
+}
+.quadro[data-apagada="true"] {
+  opacity: 0.32;
+}
+.quadro[data-acesa="true"] {
+  z-index: 2;
+  transform: scale(1.1);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px var(--vivo-amarelo);
+}
+.quadro[data-hipotecada="true"] {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      rgb(0 0 0 / 0.09) 0 5px,
+      transparent 5px 10px
+    ),
+    var(--met-creme);
+}
+
+/* a faixa da cor do grupo, na aresta que dá para o miolo */
+.quadro-faixa {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 22%;
+  border-bottom: 1.5px solid #a3906b;
+}
+.quadro[data-borda="baixo"] .quadro-faixa {
+  inset: 0 0 auto 0;
+}
+.quadro[data-borda="topo"] .quadro-faixa {
+  inset: auto 0 0 0;
+  border-bottom: 0;
+  border-top: 1.5px solid #a3906b;
+}
+.quadro[data-borda="esquerda"] .quadro-faixa {
+  inset: 0 0 0 auto;
+  width: 22%;
+  height: auto;
+  border-bottom: 0;
+  border-left: 1.5px solid #a3906b;
+}
+.quadro[data-borda="direita"] .quadro-faixa {
+  inset: 0 auto 0 0;
+  width: 22%;
+  height: auto;
+  border-bottom: 0;
+  border-right: 1.5px solid #a3906b;
+}
+
+/* a barra do dono: dá para ver um monopólio se formando sem ler nada */
+.quadro-dono {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 5px;
+}
+
+.quadro-nome {
+  margin-top: 22%;
+  font-size: 0.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--met-tinta);
+  text-align: center;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+.quadro[data-borda="esquerda"] .quadro-nome,
+.quadro[data-borda="direita"] .quadro-nome {
+  margin-top: 0;
+  padding-left: 22%;
+}
+.quadro[data-borda="topo"] .quadro-nome {
+  margin-top: 0;
+}
+.quadro[data-borda="canto"] .quadro-nome {
+  margin-top: 0;
+  font-size: 0.54rem;
+}
+
+.quadro-num {
+  margin-top: auto;
+  font-size: 0.48rem;
+  font-weight: 800;
+  color: #6b6255;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.quadro[data-dono="true"] .quadro-num {
+  color: var(--met-terra);
+}
+
+.quadro-obras {
+  position: absolute;
+  top: 24%;
+  right: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  width: 12px;
+}
+.obra-casa {
+  width: 4px;
+  height: 4px;
+  border-radius: 1px;
+  background: var(--met-menta);
+  box-shadow: 0 0 0 0.5px var(--ink);
+}
+.obra-hotel {
+  width: 11px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--met-terra);
+  box-shadow: 0 0 0 0.5px var(--ink);
+}
+
+.quadro-hip {
+  position: absolute;
+  bottom: 6px;
+  left: 2px;
+  font-size: 0.4rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #9a8f7d;
+  text-transform: uppercase;
+}
+
+.quadro-peoes {
+  position: absolute;
+  inset: auto 1px 6px auto;
+  display: flex;
+  flex-wrap: wrap-reverse;
+  gap: 1px;
+  max-width: 70%;
+  justify-content: flex-end;
+}
+.peao {
+  display: grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  border: 1.5px solid;
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.46rem;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 1px 0 rgb(0 0 0 / 0.3);
+}
+.peao[data-preso="true"] {
+  opacity: 0.55;
+  filter: grayscale(0.5);
+}
+
+/* ── leilão ───────────────────────────────────────────────────────────── */
+
+.leilao {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  border: 3px solid var(--ink);
+  border-radius: var(--r-lg);
+  background: var(--met-terra);
+  box-shadow: 0 6px 0 #9c421f, var(--shadow-rest);
+  animation: sobe-entra 0.32s var(--ease-pop) both;
+}
+.leilao-cabeca {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.leilao .eyebrow {
+  color: #ffe9d8;
+}
+.leilao-relogio {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.22);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.leilao-relogio[data-urgente="true"] {
+  background: var(--ink);
+  animation: bate 0.5s var(--ease-pop) infinite alternate;
+}
+.leilao-prop {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 70, "WONK" 1, "opsz" 144;
+  font-size: clamp(1.4rem, 6vw, 2rem);
+  font-weight: 700;
+  line-height: 1.05;
+  color: #fff8f0;
+}
+.leilao-preco {
+  color: #ffdcc9;
+  font-size: 0.8rem;
+}
+.leilao-alto {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #fff;
+}
+.leilao-alto .dim {
+  color: #ffd3bd;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.leilao-acao {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.leilao-atalhos,
+.leilao-livre {
+  display: flex;
+  gap: 0.4rem;
+}
+.leilao-btn {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 0.6rem;
+  font-size: 0.85rem;
+}
+.leilao-campo {
+  flex: 1;
+  min-width: 0;
+  padding: 0 0.7rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--met-creme);
+  color: var(--met-tinta);
+  font-size: 1rem;
+  font-weight: 700;
+}
+.leilao-liderando {
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.2);
+  color: #fff8f0;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.leilao-passaram {
+  color: #ffd3bd;
+  font-size: 0.75rem;
+}
+
+/* ── painel de ação ───────────────────────────────────────────────────── */
+
+.met-acao {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.met-bloco {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.85rem 0.95rem;
+  border: 3px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--felt-900);
+}
+.met-divida {
+  border-color: var(--vivo-vermelho);
+}
+.met-titulo {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.met-nota {
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+.met-botoes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.met-botoes .btn {
+  flex: 1 1 auto;
+  min-width: 8rem;
+}
+.met-rolar,
+.met-passar {
+  width: 100%;
+}
+.met-espera {
+  padding: 0.7rem 0.9rem;
+  border: 3px dashed var(--line);
+  border-radius: var(--r-lg);
+  font-size: 0.86rem;
+  text-align: center;
+}
+.met-erro {
+  padding: 0.55rem 0.9rem;
+  border: 3px solid var(--ink);
+  border-radius: 999px;
+  background: var(--vivo-rosa);
+  color: var(--ink);
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.83rem;
+  font-weight: 700;
+  animation: sobe-entra 0.22s var(--ease-pop) both;
+}
+
+/* ── ficha de uma casa ────────────────────────────────────────────────── */
+
+.ficha {
+  padding: 0.8rem 0.95rem;
+}
+.ficha-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.ficha-nome {
+  font-size: 1rem;
+  font-weight: 700;
+}
+.ficha-x {
+  flex: none;
+  padding: 0.1rem 0.4rem;
+  border: 0;
+  background: none;
+  color: var(--fg-faint);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.ficha-linha {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-top: 0.3rem;
+  font-size: 0.86rem;
+}
+.ficha-nota {
+  margin-top: 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+/* ── fluxo de caixa ───────────────────────────────────────────────────── */
+
+.fluxo {
+  padding: 0.9rem 1rem;
+}
+.fluxo-total {
+  margin-top: 0.3rem;
+  font-size: clamp(1.7rem, 7vw, 2.3rem);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--vivo-amarelo);
+  font-variant-numeric: tabular-nums;
+}
+.fluxo-titulo {
+  margin-top: 1rem;
+}
+.fluxo-quebra {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.85rem;
+}
+.fluxo-quebra li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  color: var(--fg-dim);
+}
+.fluxo-quebra li span:last-child {
+  font-variant-numeric: tabular-nums;
+}
+.fluxo-mais {
+  color: var(--vivo-limao);
+}
+.fluxo-menos {
+  color: var(--vivo-rosa);
+}
+.fluxo-saldo {
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
+  border-top: 2px solid var(--line);
+  color: var(--fg) !important;
+  font-weight: 700;
+}
+.fluxo-saldo[data-ruim="true"] span:last-child {
+  color: var(--vivo-vermelho);
+}
+.fluxo-saldo[data-ruim="false"] span:last-child {
+  color: var(--vivo-limao);
+}
+.fluxo-aviso {
+  margin-top: 0.7rem;
+  padding: 0.55rem 0.75rem;
+  border: 2.5px solid var(--ink);
+  border-radius: var(--r-md);
+  background: var(--vivo-amarelo);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.fluxo-nota {
+  margin-top: 0.7rem;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+/* ── minhas propriedades ──────────────────────────────────────────────── */
+
+.minhas {
+  padding: 0.9rem 1rem;
+}
+.minhas-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+.minhas-banco {
+  font-size: 0.74rem;
+}
+.grupo {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 2px solid var(--line);
+}
+.grupo:first-of-type {
+  border-top: 0;
+}
+.grupo-cabeca {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.grupo-cor {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+}
+.grupo-nome {
+  flex: 1;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.grupo-conta {
+  font-size: 0.78rem;
+  color: var(--fg-faint);
+}
+.grupo-selo {
+  padding: 0.1rem 0.45rem;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--vivo-limao);
+  color: var(--ink);
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+.grupo-nota {
+  margin-top: 0.3rem;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+.props {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.prop {
+  border: 2px solid var(--line);
+  border-radius: var(--r-md);
+  background: #071c1a73;
+  overflow: hidden;
+}
+.prop[data-aberta="true"] {
+  border-color: var(--vivo-amarelo);
+}
+.prop-linha {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.prop-nome {
+  flex: 1;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prop-obra {
+  flex: none;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: var(--met-menta);
+  color: #04251f;
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+.prop-hip {
+  flex: none;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: #4a4038;
+  color: #d8cbb8;
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+.prop-aluguel {
+  flex: none;
+  color: var(--vivo-amarelo);
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.prop-corpo {
+  padding: 0 0.6rem 0.6rem;
+}
+.tabela {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.76rem;
+}
+.tabela li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+  color: var(--fg-faint);
+}
+.tabela li[data-agora="true"] {
+  background: #ffc42e1f;
+  color: var(--vivo-amarelo);
+  font-weight: 700;
+}
+.tabela-dobro {
+  color: var(--vivo-limao);
+  font-size: 0.68rem;
+}
+.prop-acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+.prop-btn {
+  flex: 1 1 auto;
+  min-width: 9rem;
+  min-height: 40px;
+  font-size: 0.78rem;
+}
+.prop-dica {
+  flex: 1 1 100%;
+  color: var(--vivo-limao);
+  font-size: 0.72rem;
+}
+
+/* ── mesa e registro ──────────────────────────────────────────────────── */
+
+.met-mesa {
+  padding: 0.9rem 1rem;
+}
+.met-jogadores {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.met-jogador {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.84rem;
+}
+.met-jogador[data-vez="true"] .met-jogador-nome {
+  color: var(--vivo-amarelo);
+}
+.met-jogador[data-fora="true"] {
+  opacity: 0.5;
+}
+.met-jogador-nome {
+  flex: 1;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.met-jogador-caixa {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.met-jogador-pat {
+  flex: none;
+  width: 6.5rem;
+  font-size: 0.74rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.met-preso,
+.met-devendo,
+.met-fora {
+  flex: none;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+.met-preso {
+  background: #4a4038;
+  color: #d8cbb8;
+}
+.met-devendo {
+  background: var(--vivo-vermelho);
+  color: #fff4f5;
+}
+.met-fora {
+  background: var(--vivo-roxo);
+  color: #fff;
+}
+.met-mesa-nota {
+  margin-top: 0.7rem;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.met-log {
+  padding: 0.9rem 1rem;
+}
+.met-log-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--fg-dim);
+}
+.met-log-lista li:first-child {
+  color: var(--fg);
+  font-weight: 600;
+}
+.met-log-lista li[data-k="compra"],
+.met-log-lista li[data-k="leilao-fecha"] {
+  color: var(--vivo-limao);
+}
+.met-log-lista li[data-k="carta"] {
+  color: var(--vivo-turquesa);
+}
+.met-log-lista li[data-k="investidor"],
+.met-log-lista li[data-k="eliminado"],
+.met-log-lista li[data-k="fim-rodadas"] {
+  color: var(--vivo-amarelo);
+  font-weight: 700;
+}
+
+/* ── fim ──────────────────────────────────────────────────────────────── */
+
+.met-fim {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.met-fim-titulo {
+  font-size: clamp(2rem, 8vw, 3.2rem);
+  line-height: 1.05;
+  color: var(--met-latao);
+  text-shadow: 0 5px 0 #8a6a1f;
+  text-wrap: balance;
+  animation: pula var(--dur-slow) var(--ease-pop) both;
+}
+.met-fim-nota {
+  max-width: 48ch;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.met-podio {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.met-podio-linha {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  font-size: 0.88rem;
+}
+.met-podio-linha[data-eu="true"] {
+  border-color: var(--met-latao);
+}
+.met-podio-nome {
+  flex: 1;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.met-podio-valor {
+  flex: none;
+  color: var(--vivo-amarelo);
+  font-size: 1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── duas colunas quando há espaço ────────────────────────────────────── */
+
+@media (min-width: 64rem) {
+  .met {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(19rem, 1fr);
+    grid-template-areas:
+      "turno turno"
+      "leilao leilao"
+      "tab lado"
+      "acao lado";
+    align-items: start;
+    gap: 1rem;
+  }
+  .met-turno {
+    grid-area: turno;
+  }
+  .leilao {
+    grid-area: leilao;
+  }
+  .tab-rolo {
+    grid-area: tab;
+  }
+  .met-acao {
+    grid-area: acao;
+  }
+  .met > .ficha,
+  .met > .fluxo,
+  .met > .minhas,
+  .met > .met-mesa,
+  .met > .met-log {
+    grid-column: 2;
+  }
+  .tab {
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .met-relogio[data-urgente="true"],
+  .leilao-relogio[data-urgente="true"],
+  .leilao,
+  .met-fim-titulo,
+  .met-erro {
+    animation: none !important;
+  }
+}

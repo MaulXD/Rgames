@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import * as sfx from "@/lib/sfx";
 
 /**
@@ -104,36 +104,48 @@ export function Rolagem({
 }) {
   const [passo, setPasso] = useState(0);
   const [rolando, setRolando] = useState(true);
-  const pronto = useRef(false);
 
-  // Um relógio só, que se reagenda: dois `setTimeout` concorrentes davam
-  // assalto pulado quando a aba perdia o foco e voltava.
+  /* UM relógio para a briga inteira, e não um efeito por assalto.
+     A primeira versão religava `rolando` no corpo do efeito a cada passo —
+     que é setState dentro de efeito, o padrão que o React pede para evitar
+     porque encadeia renderizações. Aqui a sequência caminha dentro dos
+     temporizadores, que é onde mexer em estado é legítimo: o temporizador é
+     o "sistema externo" com que o efeito se sincroniza.
+
+     E resolve outro problema de brinde: com um efeito por passo, uma aba que
+     perde o foco e volta podia pular assalto. Agora a cadeia é uma só. */
   useEffect(() => {
-    if (passo >= assaltos.length) {
-      if (pronto.current) return;
-      pronto.current = true;
-      const id = setTimeout(onFim, 700);
-      return () => clearTimeout(id);
-    }
+    let vivo = true;
+    let id: ReturnType<typeof setTimeout>;
 
-    setRolando(true);
-    sfx.arm();
-    sfx.dado();
+    const conta = (i: number) => {
+      if (!vivo) return;
+      if (i >= assaltos.length) {
+        id = setTimeout(() => vivo && onFim(), 700);
+        return;
+      }
+      setPasso(i);
+      setRolando(true);
+      sfx.arm();
+      sfx.dado();
 
-    const parar = setTimeout(() => {
-      setRolando(false);
-      const a = assaltos[passo];
-      if (a.perdeDefe > a.perdeAtac) sfx.avanca();
-      else if (a.perdeAtac > a.perdeDefe) sfx.recua();
-    }, 620);
+      id = setTimeout(() => {
+        if (!vivo) return;
+        setRolando(false);
+        const a = assaltos[i];
+        if (a.perdeDefe > a.perdeAtac) sfx.avanca();
+        else if (a.perdeAtac > a.perdeDefe) sfx.recua();
 
-    const seguir = setTimeout(() => setPasso((p) => p + 1), 620 + 1150);
-
-    return () => {
-      clearTimeout(parar);
-      clearTimeout(seguir);
+        id = setTimeout(() => conta(i + 1), 1150);
+      }, 620);
     };
-  }, [passo, assaltos, onFim]);
+
+    conta(0);
+    return () => {
+      vivo = false;
+      clearTimeout(id);
+    };
+  }, [assaltos, onFim]);
 
   const atual = assaltos[Math.min(passo, assaltos.length - 1)];
   if (!atual) return null;

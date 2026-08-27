@@ -8,6 +8,7 @@ import "./letreiro.css";
 import "./dossie.css";
 import "./gamificacao.css";
 import "./dominio.css";
+import "./metropole.css";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",

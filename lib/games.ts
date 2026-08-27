@@ -92,7 +92,7 @@ export const GAMES: Game[] = [
       "Bairros brasileiros em art déco tropical, prédios que crescem na sua frente, e acordos que o jogo cobra sozinho — parcela a parcela.",
     players: "2–6",
     duration: "30–120 min",
-    seal: "Fase 4",
+    seal: "Jogável",
     phase: "Fase 4",
     skin: {
       bg: "#2B84E0",

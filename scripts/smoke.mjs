@@ -189,6 +189,7 @@ const PERMITIDAS = [
   // Domínio
   "dominio_atacar", "dominio_avancar", "dominio_encerrar_turno",
   "dominio_reforcar", "dominio_remanejar", "dominio_start", "dominio_trocar",
+  "dominio_tocar",
   // Metrópole
   "met_bankrupt", "met_bid", "met_build", "met_buy", "met_decline", "met_end_turn",
   "met_jail", "met_mortgage", "met_pass", "met_roll", "met_sell", "met_start",

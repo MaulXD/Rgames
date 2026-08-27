@@ -1033,3 +1033,56 @@
   font-size: 0.7rem;
   text-align: center;
 }
+
+/* ── a máquina pensando ──────────────────────────────────────
+
+   Três pontos que pulsam em série. É o único sinal na tela de que algo está
+   acontecendo do outro lado, e por isso ele não pode ser só texto: "está
+   jogando" parado parece "travou". */
+.acao-pensando {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--fg);
+}
+
+.pensa-pontos {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+.pensa-pontos i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--vivo-amarelo);
+  animation: pensa 1.1s var(--ease-out) infinite;
+}
+.pensa-pontos i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+.pensa-pontos i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes pensa {
+  0%,
+  70%,
+  100% {
+    opacity: 0.22;
+    transform: translateY(0);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+/* Quem pediu menos movimento recebe menos movimento — mas continua vendo que
+   há algo em curso, pelo contraste. */
+@media (prefers-reduced-motion: reduce) {
+  .pensa-pontos i {
+    animation: none;
+    opacity: 0.75;
+  }
+}

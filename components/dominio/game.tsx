@@ -62,7 +62,22 @@ export type DominioMatch = {
   public_state: DominioState;
 };
 
-export type Assento = { user_id: string; display_name: string; avatar: unknown };
+export type Assento = {
+  user_id: string;
+  display_name: string;
+  avatar: unknown;
+  is_bot?: boolean;
+};
+
+/** Quanto tempo a máquina "pensa" antes de jogar o turno dela.
+ *
+ *  NÃO É ENFEITE. O servidor resolve o turno de uma máquina em alguns
+ *  milissegundos; sem esta pausa, a pessoa encerra o turno e o mapa aparece com
+ *  seis territórios trocados de cor sem que nada tenha acontecido na tela. Num
+ *  jogo de tabuleiro, ver o adversario jogar é metade do jogo.
+ *
+ *  1200ms é o tempo de ler "Vez de Creuza" e olhar para o mapa. */
+const PENSA_MS = 1200;
 
 /** As mensagens de erro do servidor, em português e no contexto certo. */
 const RECADO: Record<string, string> = {
@@ -82,6 +97,7 @@ const RECADO: Record<string, string> = {
   BAD_COMBO: "Essas três cartas não fecham.",
   CARD_NOT_HELD: "Essa carta não está na sua mão.",
   MATCH_NOT_RUNNING: "Esta partida já terminou.",
+  NOT_BOT_TURN: "Não é a vez de nenhuma máquina.",
 };
 
 function recado(msg: string): string {
@@ -127,6 +143,13 @@ export function DominioGame({
 
   const eu = st.players.find((p) => p.userId === user?.id);
   const meuAssento = eu?.seat ?? null;
+  /* Quem está na vez é máquina? Vem do lobby, que leu `profiles.is_bot`.
+     Derivado, nunca guardado em estado: se virasse estado, a virada de turno
+     teria dois passos e por um quadro a tela diria "sua vez" com a máquina na
+     vez. */
+  const donoDaVez = st.players.find((p) => p.seat === st.turnSeat);
+  const maquinaNaVez =
+    assentos.find((a) => a.user_id === donoDaVez?.userId)?.is_bot === true;
   const minhaVez = meuAssento !== null && st.turnSeat === meuAssento && st.phase !== "fim";
   const acabou = st.phase === "fim" || match.status === "finished" || st.vencedor !== null;
   // papel picado não precisa de estado: é uma leitura do resultado
@@ -191,6 +214,59 @@ export function DominioGame({
     const id = setInterval(tick, 500);
     return () => clearInterval(id);
   }, [match.turn_deadline, acabou]);
+
+  /* ── a máquina joga, com respiro ────────────────────────────────
+
+     O SERVIDOR NÃO JOGA O TURNO DA MÁQUINA SOZINHO, e essa é a decisão de
+     ritmo do jogo todo. Se ele jogasse dentro da chamada de "encerrar turno", a
+     pessoa clicaria uma vez e receberia o mapa três turnos depois — sem ver o
+     dado rolar, sem ver o território mudar de cor, sem entender por que perdeu
+     a Aurélia.
+
+     Então a máquina FICA NA VEZ, e quem chama `dominio_tocar` é este efeito,
+     depois de PENSA_MS. O servidor confere que é vez de uma máquina e nada mais:
+     o cliente manda no RITMO, nunca no RESULTADO.
+
+     Numa mesa com duas pessoas, as duas chamam. A segunda recebe NOT_BOT_TURN
+     porque a vez já mudou, e isso é silêncio de propósito — não é erro, é a
+     corrida sendo resolvida pelo `for update` do servidor.
+
+     E se falhar três vezes seguidas, o efeito desiste e a tela oferece um botão.
+     Girar para sempre chamando um RPC que dá erro seria pior que travar: gasta
+     bateria de celular e não conta a ninguém que travou. */
+  const tocando = useRef(false);
+  const falhasSeguidas = useRef(0);
+  const [maquinaEmpacou, setMaquinaEmpacou] = useState(false);
+
+  const tocarMaquina = useCallback(async () => {
+    if (tocando.current) return;
+    tocando.current = true;
+    try {
+      const { error } = await supabaseBrowser().rpc("dominio_tocar", { p_match: match.id });
+      if (error) {
+        const msg = (error as { message?: string }).message ?? "";
+        // outra pessoa da mesa tocou primeiro: nao e erro, e a corrida resolvida
+        if (/NOT_BOT_TURN|MATCH_NOT_RUNNING/.test(msg)) {
+          falhasSeguidas.current = 0;
+          return;
+        }
+        falhasSeguidas.current += 1;
+        if (falhasSeguidas.current >= 3) setMaquinaEmpacou(true);
+        return;
+      }
+      falhasSeguidas.current = 0;
+    } finally {
+      tocando.current = false;
+    }
+  }, [match.id]);
+
+  useEffect(() => {
+    if (!maquinaNaVez || acabou || maquinaEmpacou) return;
+    // o setState mora DENTRO do temporizador; no corpo do efeito ele seria uma
+    // renderização encadeada, e o lint deste projeto recusa — com razão
+    const id = setTimeout(() => void tocarMaquina(), PENSA_MS);
+    return () => clearTimeout(id);
+  }, [maquinaNaVez, acabou, maquinaEmpacou, st.turnSeat, st.round, tocarMaquina]);
 
   /* ── som e brilho conforme o log anda ───────────────────────────────── */
   useEffect(() => {
@@ -537,7 +613,40 @@ export function DominioGame({
       {/* ── painel de ação ──────────────────────────────────────────── */}
       {!briga && (
         <div className="acao">
-          {!minhaVez && (
+          {!minhaVez && maquinaNaVez && !maquinaEmpacou && (
+            <p className="acao-espera acao-pensando">
+              <span className="pensa-pontos" aria-hidden>
+                <i />
+                <i />
+                <i />
+              </span>
+              {nomePorAssento[st.turnSeat]} está jogando
+            </p>
+          )}
+
+          {!minhaVez && maquinaNaVez && maquinaEmpacou && (
+            <div className="acao-bloco">
+              <p className="acao-titulo">A vez de {nomePorAssento[st.turnSeat]} empacou.</p>
+              <p className="acao-nota dim">
+                Pode ser conexão. O turno dela também passa sozinho no relógio — mas se
+                quiser empurrar, é aqui.
+              </p>
+              <div className="acao-botoes">
+                <button
+                  type="button"
+                  className="btn btn-brass"
+                  onClick={() => {
+                    falhasSeguidas.current = 0;
+                    setMaquinaEmpacou(false);
+                  }}
+                >
+                  Tentar de novo
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!minhaVez && !maquinaNaVez && (
             <p className="acao-espera dim">
               Esperando {nomePorAssento[st.turnSeat]}. O turno passa sozinho se ninguém jogar.
             </p>

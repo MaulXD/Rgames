@@ -1197,6 +1197,455 @@ ok(
   "no Clássico não há placar: os vinte pontos não existem lá",
 );
 
+/* ══════════════════════════════════════════════════════════════════════════
+   O CÉREBRO DA MÁQUINA
+
+   O Domínio pede três pessoas. Sem máquina não existe partida solo, e juntar
+   três pessoas ao mesmo tempo é a coisa mais difícil de um site de jogo de
+   tabuleiro. Então este bloco é o que decide se o Domínio é jogável sozinho.
+
+   Prova cinco coisas, em ordem de importância:
+
+   1. UMA PARTIDA SOLO INTEIRA RODA DO COMEÇO AO FIM. Não um turno: a partida.
+      A cada turno, o mapa é conferido inteiro — território com zero exército,
+      dono que não existe, fase impossível. Um cérebro que quebra o mapa na
+      trigésima rodada é PIOR que nenhum, porque quebra depois de a pessoa ter
+      investido meia hora.
+
+   2. O NÍVEL SIGNIFICA ALGO. Na mesma quantidade de turnos, as impiedosas têm
+      de terminar com mais mapa que as tranquilas. Nível que é rótulo é pior que
+      não ter nível.
+
+   3. A MÁQUINA NÃO TRAPACEIA. Ela joga pelas funções de 0047, as mesmas de uma
+      pessoa — então trapaça de regra é impossível por construção. O teste
+      confere no MAPA de todo modo, porque "impossível por construção" é
+      exatamente o que se diz antes de descobrir que era possível.
+
+   4. NINGUÉM FICA ESPERANDO. A faxina joga o turno da máquina em vez de pulá-lo.
+
+   5. O CÉREBRO É DETERMINÍSTICO. Bug de máquina que não reproduz não se
+      conserta.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\n  ── o cérebro da máquina ──");
+
+/** Confere o mapa inteiro. Devolve a lista de problemas — vazia é bom. */
+function conferirMapa(st, quantosJogadores) {
+  const p = [];
+  const ters = Object.keys(st.donos ?? {});
+  if (ters.length !== 42) p.push(`${ters.length} territórios em vez de 42`);
+  for (const t of ters) {
+    const n = st.exercitos?.[t];
+    if (typeof n !== "number") p.push(`${t} sem exército`);
+    else if (n < 1) p.push(`${t} com ${n} exército(s)`);
+    const dono = Number(st.donos[t]);
+    if (!Number.isInteger(dono) || dono < 0 || dono >= quantosJogadores) {
+      p.push(`${t} é do assento ${st.donos[t]}, que não existe`);
+    }
+  }
+  if (!["reforco", "ataque", "remanejo", "fim"].includes(st.phase)) {
+    p.push(`fase impossível: ${st.phase}`);
+  }
+  if ((st.reforcoLeft ?? 0) < 0) p.push(`reforcoLeft negativo: ${st.reforcoLeft}`);
+  return p;
+}
+
+/**
+ * Joga uma partida solo até acabar, ou até o teto de turnos.
+ *
+ * O HUMANO É PASSIVO, MAS NÃO SUICIDA: ele espalha o reforço nos territórios
+ * dele mais fracos e nunca ataca. Passivo de propósito, porque o que se mede
+ * aqui é a máquina; não suicida de propósito, porque um humano que se mata
+ * sozinho zera as duas comparações e o teste vira cara ou coroa.
+ */
+async function partidaSolo({ token, niveis, tetoTurnos }) {
+  const salaS = (await rpc(token, "create_room", { p_game: "dominio" })).body;
+  for (const n of niveis) {
+    const r = await rpc(token, "adicionar_bot", { p_room: salaS.id, p_nivel: n });
+    if (r.status !== 200) return { erro: `adicionar_bot(${n}): ${JSON.stringify(r.body)}` };
+  }
+  const ini = await rpc(token, "dominio_start", { p_room: salaS.id });
+  if (ini.status !== 200) return { erro: `dominio_start: ${JSON.stringify(ini.body)}` };
+
+  const idPartida = ini.body.id;
+  const elenco = (
+    await db.query(
+      `select mp.seat, p.is_bot from match_players mp
+        join profiles p on p.id = mp.user_id
+       where mp.match_id = $1 order by mp.seat`,
+      [idPartida],
+    )
+  ).rows;
+  const meuAssento = Number(elenco.find((e) => !e.is_bot).seat);
+  const assentosBot = elenco.filter((e) => e.is_bot).map((e) => Number(e.seat));
+
+  const problemas = [];
+  let turnos = 0;
+  let turnosBot = 0;
+  let conquistasBot = 0;
+  let acabou = false;
+
+  while (turnos < tetoTurnos) {
+    const linha = (
+      await db.query("select status, public_state from matches where id = $1", [idPartida])
+    ).rows[0];
+    const st = linha.public_state;
+    if (linha.status !== "running") {
+      acabou = true;
+      break;
+    }
+
+    const ruim = conferirMapa(st, elenco.length);
+    if (ruim.length) {
+      problemas.push(`turno ${turnos}, assento ${st.turnSeat}: ${ruim.slice(0, 3).join("; ")}`);
+      break;
+    }
+
+    if (Number(st.turnSeat) === meuAssento) {
+      const meus = Object.keys(st.donos)
+        .filter((t) => Number(st.donos[t]) === meuAssento)
+        .sort((a, b) => st.exercitos[a] - st.exercitos[b]);
+      if (meus.length === 0) break;
+
+      let resta = st.reforcoLeft ?? 0;
+      if (resta > 0) {
+        const tenta = await rpc(token, "dominio_reforcar", {
+          p_match: idPartida,
+          p_ter: meus[0],
+          p_qtd: 1,
+        });
+        if (tenta.status !== 200 && /MUST_TRADE/.test(JSON.stringify(tenta.body))) {
+          await rpc(token, "dominio_trocar", { p_match: idPartida, p_cartas: [0, 1, 2] });
+          resta = Number(
+            (
+              await db.query("select public_state ->> 'reforcoLeft' r from matches where id = $1", [
+                idPartida,
+              ])
+            ).rows[0].r,
+          );
+        } else if (tenta.status === 200) {
+          resta -= 1;
+        } else {
+          problemas.push(`humano não reforçou: ${JSON.stringify(tenta.body).slice(0, 110)}`);
+          break;
+        }
+        // espalha o resto nos mais fracos, um por um
+        let i = 1;
+        while (resta > 0) {
+          const alvo = meus[i % meus.length];
+          const r = await rpc(token, "dominio_reforcar", {
+            p_match: idPartida,
+            p_ter: alvo,
+            p_qtd: 1,
+          });
+          if (r.status !== 200) break;
+          resta -= 1;
+          i++;
+        }
+      }
+      const fim = await rpc(token, "dominio_encerrar_turno", { p_match: idPartida });
+      if (fim.status !== 200) {
+        problemas.push(`humano não passou a vez: ${JSON.stringify(fim.body).slice(0, 120)}`);
+        break;
+      }
+    } else {
+      const antes = { ...st.donos };
+      const t = await rpc(token, "dominio_tocar", { p_match: idPartida });
+      if (t.status !== 200) {
+        problemas.push(
+          `dominio_tocar no assento ${st.turnSeat}: ${JSON.stringify(t.body).slice(0, 150)}`,
+        );
+        break;
+      }
+      turnosBot++;
+      /* QUANTOS TERRITÓRIOS ELA TOMOU NESTE TURNO, contados no mapa e não no
+         registro: `dominio_log` guarda 80 linhas, e uma partida de 36 turnos
+         passa disso. Medir pelo registro seria medir a janela do registro. */
+      const depois = (t.body?.public_state ?? {}).donos ?? {};
+      const dela = Number(st.turnSeat);
+      for (const ter of Object.keys(antes)) {
+        if (Number(antes[ter]) !== dela && Number(depois[ter]) === dela) conquistasBot++;
+      }
+    }
+    turnos++;
+  }
+
+  const fim = (
+    await db.query("select status, public_state from matches where id = $1", [idPartida])
+  ).rows[0];
+  const contagem = {};
+  for (const t of Object.keys(fim.public_state.donos ?? {})) {
+    const d = Number(fim.public_state.donos[t]);
+    contagem[d] = (contagem[d] ?? 0) + 1;
+  }
+  const vencedor = fim.public_state.vencedor;
+  /* A FORÇA DAS MÁQUINAS numa partida: quanto mapa elas seguram. Se uma delas
+     GANHOU, seguram tudo — 42 — porque a partida acabou justamente por isso.
+     Sem essa regra, a partida que a máquina ganha rápido mediria força MENOR
+     que a que ela quase ganha devagar. */
+  const forcaBot =
+    vencedor !== undefined && vencedor !== null && assentosBot.includes(Number(vencedor))
+      ? 42
+      : assentosBot.reduce((soma, s) => soma + (contagem[s] ?? 0), 0);
+
+  return {
+    id: idPartida,
+    meuAssento,
+    assentosBot,
+    turnos,
+    turnosBot,
+    conquistasBot,
+    /* A FORÇA DE UM NÍVEL: territórios tomados POR TURNO de máquina.
+       É a medida certa por dois motivos. Primeiro, ela não satura: contar
+       territórios no fim dá 42 para qualquer dupla que vença, e contra um humano
+       passivo toda dupla acaba vencendo — foi assim que a primeira versão deste
+       teste comparou 42 com 42 e não disse nada. Segundo, ela mede exatamente o
+       que o nível DEFINE: a tranquila ataca com dois de vantagem e no máximo
+       duas vezes; a impiedosa ataca em paridade e até doze. */
+    porTurno: turnosBot > 0 ? conquistasBot / turnosBot : 0,
+    acabou,
+    problemas,
+    st: fim.public_state,
+    status: fim.status,
+    contagem,
+    forcaBot,
+    vencedor,
+  };
+}
+
+/* ── 1. a recusa: tocar não é jogar no lugar de gente ─────────────────────── */
+
+const salaT = (await rpc(P[0].token, "create_room", { p_game: "dominio" })).body;
+await rpc(P[0].token, "adicionar_bot", { p_room: salaT.id, p_nivel: "medio" });
+await rpc(P[0].token, "adicionar_bot", { p_room: salaT.id, p_nivel: "dificil" });
+const iniT = await rpc(P[0].token, "dominio_start", { p_room: salaT.id });
+ok(
+  iniT.status === 200,
+  `partida solo com duas máquinas começa${iniT.status !== 200 ? " " + JSON.stringify(iniT.body).slice(0, 130) : ""}`,
+);
+
+const trioT = (
+  await db.query(
+    `select mp.seat, p.is_bot, p.display_name, rm.bot_nivel
+       from match_players mp
+       join profiles p on p.id = mp.user_id
+       left join room_members rm on rm.room_id = $2 and rm.user_id = mp.user_id
+      where mp.match_id = $1 order by mp.seat`,
+    [iniT.body.id, salaT.id],
+  )
+).rows;
+ok(
+  trioT.filter((t) => t.is_bot).length === 2,
+  `três na mesa, duas máquinas: ${trioT
+    .map((t) => t.display_name + (t.is_bot ? ` (${t.bot_nivel})` : ""))
+    .join(", ")}`,
+);
+
+const meuT = Number(trioT.find((t) => !t.is_bot).seat);
+const botSeat = Number(trioT.find((t) => t.is_bot).seat);
+
+// na vez de gente, tocar recusa
+await db.query(
+  `update matches set public_state = jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int))
+    where id = $1`,
+  [iniT.body.id, meuT],
+);
+const recusa = await rpc(P[0].token, "dominio_tocar", { p_match: iniT.body.id });
+ok(
+  /NOT_BOT_TURN/.test(JSON.stringify(recusa.body)),
+  "na vez de GENTE, `dominio_tocar` recusa — o cliente manda no ritmo, nunca no resultado",
+);
+
+const deFora = await rpc(P[2].token, "dominio_tocar", { p_match: iniT.body.id });
+ok(
+  /NOT_A_PLAYER/.test(JSON.stringify(deFora.body)),
+  "e quem não está na mesa não toca a máquina de ninguém",
+);
+
+/* ── 2. a faxina joga o turno da máquina, e não pula ──────────────────────── */
+
+await db.query(
+  `update matches
+      set public_state = jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
+            '{phase}', '"reforco"'),
+          turn_deadline = now() - interval '1 second'
+    where id = $1`,
+  [iniT.body.id, botSeat],
+);
+const antesFaxina = Number(
+  (
+    await db.query(
+      "select jsonb_array_length(coalesce(public_state -> 'log', '[]'::jsonb)) n from matches where id = $1",
+      [iniT.body.id],
+    )
+  ).rows[0].n,
+);
+const varrida = await db.query("select public.dominio_sweep() n");
+const depoisFaxina = (
+  await db.query(
+    `select coalesce(public_state -> 'log', '[]'::jsonb) l,
+            (public_state ->> 'turnSeat')::int t, status
+       from matches where id = $1`,
+    [iniT.body.id],
+  )
+).rows[0];
+ok(Number(varrida.rows[0].n) >= 1, `a faxina agiu na mesa com máquina (${varrida.rows[0].n})`);
+ok(
+  Number(depoisFaxina.t) !== botSeat || depoisFaxina.status !== "running",
+  `e a vez saiu da máquina (${botSeat} → ${depoisFaxina.t}): ninguém fica esperando uma máquina`,
+);
+ok(
+  (depoisFaxina.l ?? []).filter((l) => l.k === "tempo-esgotado" && Number(l.seat) === botSeat)
+    .length === 0,
+  "o registro NÃO diz que a máquina perdeu o turno no relógio — ela jogou",
+);
+ok(
+  (depoisFaxina.l ?? []).length > antesFaxina,
+  `o registro cresceu de ${antesFaxina} para ${(depoisFaxina.l ?? []).length} linhas: a máquina fez coisas`,
+);
+
+/* ── 3. UMA PARTIDA SOLO INTEIRA ─────────────────────────────────────────── */
+
+const solo = await partidaSolo({ token: P[0].token, niveis: ["medio", "dificil"], tetoTurnos: 400 });
+ok(!solo.erro, `a partida solo montou${solo.erro ? ": " + solo.erro : ""}`);
+if (!solo.erro) {
+  ok(
+    solo.problemas.length === 0,
+    solo.problemas.length === 0
+      ? `${solo.turnos} turnos jogados e o mapa nunca ficou inválido`
+      : `MAPA QUEBRADO: ${solo.problemas[0]}`,
+  );
+  ok(
+    solo.acabou,
+    solo.acabou
+      ? `e a partida ACABOU sozinha em ${solo.turnos} turnos — o Domínio é jogável sozinho`
+      : `a partida não acabou em ${solo.turnos} turnos: ${JSON.stringify(solo.contagem)}`,
+  );
+  ok(solo.turnosBot >= 2, `as máquinas jogaram ${solo.turnosBot} turnos`);
+  const somaEx = Object.values(solo.st.exercitos ?? {}).reduce((a, b) => a + b, 0);
+  ok(somaEx >= 42, `${somaEx} exércitos em 42 territórios — nunca menos de um por território`);
+  console.log(
+    `         no fim: ${Object.entries(solo.contagem)
+      .map(([s, n]) => `assento ${s}=${n}`)
+      .join(", ")}${solo.vencedor !== undefined && solo.vencedor !== null ? ` · venceu ${solo.vencedor}` : ""}`,
+  );
+  const kinds = new Set((solo.st.log ?? []).map((l) => l.k));
+  ok(
+    kinds.has("conquista"),
+    `o registro mostra conquista de verdade (tipos: ${[...kinds].join(", ")})`,
+  );
+}
+
+/* ── 4. a máquina não trapaceia ──────────────────────────────────────────── */
+
+if (!solo.erro) {
+  const mapaS = (
+    await db.query(
+      `select gt.data d from game_themes gt
+        join matches m on gt.id = (m.public_state ->> 'map') where m.id = $1`,
+      [solo.id],
+    )
+  ).rows[0].d;
+  const adj = mapaS.adjacencia;
+  const conquistas = (solo.st.log ?? []).filter((l) => l.k === "conquista");
+  ok(
+    conquistas.length > 0 && conquistas.every((l) => (adj[l.de] ?? []).includes(l.para)),
+    `todas as ${conquistas.length} conquistas do registro foram entre territórios VIZINHOS`,
+  );
+  const remanejos = (solo.st.log ?? []).filter((l) => l.k === "remanejo");
+  ok(
+    remanejos.every((l) => l.n >= 1),
+    `nenhum remanejo de zero exército (${remanejos.length} no registro)`,
+  );
+  const avancos = (solo.st.log ?? []).filter((l) => l.k === "avanco");
+  ok(
+    avancos.every((l) => l.n >= 1 && l.n <= 2),
+    `todo avanço ficou entre 1 e 2 exércitos (${avancos.length} no registro)`,
+  );
+  const reforcos = (solo.st.log ?? []).filter((l) => l.k === "reforco");
+  ok(
+    reforcos.every((l) => l.n >= 1),
+    `e todo reforço do registro põe pelo menos um exército (${reforcos.length} linhas)`,
+  );
+}
+
+/* ── 5. o nível significa algo? ──────────────────────────────────────────── */
+
+/* Duas partidas com o MESMO humano passivo e o mesmo teto de turnos: uma contra
+   duas tranquilas, outra contra duas impiedosas. Se o nível for rótulo, as duas
+   duplas seguram o mesmo tanto de mapa. */
+
+const contraFacil = await partidaSolo({ token: P[0].token, niveis: ["facil", "facil"], tetoTurnos: 60 });
+const contraDif = await partidaSolo({ token: P[0].token, niveis: ["dificil", "dificil"], tetoTurnos: 60 });
+
+ok(
+  !contraFacil.erro && !contraDif.erro,
+  `as duas partidas de comparação montaram${contraFacil.erro || contraDif.erro ? ": " + (contraFacil.erro ?? contraDif.erro) : ""}`,
+);
+if (!contraFacil.erro && !contraDif.erro) {
+  ok(
+    contraFacil.problemas.length === 0 && contraDif.problemas.length === 0,
+    contraFacil.problemas.length === 0 && contraDif.problemas.length === 0
+      ? "as duas rodaram sem quebrar o mapa"
+      : `MAPA QUEBRADO: ${contraFacil.problemas[0] ?? contraDif.problemas[0]}`,
+  );
+  ok(
+    contraDif.porTurno > contraFacil.porTurno * 1.3,
+    `o nível NÃO é rótulo: a tranquila toma ${contraFacil.porTurno.toFixed(2)} territórios por turno e a impiedosa ${contraDif.porTurno.toFixed(2)}` +
+      ` (${contraFacil.conquistasBot}/${contraFacil.turnosBot} contra ${contraDif.conquistasBot}/${contraDif.turnosBot})`,
+  );
+  ok(
+    contraFacil.porTurno > 0,
+    `e a tranquila TOMA algo (${contraFacil.conquistasBot} territórios): adversario que nunca ataca não é fácil, é enfeite`,
+  );
+}
+
+/* ── 6. o cérebro é determinístico ───────────────────────────────────────── */
+
+/* A MESMA partida, o mesmo estado, o mesmo assento: rodar o turno duas vezes
+   tem de dar o mesmo mapa. É a única forma de um bug de máquina ser
+   reproduzível — e bug de máquina é o mais difícil de reproduzir que existe. */
+
+const salaR = (await rpc(P[0].token, "create_room", { p_game: "dominio" })).body;
+await rpc(P[0].token, "adicionar_bot", { p_room: salaR.id, p_nivel: "dificil" });
+await rpc(P[0].token, "adicionar_bot", { p_room: salaR.id, p_nivel: "medio" });
+const iniR = await rpc(P[0].token, "dominio_start", { p_room: salaR.id });
+const seatR = Number(
+  (
+    await db.query(
+      `select mp.seat from match_players mp join profiles p on p.id = mp.user_id
+        where mp.match_id = $1 and p.is_bot order by mp.seat limit 1`,
+      [iniR.body.id],
+    )
+  ).rows[0].seat,
+);
+const partidaBase = (
+  await db.query(
+    `select jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)) e, status, turn_deadline d
+       from matches where id = $1`,
+    [iniR.body.id, seatR],
+  )
+).rows[0];
+
+const duas = [];
+for (let volta = 0; volta < 2; volta++) {
+  await db.query(
+    `update matches set public_state = $2::jsonb, status = 'running', ended_at = null
+      where id = $1`,
+    [iniR.body.id, JSON.stringify(partidaBase.e)],
+  );
+  await db.query("select public.dominio_bot_turno($1::uuid)", [iniR.body.id]);
+  const dep = (
+    await db.query("select public_state s from matches where id = $1", [iniR.body.id])
+  ).rows[0].s;
+  duas.push({ exercitos: dep.exercitos, donos: dep.donos, seq: dep.seq });
+}
+ok(
+  JSON.stringify(duas[0].exercitos) === JSON.stringify(duas[1].exercitos) &&
+    JSON.stringify(duas[0].donos) === JSON.stringify(duas[1].donos),
+  "mesmo estado, mesmo turno: o cérebro é determinístico — sem isso, bug de máquina não se conserta",
+);
+
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();
 

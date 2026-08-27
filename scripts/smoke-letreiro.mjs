@@ -362,7 +362,10 @@ ok(/BAD_LEVEL/.test(JSON.stringify(nivelRuim.body)), "nível fora do vocabulári
    Uma máquina sem cérebro numa mesa de Domínio é pior que cadeira vazia: ocupa
    assento, recebe territórios e objetivo, e perde a vez no relógio para sempre.
    Os outros três jogariam contra um cadáver que segura um continente. */
-for (const jogo of ["dominio", "dossie", "metropole"]) {
+// o Domínio saiu desta lista em 0048, quando ganhou cérebro. A lista É o
+// registro honesto de onde o trabalho chegou — e o teste do Domínio prova que
+// lá a máquina agora ENTRA e joga a partida inteira.
+for (const jogo of ["dossie", "metropole"]) {
   const salaOutra = (await rpc(A.token, "create_room", { p_game: jogo })).body;
   const recusa = await rpc(A.token, "adicionar_bot", { p_room: salaOutra.id, p_nivel: "medio" });
   ok(

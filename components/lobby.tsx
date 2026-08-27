@@ -45,7 +45,7 @@ const NIVEIS: { chave: NivelBot; nome: string; promessa: string }[] = [
    RECUSA (é ele a autoridade) e a interface NÃO OFERECE (botão que dá erro é
    uma promessa quebrada). Quando o cérebro do Domínio existir, são duas linhas
    — esta e a do banco. */
-const BOT_SABE_JOGAR = new Set(["letreiro"]);
+const BOT_SABE_JOGAR = new Set(["letreiro", "dominio"]);
 
 const NOME_NIVEL: Record<NivelBot, string> = {
   facil: "tranquila",

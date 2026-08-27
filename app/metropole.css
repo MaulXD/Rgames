@@ -997,3 +997,505 @@
     animation: none !important;
   }
 }
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   A MESA DE NEGOCIAÇÃO
+
+   O problema de desenho: são sete tipos de item, de cada lado, e uma proposta
+   pode combinar vários. Quatorze campos abertos numa tela é o caminho mais
+   rápido para ninguém negociar nada.
+
+   A solução é a mesma que a mesa de verdade usa: você EMPILHA coisas no meio,
+   e a pilha se lê numa frase. Cada escritura é um chip que entra ou sai. As
+   três cláusulas — parcelamento, isenção, opção — ficam atrás de um
+   "+ cláusula", porque são as menos usadas e as que pedem dois números cada.
+
+   E a proposta inteira é resumida em DUAS LINHAS antes de sair. Sem isso, a
+   pessoa manda sem ler.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.met-negociar {
+  position: relative;
+  width: 100%;
+}
+.met-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  margin-left: 0.5rem;
+  padding: 0 5px;
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  background: var(--vivo-vermelho);
+  color: #fff4f5;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.7rem;
+  font-weight: 800;
+  animation: pulinho 0.7s var(--ease-pop) infinite alternate;
+}
+
+/* ── propostas na mesa ────────────────────────────────────────────────── */
+
+.propostas {
+  padding: 0.9rem 1rem;
+}
+.propostas-titulo {
+  margin-top: 1rem;
+}
+.propostas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.proposta {
+  padding: 0.7rem 0.8rem;
+  border: 2px solid var(--line);
+  border-radius: var(--r-md);
+  background: #071c1a73;
+}
+/* a que é PARA você tem moldura de latão: numa lista de seis, a sua salta */
+.proposta[data-para-mim="true"] {
+  border-color: var(--met-latao);
+  background: #c79a3e14;
+}
+.proposta-quem {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--vivo-amarelo);
+}
+.proposta-corpo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-top: 0.35rem;
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+/* verde entra, rosa sai — a mesma convenção do painel de fluxo de caixa */
+.proposta-da {
+  color: var(--vivo-limao);
+}
+.proposta-quer {
+  color: var(--vivo-rosa);
+}
+.proposta-acoes {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.proposta-btn {
+  flex: 1;
+  min-height: 40px;
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+}
+.proposta-acoes .proposta-btn {
+  margin-top: 0;
+}
+
+/* ── contratos em vigor ───────────────────────────────────────────────── */
+
+.contratos {
+  padding: 0.9rem 1rem;
+}
+.contratos-nota {
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+.contratos-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.contrato {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.6rem;
+  border-left: 4px solid var(--line-strong);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  background: #071c1a73;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+/* a tarja da esquerda diz o tipo sem precisar do rótulo */
+.contrato[data-tipo="parcela"] {
+  border-left-color: var(--vivo-rosa);
+}
+.contrato[data-tipo="isencao"] {
+  border-left-color: var(--vivo-turquesa);
+}
+.contrato[data-tipo="opcao"] {
+  border-left-color: var(--met-latao);
+}
+.contrato-tipo {
+  flex: none;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: #ffffff14;
+  color: var(--fg-faint);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.contrato-texto {
+  flex: 1;
+  min-width: 12rem;
+}
+.contrato-btn {
+  flex: none;
+  min-height: 36px;
+  padding: 0 0.7rem;
+  font-size: 0.78rem;
+}
+
+/* ── a mesa ───────────────────────────────────────────────────────────── */
+
+.mesa {
+  padding: 0.9rem 1rem;
+}
+.mesa-topo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.mesa-com {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.mesa-quem {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  border: 2.5px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-mid);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.mesa-quem[data-on="true"] {
+  border-color: var(--met-latao);
+  background: #c79a3e1f;
+  color: var(--fg);
+}
+/* o caixa dele no botão: é a informação que decide o que pedir */
+.mesa-quem-caixa {
+  color: var(--fg-faint);
+  font-size: 0.74rem;
+}
+
+.lado {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 2px solid var(--line);
+}
+.lado-titulo {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--vivo-amarelo);
+}
+.lado-linha {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.82rem;
+}
+.lado-linha > span:first-child {
+  flex: none;
+  width: 7.5rem;
+  color: var(--fg-dim);
+}
+.lado-campo {
+  flex: 1;
+  min-width: 0;
+  max-width: 9rem;
+  padding: 0.35rem 0.6rem;
+  border: 2.5px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--felt-950);
+  color: var(--fg);
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.lado-campo-curto {
+  max-width: 4.5rem;
+}
+.lado-limite {
+  flex: none;
+  font-size: 0.72rem;
+}
+.lado-props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.55rem;
+}
+.chip-prop {
+  position: relative;
+  padding: 0.3rem 0.6rem 0.3rem 0.85rem;
+  border: 2px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-mid);
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+/* a bolinha da cor do grupo: dá para escolher pelo grupo sem ler o nome */
+.chip-prop::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 5px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cor, var(--fg-faint));
+  transform: translateY(-50%);
+}
+.chip-prop[data-on="true"] {
+  border-color: var(--vivo-amarelo);
+  background: #ffc42e1f;
+  color: var(--fg);
+}
+.chip-mini {
+  padding: 0.2rem 0.5rem 0.2rem 0.75rem;
+  font-size: 0.7rem;
+}
+.lado-nota {
+  margin-top: 0.4rem;
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+.lado-mais {
+  margin-top: 0.6rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--vivo-turquesa);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: left;
+}
+.lado-mais .dim {
+  font-size: 0.72rem;
+  font-weight: 400;
+}
+
+.clausulas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+/* tracejado quando desligada, sólida quando entra na proposta: a moldura
+   sozinha diz se a cláusula está valendo */
+.clausula {
+  padding: 0.45rem 0.55rem;
+  border: 2px dashed var(--line);
+  border-radius: var(--r-md);
+}
+.clausula[data-on="true"] {
+  border-style: solid;
+  border-color: var(--vivo-turquesa);
+  background: #2fd8c414;
+}
+.clausula-nome {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.clausula[data-on="false"] .clausula-nome {
+  color: var(--fg-faint);
+}
+.clausula-nome:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+.clausula-campos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+  font-size: 0.78rem;
+}
+.clausula-props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  width: 100%;
+  margin-top: 0.3rem;
+}
+
+/* O RESUMO. É a única coisa que separa "mandei sem ler" de "conferi". */
+.mesa-resumo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 1rem;
+  padding: 0.7rem 0.8rem;
+  border: 3px solid var(--met-latao);
+  border-radius: var(--r-md);
+  background: #c79a3e14;
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+.mesa-resumo strong {
+  color: var(--met-latao);
+}
+.mesa-acoes {
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+.mesa-acoes .btn {
+  flex: 1;
+}
+
+@media (min-width: 64rem) {
+  .met > .propostas,
+  .met > .contratos,
+  .met > .mesa {
+    grid-column: 2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .met-badge {
+    animation: none;
+  }
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   OS OITO GRUPOS, DISTINGUÍVEIS SEM COR
+
+   Critério de aceite do PRD: "grupos de cor distinguíveis em protanopia e
+   deuteranopia (padrão nas escrituras, não só cor)".
+
+   O problema é concreto e não é hipotético: em deuteranopia e em protanopia, o
+   verde e o vermelho do tabuleiro caem quase no mesmo tom — e o tabuleiro tem
+   os dois, com preços muito diferentes. Confundir o grupo verde com o vermelho
+   é confundir aluguel de R$ 260 com aluguel de R$ 200 e um custo de casa de
+   R$ 2.000 com um de R$ 1.500.
+
+   A solução não é trocar as cores por uma paleta "segura" — as cores do Banco
+   Imobiliário são parte de como as pessoas falam do jogo ("me dá o laranja").
+   É acrescentar um PADRÃO por cima, e o padrão é o que resolve: mesmo em
+   escala de cinza total, oito texturas diferentes continuam sendo oito coisas
+   diferentes.
+
+   Os padrões vão em ordem crescente de densidade, seguindo o preço: o marrom
+   (mais barato) é liso, o azul-escuro (mais caro) é o mais carregado. Assim a
+   textura também diz "isto é caro", que é informação de graça.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.quadro-faixa[data-g],
+.chip-prop[data-g]::before {
+  background-blend-mode: soft-light, normal;
+}
+
+/* marrom — liso: o mais barato não precisa de textura */
+
+/* azul-claro — pontos esparsos */
+.quadro-faixa[data-g="azul-claro"] {
+  background-image: radial-gradient(circle at 50% 50%, rgb(0 0 0 / 0.4) 0.8px, transparent 1px);
+  background-size: 6px 6px;
+}
+
+/* rosa — diagonal para a direita */
+.quadro-faixa[data-g="rosa"] {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgb(0 0 0 / 0.28) 0 1.5px,
+    transparent 1.5px 5px
+  );
+}
+
+/* laranja — diagonal para a esquerda */
+.quadro-faixa[data-g="laranja"] {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    rgb(0 0 0 / 0.28) 0 1.5px,
+    transparent 1.5px 5px
+  );
+}
+
+/* vermelho — listras verticais */
+.quadro-faixa[data-g="vermelho"] {
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgb(0 0 0 / 0.3) 0 1.5px,
+    transparent 1.5px 5px
+  );
+}
+
+/* amarelo — listras horizontais */
+.quadro-faixa[data-g="amarelo"] {
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgb(0 0 0 / 0.3) 0 1.5px,
+    transparent 1.5px 5px
+  );
+}
+
+/* verde — xadrez diagonal: o par do vermelho, e o que mais precisava */
+.quadro-faixa[data-g="verde"] {
+  background-image:
+    repeating-linear-gradient(45deg, rgb(0 0 0 / 0.26) 0 1.5px, transparent 1.5px 5px),
+    repeating-linear-gradient(-45deg, rgb(0 0 0 / 0.26) 0 1.5px, transparent 1.5px 5px);
+}
+
+/* azul-escuro — o mais denso, para o mais caro */
+.quadro-faixa[data-g="azul-escuro"] {
+  background-image:
+    repeating-linear-gradient(0deg, rgb(255 255 255 / 0.34) 0 1.5px, transparent 1.5px 4px),
+    repeating-linear-gradient(90deg, rgb(255 255 255 / 0.34) 0 1.5px, transparent 1.5px 4px);
+}
+
+/* a mesma família de padrões na bolinha do chip, em miniatura: quem escolhe
+   propriedade na mesa de negociação escolhe pelo grupo, e precisa do mesmo
+   sinal que o tabuleiro dá */
+.chip-prop[data-g="rosa"]::before,
+.chip-prop[data-g="verde"]::before {
+  box-shadow: inset 0 0 0 1.5px rgb(0 0 0 / 0.55);
+}
+.chip-prop[data-g="laranja"]::before,
+.chip-prop[data-g="amarelo"]::before {
+  border-radius: 1px;
+}
+.chip-prop[data-g="vermelho"]::before {
+  border-radius: 1px;
+  box-shadow: inset 0 0 0 1.5px rgb(0 0 0 / 0.55);
+}
+.chip-prop[data-g="azul-escuro"]::before {
+  border-radius: 0;
+  transform: translateY(-50%) rotate(45deg);
+}
+.chip-prop[data-g="azul-claro"]::before {
+  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / 0.7);
+}

@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Tabuleiro } from "@/components/metropole/tabuleiro";
 import { Fluxo, MinhasProps } from "@/components/metropole/painel";
+import {
+  Contratos,
+  MesaDeNegociacao,
+  Propostas,
+  type Contrato,
+  type Oferta,
+} from "@/components/metropole/negociar";
 import { Avatar } from "@/components/avatar";
 import { Confete } from "@/components/confete";
 import { useSession } from "@/components/session";
@@ -49,6 +56,8 @@ export type MetState = {
     abriuSeat: number;
   } | null;
   devedores?: number[];
+  ofertas?: Oferta[];
+  contratos?: Contrato[];
   rodadaFinal: number | null;
   log: LinhaLog[];
   vencedor: number | null;
@@ -67,6 +76,7 @@ type LinhaLog = {
   n?: number;
   d?: number[];
   auto?: boolean;
+  tipo?: string;
   seq?: number;
 };
 
@@ -104,6 +114,20 @@ const RECADO: Record<string, string> = {
   NOT_BROKE: "Você não está no negativo.",
   AUCTION_OPEN: "Espere o leilão fechar.",
   BANKRUPT: "Você está fora da partida.",
+  SELF_OFFER: "Não dá para negociar consigo mesmo.",
+  EMPTY_OFFER: "A proposta está vazia dos dois lados.",
+  TOO_MANY_OFFERS: "Você já tem três propostas na mesa. Retire uma antes.",
+  NO_SUCH_OFFER: "Essa proposta não está mais na mesa.",
+  NOT_FOR_YOU: "Essa proposta não é para você.",
+  BUILDINGS_ON_PROP: "Escritura com construção não passa de mão: venda as casas primeiro.",
+  NOT_ENOUGH_CARDS: "Você não tem tantas cartas de saída.",
+  NO_SUCH_OPTION: "Essa opção não existe mais.",
+  OPTION_EXPIRED: "O prazo da opção venceu.",
+  OWNER_CHANGED: "A propriedade mudou de dono: a opção não vale contra terceiro.",
+  BAD_OFFER: "Algum número da proposta não fecha.",
+  OFFER_STALE: "A proposta ficou impossível desde que foi feita — refaça.",
+  THEY_NOT_YOURS: "O que você pediu não é mais dele.",
+  THEY_NOT_ENOUGH_CASH: "Ele não tem esse dinheiro.",
 };
 
 function recado(msg: string): string {
@@ -130,6 +154,7 @@ export function MetropoleGame({
   const [lance, setLance] = useState<number | null>(null);
   const [resto, setResto] = useState(0);
   const [olhando, setOlhando] = useState<string | null>(null);
+  const [negociando, setNegociando] = useState(false);
   const ultimoLog = useRef("");
 
   const mudo = useSyncExternalStore(sfx.subscribe, sfx.getSnapshot, sfx.getServerSnapshot);
@@ -199,6 +224,9 @@ export function MetropoleGame({
     else if (nova.k === "vez") sfx.vez();
     else if (nova.k === "largada") sfx.troca();
     else if (nova.k === "fim-rodadas") sfx.venceu();
+    else if (nova.k === "acordo" || nova.k === "opcao-exercida") sfx.troca();
+    else if (nova.k === "proposta") sfx.sino();
+    else if (nova.k === "parcela") sfx.clique();
   }, [st.log]);
 
   /* O CAMPO DE LANCE NÃO PRECISA SER ZERADO.
@@ -542,6 +570,24 @@ export function MetropoleGame({
           </button>
         )}
 
+        {/* NEGOCIAR ESTÁ SEMPRE DISPONÍVEL, inclusive fora da sua vez. É a
+            segunda ação do jogo que não espera turno, pelo mesmo motivo do
+            leilão: metade das trocas boas nasce de ver o outro parar num lugar
+            ruim e oferecer socorro na hora. */}
+        {meuAssento !== null && !eu?.quebrado && !acabou && (
+          <button
+            className="btn btn-ghost met-negociar"
+            onClick={() => setNegociando((n) => !n)}
+          >
+            {negociando ? "Fechar a mesa" : "Negociar"}
+            {(st.ofertas ?? []).some((o) => o.para === meuAssento) && (
+              <span className="met-badge">
+                {(st.ofertas ?? []).filter((o) => o.para === meuAssento).length}
+              </span>
+            )}
+          </button>
+        )}
+
         {erro && (
           <p className="met-erro" role="alert">
             {erro}
@@ -551,6 +597,46 @@ export function MetropoleGame({
 
       {/* ── a casa que você está olhando ───────────────────────────── */}
       {olhando && <FichaCasa prop={olhando} st={st} nomes={nomes} onFechar={() => setOlhando(null)} />}
+
+      <Propostas
+        ofertas={st.ofertas ?? []}
+        nomes={nomes}
+        meuAssento={meuAssento}
+        onResponder={(id, aceita) =>
+          void chama("met_offer_reply", { p_match: match.id, p_id: id, p_aceita: aceita })
+        }
+        onRetirar={(id) => void chama("met_offer_cancel", { p_match: match.id, p_id: id })}
+      />
+
+      {negociando && meuAssento !== null && (
+        <MesaDeNegociacao
+          props={st.props}
+          jogadores={entradas}
+          nomes={nomes}
+          meuAssento={meuAssento}
+          rodada={st.round}
+          rodadaFinal={st.rodadaFinal}
+          ocupado={ocupado}
+          onPropor={async (para, da, quer) => {
+            const r = await chama("met_offer", {
+              p_match: match.id,
+              p_para: para,
+              p_da: da,
+              p_quer: quer,
+            });
+            if (r) setNegociando(false);
+          }}
+          onFechar={() => setNegociando(false)}
+        />
+      )}
+
+      <Contratos
+        contratos={st.contratos ?? []}
+        nomes={nomes}
+        meuAssento={meuAssento}
+        rodada={st.round}
+        onExercer={(id) => void chama("met_exercer", { p_match: match.id, p_id: id })}
+      />
 
       {eu && (
         <Fluxo
@@ -738,6 +824,24 @@ function Registro({ log, nomes }: { log: LinhaLog[]; nomes: Record<number, strin
         return `${quem(l.seat)} quebrou e saiu da partida`;
       case "quebrou-no-relogio":
         return `${quem(l.seat)} quebrou no relógio`;
+      case "proposta":
+        return `${quem(l.de)} fez uma proposta a ${quem(l.para)}`;
+      case "proposta-recusada":
+        return `${quem(l.para)} recusou a proposta de ${quem(l.de)}`;
+      case "proposta-retirada":
+        return `${quem(l.de)} retirou a proposta`;
+      case "acordo":
+        return `${quem(l.de)} e ${quem(l.para)} fecharam um acordo`;
+      case "parcela":
+        return `parcela de ${reais(l.valor ?? 0)}: ${quem(l.de)} pagou ${quem(l.para)}${
+          l.n ? ` — faltam ${l.n}` : " — a última"
+        }`;
+      case "isento":
+        return `${quem(l.seat)} não pagou ${reais(l.valor ?? 0)} em ${onde(l.prop)}: contrato de isenção`;
+      case "opcao-exercida":
+        return `${quem(l.seat)} exerceu a opção e comprou ${onde(l.prop)} por ${reais(l.valor ?? 0)}`;
+      case "contrato-fim":
+        return `um contrato de ${l.tipo ?? "acordo"} chegou ao fim`;
       case "vez":
         return `vez de ${quem(l.seat)}`;
       case "tempo-esgotado":

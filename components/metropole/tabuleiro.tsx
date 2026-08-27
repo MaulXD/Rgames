@@ -141,7 +141,13 @@ function Quadro({
           : casa.nome
       }
     >
-      {cor && <span className="quadro-faixa" style={{ background: cor }} aria-hidden />}
+      {/* `data-g` carrega o grupo para o CSS poder desenhar o PADRÃO por cima
+          da cor. Verde e vermelho são a mesma coisa em deuteranopia e em
+          protanopia, e o tabuleiro tem os dois — sem padrão, duas das oito
+          famílias ficam indistinguíveis para uma parte das pessoas. */}
+      {cor && (
+        <span className="quadro-faixa" data-g={casa.g} style={{ background: cor }} aria-hidden />
+      )}
 
       {/* a barra do dono: a cor dele atravessando a casa inteira. Dá para ver
           um monopólio se formando de longe, sem ler nome nenhum. */}

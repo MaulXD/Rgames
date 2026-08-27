@@ -67,7 +67,218 @@ const ANULACOES = [
   },
 ] as const;
 
+/* ══════════════════════════════════════════════════════════════════════════
+   AS REGRAS DA CASA DA METRÓPOLE
+
+   A decisão de produto aqui é não brigar com ninguém. As regras da casa estão
+   todas disponíveis, funcionando, e cada uma diz O QUE FAZ COM A PARTIDA em
+   minutos. Na prática, mostrar "+35 a +50 min" ao lado do bolão resolve a
+   discussão sozinho — e o jogo não precisou proibir nada.
+
+   O custo em minutos não é chute: sai do que cada regra faz com a economia. O
+   bolão devolve à mesa dinheiro que já havia saído do jogo, e adia a quebra de
+   todos ao mesmo tempo; "construir solto" antecipa a construção, que é o que
+   termina a partida. Ver docs/05-PRD-METROPOLE.md §5.7.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const MODOS_MET = [
+  {
+    id: "metropole",
+    nome: "Metrópole",
+    nota: "Vinte rodadas, três propriedades sorteadas por pessoa, e ganha o maior patrimônio. Quem quebra vira Investidor.",
+    tempo: "45 a 60 min",
+  },
+  {
+    id: "classico",
+    nome: "Clássico",
+    nota: "Tabuleiro vazio, acaba quando sobra um, e quem quebra sai. É a experiência original, inteira e correta.",
+    tempo: "90 a 120 min",
+  },
+  {
+    id: "relampago",
+    nome: "Relâmpago",
+    nota: "Doze rodadas, quatro propriedades sorteadas, banco inicial maior. Cabe numa pausa de almoço.",
+    tempo: "25 a 35 min",
+  },
+] as const;
+
+const CASA_MET = [
+  {
+    id: "bolao",
+    nome: "Bolão da Praça Central",
+    nota: "Multas e taxas vão para um pote, e quem parar na Praça leva tudo.",
+    porque:
+      "É a regra da casa mais popular do mundo e a que mais alonga o jogo: devolve à mesa um dinheiro que já tinha saído da partida, e adia a quebra de todos ao mesmo tempo.",
+    tempo: "+35 a +50 min",
+    piora: true,
+  },
+  {
+    id: "largadaDobrada",
+    nome: "Salário dobrado na Largada",
+    nota: "Parar exatamente na Largada paga o salário duas vezes.",
+    porque: "Injeta pouco dinheiro, mas injeta — e todo dinheiro novo empurra o fim para longe.",
+    tempo: "+10 min",
+    piora: true,
+  },
+  {
+    id: "semLeilao",
+    nome: "Sem leilão",
+    nota: "Quem não compra devolve a propriedade ao banco, e ela fica esperando.",
+    porque:
+      "Sem leilão, a fase de aquisição vira roleta: você só compra o que cai no seu dado. O tabuleiro leva 15 rodadas para se distribuir em vez de 6.",
+    tempo: "+25 min",
+    piora: true,
+  },
+  {
+    id: "construirSolto",
+    nome: "Construir sem o grupo completo",
+    nota: "Dá para construir sem ter todas as propriedades da cor.",
+    porque:
+      "Encurta a partida porque a construção começa antes — mas tira o motivo de negociar, que é a melhor parte do jogo.",
+    tempo: "−15 min",
+    piora: false,
+  },
+] as const;
+
 export function HouseRules({
+  room,
+  isHost,
+  onChanged,
+}: {
+  room: Room;
+  isHost: boolean;
+  onChanged: (r: Room) => void;
+}) {
+  if (room.game_key === "metropole") {
+    return <RegrasMetropole room={room} isHost={isHost} onChanged={onChanged} />;
+  }
+  return <RegrasLetreiro room={room} isHost={isHost} onChanged={onChanged} />;
+}
+
+function RegrasMetropole({
+  room,
+  isHost,
+  onChanged,
+}: {
+  room: Room;
+  isHost: boolean;
+  onChanged: (r: Room) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const modo = (room.settings?.modo as string) ?? "metropole";
+  const ligada = (id: string) => room.settings?.[id] === true;
+  const quantasLigadas = CASA_MET.filter((r) => ligada(r.id)).length;
+
+  async function salvar(patch: Record<string, unknown>) {
+    setBusy(true);
+    setErro(null);
+    const { data, error } = await supabaseBrowser().rpc("set_room_settings", {
+      p_room: room.id,
+      p_settings: patch,
+    });
+    setBusy(false);
+    if (error) {
+      const msg = error.message ?? String(error);
+      setErro(
+        /MATCH_IN_PROGRESS/.test(msg)
+          ? "Não dá para mudar com partida rolando."
+          : /NOT_HOST/.test(msg)
+            ? "Só o anfitrião muda as regras."
+            : msg,
+      );
+      return;
+    }
+    onChanged(data as unknown as Room);
+  }
+
+  const oModo = MODOS_MET.find((m) => m.id === modo);
+  const resumo = `${oModo?.nome} · ${oModo?.tempo}${
+    quantasLigadas > 0 ? ` · ${quantasLigadas} regra${quantasLigadas > 1 ? "s" : ""} da casa` : ""
+  }`;
+
+  return (
+    <div className="panel mt-4 p-5 sm:p-6">
+      <button
+        type="button"
+        className="flex w-full items-baseline justify-between gap-3 text-left"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span>
+          <span className="eyebrow">Regras da casa</span>
+          <span className="mt-1 block text-sm dim">{resumo}</span>
+        </span>
+        <span className="mono text-xs" style={{ color: "var(--vivo-amarelo)" }}>
+          {open ? "fechar" : "mudar"}
+        </span>
+      </button>
+
+      {open && (
+        <div className="mt-5 flex flex-col gap-6">
+          {!isHost && (
+            <p className="text-sm dim">
+              Só o anfitrião muda as regras. Você está vendo o que valeu para esta sala.
+            </p>
+          )}
+
+          <fieldset disabled={!isHost || busy} style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="eyebrow mb-3">Modo</legend>
+            <div className="flex flex-col gap-2">
+              {MODOS_MET.map((m) => (
+                <Opcao
+                  key={m.id}
+                  ativo={modo === m.id}
+                  nome={m.nome}
+                  nota={m.nota}
+                  previa={<span className="regra-tempo">{m.tempo}</span>}
+                  onClick={() => void salvar({ modo: m.id })}
+                />
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset disabled={!isHost || busy} style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="eyebrow mb-3">Regras da casa</legend>
+            {/* A frase que faz a coisa funcionar: ninguém está proibido de
+                nada, está informado. Sem isso, as etiquetas de tempo pareceriam
+                repreensão em vez de informação. */}
+            <p className="mb-3 text-sm dim">
+              Todas desligadas por padrão. Nenhuma é proibida — cada uma diz o que faz com a
+              duração da partida, e a mesa decide.
+            </p>
+            <div className="flex flex-col gap-2">
+              {CASA_MET.map((r) => (
+                <Opcao
+                  key={r.id}
+                  ativo={ligada(r.id)}
+                  nome={r.nome}
+                  nota={`${r.nota} ${r.porque}`}
+                  previa={
+                    <span className="regra-tempo" data-piora={r.piora}>
+                      {r.tempo}
+                    </span>
+                  }
+                  onClick={() => void salvar({ [r.id]: !ligada(r.id) })}
+                />
+              ))}
+            </div>
+          </fieldset>
+
+          {erro && (
+            <p className="text-sm" style={{ color: "#ffb3a7" }}>
+              {erro}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RegrasLetreiro({
   room,
   isHost,
   onChanged,
@@ -88,9 +299,12 @@ export function HouseRules({
   async function salvar(patch: Record<string, string | number>) {
     setBusy(true);
     setErro(null);
+    /* Só o que MUDOU vai no patch. O servidor funde com o que já está na sala
+       (ver 0035), então mandar o conjunto inteiro a cada clique só cria a
+       chance de sobrescrever com um valor velho lido de outra aba. */
     const { data, error } = await supabaseBrowser().rpc("set_room_settings", {
       p_room: room.id,
-      p_settings: { modo, anulacao, tamanho, ...patch },
+      p_settings: patch,
     });
     setBusy(false);
     if (error) {

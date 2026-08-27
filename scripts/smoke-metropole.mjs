@@ -431,11 +431,30 @@ if (partida?.public_state) {
     Array.isArray(st.dados) && st.dados.length === 2 && st.dados.every((d) => d >= 1 && d <= 6),
     `os dois dados saíram de 1 a 6 (${st.dados})`,
   );
-  const andou = (st.players[e1.turnSeat].pos - posAntes + 40) % 40;
-  ok(
-    andou === st.dados[0] + st.dados[1] || st.players[e1.turnSeat].jail > 0,
-    `andou exatamente a soma dos dados (${andou} = ${st.dados[0]}+${st.dados[1]})`,
-  );
+  /* A POSIÇÃO FINAL PODE NÃO SER pos + dados, e isso é CERTO: o dado te leva a
+     uma casa, e a casa pode te levar a outra. Uma carta de Sorte manda para o
+     Leblon, "Vá para a Cadeia" manda para a 10, "volte três casas" anda de
+     novo. A primeira versão deste teste comparava a posição final com a soma
+     dos dados e falhava em duas de cada cinco execuções — não porque o motor
+     erra, mas porque a asserção estava incompleta.
+
+     O que se compara é a casa registrada pelo DADO, que `met_roll` grava no
+     log antes de resolver a casa. Essa sim é sempre pos + dados. */
+  const linhaAnda = (st.log ?? []).find((l) => l.k === "anda");
+  ok(!!linhaAnda, "a rolagem foi registrada");
+  if (linhaAnda) {
+    ok(
+      linhaAnda.para === (posAntes + linhaAnda.d[0] + linhaAnda.d[1]) % 40,
+      `o dado levou exatamente a soma: ${posAntes} + ${linhaAnda.d[0]}+${linhaAnda.d[1]} = casa ${linhaAnda.para}`,
+    );
+    const fim = st.players[e1.turnSeat].pos;
+    if (fim !== linhaAnda.para) {
+      ok(
+        true,
+        `e a casa ${linhaAnda.para} mandou o peão para a ${fim} — carta ou cadeia, e é assim que tem de ser`,
+      );
+    }
+  }
 
   /* ── leilão ─────────────────────────────────────────────────────────── */
 
@@ -1226,6 +1245,224 @@ ok(
   "e a isenção que A concedia caiu, porque ele não tem mais propriedade nenhuma",
 );
 ok(e2.props.ipanema.owner === null, "as propriedades dele voltaram ao banco");
+
+/* ══════════════════════════════════════════════════════════════════════════
+   7. AS REGRAS DA CASA
+
+   Quatro regras, todas desligadas por padrão, e cada uma com efeito de verdade
+   no motor. O que mais importa testar aqui não é se elas funcionam — é se elas
+   ficam CONGELADAS: mudar a regra com a partida rolando não pode mudar a
+   partida em curso.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const sala3 = (await rpc(P[0].token, "create_room", { p_game: "metropole" })).body;
+await rpc(P[1].token, "join_room", { p_code: sala3.code });
+
+const chaveErrada = await rpc(P[0].token, "set_room_settings", {
+  p_room: sala3.id,
+  p_settings: { tamanho: 5 },
+});
+ok(
+  /UNKNOWN_SETTING_tamanho/.test(JSON.stringify(chaveErrada.body)),
+  "chave de outro jogo é RECUSADA, não descartada em silêncio",
+);
+
+const modoRuim = await rpc(P[0].token, "set_room_settings", {
+  p_room: sala3.id,
+  p_settings: { modo: "eterno" },
+});
+ok(/BAD_MODE/.test(JSON.stringify(modoRuim.body)), "modo fora do vocabulário é recusado");
+
+const padrao = await rpc(P[0].token, "set_room_settings", {
+  p_room: sala3.id,
+  p_settings: { modo: "metropole" },
+});
+ok(
+  padrao.body?.settings?.bolao === false &&
+    padrao.body?.settings?.semLeilao === false &&
+    padrao.body?.settings?.largadaDobrada === false &&
+    padrao.body?.settings?.construirSolto === false,
+  "as quatro regras da casa nascem desligadas",
+);
+
+const liga = await rpc(P[0].token, "set_room_settings", {
+  p_room: sala3.id,
+  p_settings: { bolao: true, semLeilao: true },
+});
+ok(
+  liga.body?.settings?.bolao === true && liga.body?.settings?.semLeilao === true,
+  "o anfitrião liga duas regras",
+);
+ok(
+  liga.body?.settings?.modo === "metropole",
+  "e o patch parcial não apaga o que já estava gravado",
+);
+
+const jogo3 = (await rpc(P[0].token, "met_start", { p_room: sala3.id })).body;
+ok(
+  jogo3?.public_state?.regras?.bolao === true,
+  "as regras entram CONGELADAS no estado da partida",
+);
+ok(jogo3?.public_state?.bolao === 0, "e o pote começa vazio");
+
+/* congelamento: mudar a sala com a partida rolando não muda a partida. A
+   função recusa com a partida em curso, o que já é a garantia — mas se um dia
+   ela deixar, o estado continua sendo o que valia no início. */
+const durante = await rpc(P[0].token, "set_room_settings", {
+  p_room: sala3.id,
+  p_settings: { bolao: false },
+});
+ok(
+  /MATCH_IN_PROGRESS/.test(JSON.stringify(durante.body)),
+  "não se muda a regra da casa com a partida rolando",
+);
+
+/* ── o bolão, na função ─────────────────────────────────────────────────── */
+
+const comBolao = {
+  ...estadoBase(),
+  regras: { bolao: true, largadaDobrada: false, construirSolto: false, semLeilao: false },
+  bolao: 0,
+};
+comBolao.players[0].pos = 4; // Imposto de Renda
+let pote = await pousa(comBolao, 0);
+ok(pote.players[0].cash === 10000 - 2000, "o imposto sai do caixa igual");
+ok(pote.bolao === 2000, "e com o bolão ligado ele vai para o POTE, não para o banco");
+
+// e a Praça paga o pote
+const naPraca = { ...pote };
+naPraca.players[1] = { ...naPraca.players[1], pos: 20 };
+const levou = await pousa(naPraca, 1);
+ok(levou.players[1].cash === 10000 + 2000, "quem para na Praça Central leva o pote inteiro");
+ok(levou.bolao === 0, "e o pote zera");
+ok(
+  levou.log.some((l) => l.k === "bolao"),
+  "o registro conta que foi o bolão",
+);
+
+// sem a regra, a Praça é descanso e o imposto some no banco
+const semBolao = { ...estadoBase(), regras: { bolao: false }, bolao: 0 };
+semBolao.players[0].pos = 4;
+const semPote = await pousa(semBolao, 0);
+ok(
+  (semPote.bolao ?? 0) === 0,
+  "sem a regra, o imposto não vira pote — o dinheiro sai do jogo, e é isso que faz a partida ter fim",
+);
+
+// compra de escritura NÃO alimenta o pote: é pagamento, não penalidade
+const compraNoPote = await db.query(
+  `select public.met_paga($1::jsonb, 0::smallint, null::smallint, 3000, 'compra:leblon') v`,
+  [JSON.stringify(comBolao)],
+);
+ok(
+  (compraNoPote.rows[0].v.bolao ?? 0) === 0,
+  "comprar escritura não alimenta o pote: só multa e taxa são penalidade",
+);
+const taxaNoPote = await db.query(
+  `select public.met_paga($1::jsonb, 0::smallint, null::smallint, 500, 'fianca') v`,
+  [JSON.stringify(comBolao)],
+);
+ok(taxaNoPote.rows[0].v.bolao === 500, "a fiança da cadeia, sim");
+
+/* ── salário dobrado na Largada ─────────────────────────────────────────── */
+
+const dobra = {
+  ...estadoBase(),
+  regras: { bolao: false, largadaDobrada: true },
+};
+dobra.players[0].pos = 0;
+const naLargada = await pousa(dobra, 0);
+ok(
+  naLargada.players[0].cash === 10000 + 2000,
+  "parar exatamente na Largada paga o salário de novo, com a regra ligada",
+);
+const semDobra = { ...estadoBase(), regras: { largadaDobrada: false } };
+semDobra.players[0].pos = 0;
+ok(
+  (await pousa(semDobra, 0)).players[0].cash === 10000,
+  "sem a regra, parar na Largada não paga extra",
+);
+
+/* ── construir sem o grupo completo ─────────────────────────────────────── */
+
+const soltoProps = { ...estadoBase().props };
+soltoProps["leblon"] = { owner: 0, casas: 0, hotel: false, hipotecada: false };
+// Jardins fica sem dono: o grupo azul-escuro NÃO está completo
+
+await poe(jogo3.id, {
+  props: soltoProps,
+  regras: { bolao: true, largadaDobrada: false, construirSolto: false, semLeilao: true },
+  phase: "acao",
+  pendente: null,
+  turnSeat: 0,
+  players: {
+    ...jogo3.public_state.players,
+    0: { ...jogo3.public_state.players[0], cash: 30000 },
+  },
+});
+const idSeat0 = (
+  await db.query("select user_id from match_players where match_id = $1 and seat = 0", [jogo3.id])
+).rows[0].user_id;
+const donoSolto = P.find((x) => x.id === idSeat0);
+ok(!!donoSolto, "o assento 0 da terceira partida foi identificado");
+const semGrupo = await rpc(donoSolto.token, "met_build", {
+  p_match: jogo3.id,
+  p_prop: "leblon",
+  p_n: 1,
+});
+ok(
+  /GROUP_INCOMPLETE/.test(JSON.stringify(semGrupo.body)),
+  "sem a regra, construir exige o grupo de cor inteiro",
+);
+
+await poe(jogo3.id, {
+  regras: { bolao: true, largadaDobrada: false, construirSolto: true, semLeilao: true },
+});
+const comSolto = await rpc(donoSolto.token, "met_build", {
+  p_match: jogo3.id,
+  p_prop: "leblon",
+  p_n: 1,
+});
+ok(
+  comSolto.status === 200 && comSolto.body.public_state.props.leblon.casas === 1,
+  `com "construir solto", constrói sem o monopólio (${JSON.stringify(comSolto.body).slice(0, 70)})`,
+);
+
+/* ── sem leilão ─────────────────────────────────────────────────────────── */
+
+await poe(jogo3.id, {
+  props: { ...estadoBase().props },
+  regras: { bolao: false, largadaDobrada: false, construirSolto: false, semLeilao: true },
+  phase: "resolve",
+  turnSeat: 0,
+  pendente: { k: "comprar", prop: "ipanema", preco: CASA.ipanema.preco },
+  leilao: null,
+});
+const recusaSem = await rpc(donoSolto.token, "met_decline", { p_match: jogo3.id });
+ok(recusaSem.status === 200, "recusa aceita com a regra sem leilão");
+ok(
+  recusaSem.body.public_state.leilao === null &&
+    recusaSem.body.public_state.phase !== "leilao",
+  "com a regra ligada, recusar devolve ao banco e NÃO abre leilão",
+);
+ok(
+  recusaSem.body.public_state.props.ipanema.owner === null,
+  "e a propriedade continua sem dono",
+);
+
+// e a regra do estado é que manda, não a da sala
+await poe(jogo3.id, {
+  regras: { bolao: false, largadaDobrada: false, construirSolto: false, semLeilao: false },
+  phase: "resolve",
+  turnSeat: 0,
+  pendente: { k: "comprar", prop: "ipanema", preco: CASA.ipanema.preco },
+  leilao: null,
+});
+const recusaCom = await rpc(donoSolto.token, "met_decline", { p_match: jogo3.id });
+ok(
+  recusaCom.body.public_state.phase === "leilao",
+  "com a regra desligada no ESTADO, recusar abre o leilão — a sala não tem voz aqui",
+);
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();

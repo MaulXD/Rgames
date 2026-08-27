@@ -422,7 +422,7 @@ export function Lobby({ code }: { code: string }) {
         </div>
       )}
 
-      {room.game_key === "letreiro" && (
+      {(room.game_key === "letreiro" || room.game_key === "metropole") && (
         <HouseRules room={room} isHost={iAmHost} onChanged={setRoom} />
       )}
 

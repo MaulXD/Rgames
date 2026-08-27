@@ -937,3 +937,21 @@ body::after {
     display: none;
   }
 }
+
+/* a etiqueta de tempo das regras da casa: verde encurta, âmbar alonga */
+.regra-tempo {
+  flex: none;
+  align-self: flex-start;
+  padding: 0.15rem 0.5rem;
+  border: 2.5px solid var(--ink);
+  border-radius: 999px;
+  background: var(--vivo-limao);
+  color: var(--ink);
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.regra-tempo[data-piora="true"] {
+  background: var(--vivo-amarelo);
+}

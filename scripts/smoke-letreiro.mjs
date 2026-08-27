@@ -9,6 +9,7 @@
  */
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFile } from "node:fs/promises";
 import { config } from "dotenv";
 import pg from "pg";
 
@@ -333,6 +334,112 @@ ok(g5.rows[0].comuns?.length > 0, `a grade de 5×5 tem ${g5.rows[0].comuns?.leng
 // a sala volta para o lobby, pronta para revanche
 const salaFim = (await get(A.token, `rooms?select=status&id=eq.${sala.id}`)).body?.[0];
 ok(salaFim?.status === "lobby", "sala voltou para o lobby");
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AS PALAVRAS QUE O JOGO MOSTRA
+
+   O Letreiro tem duas listas e a diferença entre elas é uma decisão de projeto:
+   ele ACEITA generosamente (recusar palavra que a pessoa sabe que existe é a
+   pior coisa que um Boggle faz) e MOSTRA seletivamente. A lista do MOSTRA é a
+   da revelação e é de onde a máquina tira as palavras dela.
+
+   Antes de 0051 o MOSTRA tinha um corte único de 50 mil no posto do corpus, e
+   uma grade real saía assim:
+
+     SONO SONDA ONO ONDA ONDE DOS DONO DONDE DONA DUNA DUDA UNOS UNA ADE
+     ADELE AGUDO FONE FOR FOLE FUNDO NOS NON NOR NUNO NULO NEURO NELE NET
+     NETA NONO GUA GUDE GAEL GATE OUT ORE UFO ENDO ENA EURO
+
+   A revelação é o momento em que o jogo ENSINA. Mostrar "ADE" ali é o jogo
+   dizendo que ADE era uma palavra que a pessoa devia ter achado.
+
+   ESTE BLOCO GUARDA AS DUAS PONTAS, e a segunda é a que mais importa. Um filtro
+   de qualidade erra nas duas direções: mostrar "ADELE" faz o jogo parecer
+   desleixado, mas ESCONDER "CASA" faz a revelação mentir. A lista curada já
+   teve, em duas versões diferentes, "dentro", "fora", "porto", "clara", "para"
+   e "meta" — todas palavras do dia a dia que também são nome, sobrenome ou
+   parecem prefixo.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\n  ── as palavras que o jogo mostra ──");
+
+const naoComum = new Set(
+  (await readFile(join(root, "data", "letreiro-nao-comum.txt"), "utf8"))
+    .split(/\r?\n/)
+    .filter((l) => !l.trim().startsWith("#"))
+    .flatMap((l) => l.trim().split(/\s+/))
+    .filter(Boolean)
+    .map((w) => w.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase()),
+);
+ok(naoComum.size > 300, `a lista curada tem ${naoComum.size} palavras`);
+
+/* A INVARIANTE: nenhuma grade SORTEÁVEL mostra palavra da lista curada.
+   É a checagem que sobrevive a mim: se um dia alguém acrescentar palavra à
+   lista e esquecer de recomputar as grades, isto quebra. */
+const gradesAmostra = (
+  await db.query(
+    "select id, size, comuns from letreiro_boards where usavel order by random() limit 300",
+  )
+).rows;
+const vazando = [];
+for (const g of gradesAmostra) {
+  for (const w of g.comuns) if (naoComum.has(w)) vazando.push(`${w} (grade ${g.id})`);
+}
+ok(
+  vazando.length === 0,
+  vazando.length === 0
+    ? `em 300 grades sorteáveis, nenhuma palavra da lista curada aparece na revelação`
+    : `VAZOU para a revelação: ${vazando.slice(0, 6).join(", ")}`,
+);
+
+/* O corte por tamanho, medido no dicionário. Não é uma opinião sobre onde
+   cortar: é a conferência de que o corte existe e escala. */
+const cortes = (
+  await db.query(
+    `select len, count(*) filter (where comum)::int comuns, count(*)::int total,
+            max(freq) filter (where comum) pior
+       from dict_pt where len between 3 and 7 group by len order by len`,
+  )
+).rows;
+ok(
+  cortes.every((c, i) => i === 0 || Number(c.pior) >= Number(cortes[i - 1].pior)),
+  `o corte escala com o tamanho: ${cortes.map((c) => `${c.len}→${c.pior}`).join(" ")}`,
+);
+ok(
+  Number(cortes[0].pior) <= 4000,
+  `palavra de 3 letras só é comum no topo do corpus (pior posto ${cortes[0].pior}) — é ali que vive o lixo`,
+);
+
+/* E O DIA A DIA CONTINUA APARECENDO. Sem esta metade, o teste acima premiaria
+   um filtro que marcasse tudo como não-comum. */
+const diaADia = [
+  "CASA", "MESA", "TEMPO", "NOITE", "AMIGO", "CIDADE", "PALAVRA", "TRABALHO",
+  "DENTRO", "FORA", "PARA", "META", "PORTO", "CLARA", "ESCOLA", "COMIDA",
+  "JANELA", "CADEIRA", "DINHEIRO", "SEMANA", "MINUTO", "CORACAO", "VERDADE",
+];
+const estado = (
+  await db.query("select norm, comum from dict_pt where norm = any($1)", [diaADia])
+).rows;
+const faltando = estado.filter((r) => !r.comum).map((r) => r.norm);
+const vistas = new Set(estado.map((r) => r.norm));
+const ausentes = diaADia.filter((w) => !vistas.has(w));
+ok(
+  faltando.length === 0 && ausentes.length === 0,
+  faltando.length === 0 && ausentes.length === 0
+    ? `e as ${diaADia.length} palavras do dia a dia seguem comuns — o filtro não apertou demais`
+    : `O FILTRO APERTOU DEMAIS: escondeu ${faltando.join(", ")}${ausentes.length ? ` · fora do dicionário: ${ausentes.join(", ")}` : ""}`,
+);
+
+/* A revelação de uma grade de verdade, para o olho humano ver. Um teste que
+   mede tudo e não mostra nada deixa a pessoa que lê sem opinião. */
+const vitrine = (
+  await db.query(
+    `select grid, comuns from letreiro_boards
+      where usavel and size = 5 order by id desc limit 1`,
+  )
+).rows[0];
+console.log(`         ${vitrine.grid.join("")}`);
+console.log(`         ${vitrine.comuns.slice(0, 34).join(" ")}`);
 
 /* ══════════════════════════════════════════════════════════════════════════
    JOGADOR CONTRA A MÁQUINA

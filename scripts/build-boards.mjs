@@ -27,8 +27,10 @@ config({ path: join(root, ".env.local"), quiet: true });
 const QUANTAS = Number(process.argv[2] ?? 1200);
 const SO_TAMANHO = process.argv[3] ? Number(process.argv[3]) : null;
 
-/** Palavra "comum" é a que aparece nas 50 mil mais faladas do corpus. */
-const CORTE_COMUM = 50000;
+/* QUEM DECIDE O QUE É COMUM É `build-dict.mjs`, e este arquivo só LÊ.
+   Antes o corte morava aqui — e consumidor que decide é regra que se repete no
+   próximo consumidor. Quem tem o corpus, o tamanho da palavra e a lista curada
+   na mão é o build-dict; a coluna `dict_pt.comum` é o resultado. */
 
 /** Base 36: um dígito por célula, até 36 células (cabe 4×4, 5×5 e 6×6). */
 const B36 = "0123456789abcdefghijklmnopqrstuvwxyz";
@@ -160,15 +162,15 @@ await client.connect();
 
 process.stdout.write("  lendo dict_pt… ");
 const { rows: palavras } = await client.query(
-  "select norm, freq from public.dict_pt",
+  "select norm, comum from public.dict_pt",
 );
 const comum = new Set();
 const raiz = {};
-for (const { norm, freq } of palavras) {
+for (const { norm, comum: ehComum } of palavras) {
   let no = raiz;
   for (const ch of norm) no = no[ch] ??= {};
   no.$ = 1;
-  if (freq !== null && freq <= CORTE_COMUM) comum.add(norm);
+  if (ehComum) comum.add(norm);
 }
 console.log(
   `${palavras.length.toLocaleString("pt-BR")} palavras, ${comum.size.toLocaleString("pt-BR")} comuns`,

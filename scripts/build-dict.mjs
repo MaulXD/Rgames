@@ -18,6 +18,7 @@
  * Colisão de normalização (sede / sedê): fica a grafia com MENOS acento —
  * ela é a que provavelmente existe por si só.
  */
+import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
@@ -45,6 +46,53 @@ config({ path: join(root, ".env.local"), quiet: true });
  */
 const CORPUS =
   "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/pt_br/pt_br_full.txt";
+
+/**
+ * O CORTE DE "PALAVRA COMUM", escalado por tamanho.
+ *
+ * `freq` é POSTO no corpus, não contagem: 1 é a mais falada. Medido — NADA=68,
+ * FUNDO=864, DONO=1683, ONDA=3047 — e o lixo vive entre 11 mil e 49 mil.
+ *
+ * O corpus degrada em RITMOS DIFERENTES por tamanho, e é essa a descoberta que
+ * resolve o problema. Amostrado por faixa de posto:
+ *
+ *   3 letras, 15k–50k:  non lux joo ami odo lao ape eba pum net tau chu ori
+ *   6 letras, 30k–50k:  cafofo reboco escuna fibula torrao crasso micose
+ *                       bolero servil alaude adorno genese rufiao obtuso
+ *
+ * Palavra longa que aparece no corpus é quase sempre palavra de verdade;
+ * palavra de três letras é uma sopa de fragmento, sigla e nome de personagem.
+ * E palavra curta vale 1 ponto, então perder algumas custa pouco.
+ *
+ * O corte único de 50 mil que existia antes deixava passar ONO, ADE, NON, NOR,
+ * GUA, DEA, ENA, OUT, NET, GATE, UFO, ADELE, GAEL, NUNO e DUDA — tudo na
+ * revelação, que é o momento em que o jogo ENSINA.
+ */
+const CORTE_POR_TAMANHO = { 3: 4_000, 4: 18_000, 5: 32_000 };
+const CORTE_PADRAO = 50_000;
+const corteDe = (len) => CORTE_POR_TAMANHO[len] ?? CORTE_PADRAO;
+
+/**
+ * A lista curada do que o corte NÃO pega: nome de personagem e inglês não
+ * traduzido, que numa legenda de filme têm frequência ALTA.
+ *
+ * O cabeçalho do arquivo conta por que não deu para automatizar: maiúscula não
+ * ajuda (o corpus é todo minúsculo) e o sinal do Hunspell foi MEDIDO e errou 37
+ * dos 56 nomes testados, além de recusar "casa" e "mesa".
+ */
+function naoComum() {
+  const bruto = readFileSync(join(root, "data", "letreiro-nao-comum.txt"), "utf8");
+  const fora = new Set();
+  for (const linha of bruto.split(/\r?\n/)) {
+    if (linha.trim().startsWith("#")) continue;
+    for (const w of linha.trim().split(/\s+/)) {
+      if (!w) continue;
+      const n = norm(w);
+      if (n) fora.add(n);
+    }
+  }
+  return fora;
+}
 
 const FONTES = [
   { url: "https://raw.githubusercontent.com/pythonprobr/palavras/master/palavras.txt", dic: false },
@@ -204,7 +252,24 @@ await client.connect();
 
 await client.query("truncate public.dict_pt");
 
-const entradas = [...dic.entries()].map(([n, w]) => [n, w, posto.get(n) ?? null]);
+const fora = naoComum();
+console.log(`  ${fora.size} palavra(s) na lista curada do "aceita mas não mostra"`);
+
+/* A DECISÃO DE "COMUM" MORA AQUI, e só aqui.
+   Antes ela vivia em `build-boards.mjs`, que é o CONSUMIDOR — e consumidor que
+   decide é regra que se repete no próximo consumidor. Quem tem o corpus, o
+   tamanho e a lista curada na mão é este script. */
+const ehComum = (n, p) => p !== null && p <= corteDe(n.length) && !fora.has(n);
+
+const entradas = [...dic.entries()].map(([n, w]) => {
+  const p = posto.get(n) ?? null;
+  return [n, w, p, ehComum(n, p)];
+});
+const quantasComuns = entradas.filter((e) => e[3]).length;
+console.log(
+  `  ${quantasComuns.toLocaleString("pt-BR")} comuns de ${entradas.length.toLocaleString("pt-BR")}` +
+    ` (o corte único de 50 mil dava ${entradas.filter((e) => e[2] !== null && e[2] <= 50_000).length.toLocaleString("pt-BR")})`,
+);
 
 // quantas palavras jogaveis sao realmente conhecidas?
 const faixas = [5000, 10000, 20000, 30000, 50000, 100000];
@@ -218,10 +283,16 @@ const LOTE = 20_000;
 for (let i = 0; i < entradas.length; i += LOTE) {
   const fatia = entradas.slice(i, i + LOTE);
   await client.query(
-    `insert into public.dict_pt (norm, word, freq)
-     select * from unnest($1::text[], $2::text[], $3::int[])
-     on conflict (norm) do update set freq = excluded.freq`,
-    [fatia.map((e) => e[0]), fatia.map((e) => e[1]), fatia.map((e) => e[2])],
+    `insert into public.dict_pt (norm, word, freq, comum)
+     select * from unnest($1::text[], $2::text[], $3::int[], $4::boolean[])
+     on conflict (norm) do update
+        set freq = excluded.freq, comum = excluded.comum`,
+    [
+      fatia.map((e) => e[0]),
+      fatia.map((e) => e[1]),
+      fatia.map((e) => e[2]),
+      fatia.map((e) => e[3]),
+    ],
   );
   process.stdout.write(`\r  carregadas ${Math.min(i + LOTE, entradas.length)} / ${entradas.length}`);
 }
@@ -260,11 +331,81 @@ for (const w of naoDeveExistir) {
     erros++;
   }
 }
+/* ── as duas pontas do "comum" ─────────────────────────────────
+
+   Um filtro de qualidade erra nas duas direções, e a segunda é PIOR. Mostrar
+   "ADELE" na revelação faz o jogo parecer desleixado; esconder "CASA" faz a
+   revelação mentir sobre o que a pessoa deixou passar. A primeira versão da
+   lista curada tinha "dentro", "fora", "lula", "temer", "porto", "catar" e
+   "clara" — nomes que também são palavras do dia a dia. Este bloco existe por
+   causa disso. */
+
+const LIXO_FORA = [
+  // fragmento e sigla
+  "ONO", "ADE", "NON", "NOR", "GUA", "DEA", "ENA", "ENDO", "APE", "ODO",
+  // inglês não traduzido
+  "OUT", "NET", "GATE", "SURF", "GOLF", "ZOOM", "BLOG", "JEEP", "CLEAR",
+  "ROBOT", "SLIDE", "PUZZLE", "TROJAN", "COMBO", "DEALER", "TEFLON",
+  // nome de pessoa e de lugar
+  "ADELE", "GAEL", "NUNO", "DUDA", "NAGA", "CRIS", "AMIR", "DINA", "NERO",
+  "OLGA", "TITO", "SACHA", "EDIPO", "CONAN", "TORINO", "MADRAS", "NILO",
+  "BACO", "ARGO", "CRETA", "NEPAL", "MACAU", "XOGUM", "AZAZEL", "MADONA",
+];
+
+const DIA_A_DIA = [
+  /* As que quase morreram na primeira versão da lista curada: nome ou
+     sobrenome que TAMBÉM é palavra do dia a dia. FARO, PAMPA e SENA estavam
+     nesta lista e saíram: o teste falhou apontando para elas, e ele estava
+     certo — nenhuma das três é palavra do dia a dia, e PAMPA nem está no
+     dicionário. Expectativa de teste também se conserta. */
+  "DENTRO", "FORA", "LULA", "TEMER", "PORTO", "CATAR", "CLARA", "SERTAO",
+  "TURCA",
+  /* E as que quase morreram na SEGUNDA passada, quando entrei prefixos na
+     lista: "para" é a preposição mais comum do português e eu a tinha marcado
+     como prefixo de "para‑". "meta", "extra", "ante" e "retro" foram junto. */
+  "PARA", "META", "EXTRA", "ANTE", "RETRO",
+  // e o dia a dia mesmo, que é o que a revelação precisa ter
+  "CASA", "MESA", "NADA", "FUNDO", "DONO", "SONO", "ONDA", "AGUDO", "DENSO",
+  "TEMPO", "NOITE", "AMIGO", "CIDADE", "ESTRADA", "PALAVRA", "TRABALHO",
+  "MULHER", "HOMEM", "VERDADE", "CORACAO", "ESCOLA", "COMIDA", "JANELA",
+  "CADEIRA", "PANELA", "CANETA", "CAMISA", "DINHEIRO", "SEMANA", "MINUTO",
+  // estrangeirismo que virou português e TEM de continuar comum
+  "MENU", "JIPE", "IATE", "BLITZ", "RIMEL", "TOTEM", "ITEM", "CZAR",
+];
+
+const comumDe = async (w) =>
+  (await client.query("select comum from public.dict_pt where norm = $1", [w])).rows[0]?.comum;
+
+let sujos = 0;
+for (const w of LIXO_FORA) {
+  if ((await comumDe(w)) === true) {
+    console.log(`  FALHA mostra: ${w} está marcada como comum`);
+    sujos++;
+  }
+}
+let sumidos = 0;
+for (const w of DIA_A_DIA) {
+  const c = await comumDe(w);
+  if (c === undefined) {
+    console.log(`  FALHA dicionário: ${w} não está no dicionário`);
+    sumidos++;
+  } else if (c !== true) {
+    console.log(`  FALHA esconde: ${w} deixou de ser comum — o filtro apertou demais`);
+    sumidos++;
+  }
+}
+erros += sujos + sumidos;
+console.log(
+  sujos === 0 && sumidos === 0
+    ? `  comum: ${LIXO_FORA.length} lixos fora e ${DIA_A_DIA.length} do dia a dia dentro`
+    : `  comum: ${sujos} lixo(s) mostrado(s), ${sumidos} do dia a dia escondida(s)`,
+);
+
 console.log(erros === 0 ? "  sanidade: tudo certo" : `  sanidade: ${erros} problema(s)`);
 
 // amostra: as palavras de 7 letras mais comuns e as sem frequencia nenhuma
 const amostraComum = await client.query(
-  "select word from public.dict_pt where len = 7 and freq is not null order by freq limit 12",
+  "select word from public.dict_pt where len = 7 and comum order by freq limit 12",
 );
 const amostraRara = await client.query(
   "select word from public.dict_pt where len = 7 and freq is null order by norm limit 12",

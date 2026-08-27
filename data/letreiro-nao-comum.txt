@@ -1,0 +1,89 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Palavras que o Letreiro ACEITA mas nunca MOSTRA
+#
+# O jogo tem duas listas, e a diferença entre elas é uma decisão de projeto:
+#
+#   ACEITA   generoso. Recusar uma palavra que a pessoa sabe que existe é a
+#            pior coisa que um Boggle pode fazer — ela fecha a aba.
+#   MOSTRA   seletivo. É a lista da revelação ("o que escapou") e é de onde a
+#            máquina tira as palavras dela.
+#
+# Estas saem do MOSTRA. O corte por frequência — posto no corpus, escalado por
+# tamanho — tira o grosso: fragmento, abreviatura, sigla. Mas o corpus é de
+# LEGENDA DE FILME, e legenda é cheia de nome de personagem e de palavra em
+# inglês que ninguém traduziu. Essas duas famílias têm frequência ALTA e
+# continuam sendo lixo aqui.
+#
+# Por que uma lista à mão e não um filtro:
+#
+#   · maiúscula não ajuda: o corpus vem todo em minúscula;
+#   · o Hunspell pt_BR não separa — foi medido, e ele aceita "adele", "nuno",
+#     "gate" e "blog" em minúscula, e NÃO tem "casa" nem "mesa" (que ele deriva
+#     por afixo). O sinal errou 37 dos 56 nomes testados;
+#   · não existe fonte pronta de "nome próprio em português minúsculo".
+#
+# Então é lista. Lista é honesta: dá para ler, discutir e corrigir.
+#
+# O ERRO NA DIREÇÃO CONTRÁRIA É PIOR, e quase aconteceu. A primeira versão
+# desta lista tinha "dentro", "fora", "lula", "temer", "porto", "catar",
+# "clara", "faro", "pampa" e "sertão" — todas palavras comuns de português que
+# por acaso também são nome ou sobrenome. Esconder uma palavra que a pessoa
+# achou e valeu ponto é bem pior que mostrar "ADELE" na revelação. Por isso o
+# teste do dicionário confere as duas pontas: o lixo fora E o dia a dia dentro.
+#
+# E ESTRANGEIRISMO QUE VIROU PORTUGUÊS FICA. "menu", "jipe", "iate", "aids",
+# "blitz", "rímel", "rúgbi", "bolero", "totem", "gilete", "doping", "czar",
+# "spa", "item", "ricota", "quinoa", "bonsai", "crupiê" não estão aqui: quem
+# joga em português usa essas.
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── nome de pessoa ────────────────────────────────────────────────────────
+# A família mais numerosa e a mais escandalosa numa revelação: ver "ADELE"
+# listada como palavra que você deixou passar faz o jogo parecer quebrado.
+#
+# Nenhum nome que também seja palavra comum entra aqui — nem "clara", nem
+# "lula", nem "vitória".
+adele gael nuno duda cris amir dina lili nero tori dino pepe olga tito
+otis mari maiá naná pepê cecé lulu mimi milo lóri tôni sacha édipo vidal
+souza simão bento nando bueno lívia maxim conan tobin rosina celina manoel
+bianco alcide mendes fígaro chagas caifás adônis lévi moré paró choi bató
+fumé olívia márcia joaquim matias tadeu benito arnaldo osvaldo waldir
+inácio otávio murilo leandro gustavo rafael tiago felipe josé
+sofia helena júlia laura alice manu dudu zeca juca gigi lolo dodô nanã tatá
+# segunda passada: apareceram em grades reais depois do primeiro corte
+abel eva luna lutero tesla judas caim moisés isaac jacó ester rute noemi
+lana mona leo sansão dalila golias jonas jó salomé marta madalena
+
+# ── nome de lugar, povo e divindade ──────────────────────────────────────
+# Roma, Cuba e Bahia o Hunspell já pega pela maiúscula. Estes não pega.
+nilo baco argo creta nepal dalai plato andes macau tirana madras torino
+hindi incas jeová buda satã adão sinai everest amazonas tejo danúbio volga
+cairo lisboa braga évora argel túnis luanda maputo gaza
+xogum hadji garuda azazel agripa borges napier salter tívoli madona
+beatle drago dumbo falco juana prius gales galês escócia gália ática
+esparta atenas tebas ítaca cnossos
+
+# ── inglês e outras línguas que não viraram português ────────────────────
+# Vêm de legenda não traduzida, letra de música e nome de produto.
+out net gate top surf golf best zoom line bull live rush soul blog demo
+jeep gear diet xerox clear robot cream petit slide maple trans puzzle
+grunge muscle trojan roadie enter combo bitter dealer teflon boom beach
+short grand self bond here caddie round corner care core wave star
+fire dark blue gold rock roll punk funk soft hard cool
+von der los las vos non nor del han chi goa emi uri epi omo tré nim
+gio jia lai iró hua tum vis gru puf sus pax ban lis bag pot sax hub gag
+enchó názir léria lissa pancá corão píero piché glacé áraque típton
+hamada ramadã bozó suri niró gita esto nara goró puna iago mojo nola jinx
+laia tubã dima jaco chai ludo prem cião
+
+# ── fragmento, prefixo e sigla solta ─────────────────────────────────────
+# O corte por tamanho tira quase tudo desta família; o que sobra fica aqui.
+# Interjeição de verdade NÃO entra: "poxa", "né", "ué", "uau" e "olé" são
+# português falado, e português falado é o registro deste jogo.
+ono ade dea gua ena endo naga apé odo lao ebá âmi joó tau chu ori gia
+agé euá caó paó idá cré toa val neuro proto pseudo intra
+supra infra peri hiper hipo
+# NUNCA entram aqui, por mais que pareçam prefixo: "para" é a preposição mais
+# comum do português, "meta" é substantivo do dia a dia, "extra", "ante" e
+# "retro" são adjetivos de uso corrente. A segunda passada desta lista tinha as
+# cinco, e o teste de dicionário agora guarda cada uma.

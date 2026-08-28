@@ -127,6 +127,12 @@ export default function GlobalError({
             >
               Tentar de novo
             </button>
+            {/* `<a>` e não `<Link>`, e o lint reclama com razão em qualquer outro
+                lugar do projeto. Aqui não: `<Link>` navega pelo CLIENTE, e o
+                cliente é justamente o que acabou de quebrar. Uma volta para a
+                mesa que depende do roteador que falhou não é volta nenhuma — o
+                que se quer aqui é carregar a página do zero. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a
               href="/"
               style={{

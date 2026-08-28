@@ -1271,6 +1271,94 @@ ok(
     : `O CÉREBRO LÊ O ENVELOPE: ${espiando.join(", ")}`,
 );
 
+/* ── O MOTOR NÃO SABE O QUE É UMA BIBLIOTECA ────────────────────────
+
+   É a promessa central do sistema de temas (PRD 07 §1), e a que sustenta todas
+   as outras: "adicionar um tema é conteúdo, não engenharia". Ela vale enquanto
+   nenhuma função do motor souber o nome de um lugar, de um suspeito ou de um
+   objeto — e é o tipo de promessa que apodrece em silêncio: um \`if sala =
+   'biblioteca'\` escrito às pressas para consertar um caso funciona, passa em
+   todo teste, e quebra o próximo tema.
+
+   A varredura pega todos os ids dos QUATRO casos publicados e procura cada um,
+   como literal entre aspas, no corpo de toda função \`dossie_*\`. Ela não depende
+   de eu lembrar de conferir: um caso novo traz ids novos, e eles entram na busca
+   sozinhos. */
+
+console.log("DOSSIÊ: o motor não sabe o que é uma biblioteca");
+
+const idsDosCasos = new Set(
+  (
+    await db.query(
+      `select value ->> 'id' id
+         from game_themes gt,
+              lateral jsonb_array_elements(
+                (gt.data -> 'suspects') || (gt.data -> 'weapons') || (gt.data -> 'rooms')
+              )
+        where gt.game_key = 'dossie'`,
+    )
+  ).rows.map((r) => r.id),
+);
+
+const corpos = (
+  await db.query(
+    `select p.proname nome, pg_get_functiondef(p.oid) corpo
+       from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname like 'dossie\_%'`,
+  )
+).rows;
+
+/* O QUE CONTA COMO "SABER O NOME": o id aparecer onde o motor DECIDE alguma
+   coisa com ele — comparado, indexado, ou dentro de uma lista.
+
+   Procurar o literal solto acusou `dossie_deducoes` de conhecer a Casa de
+   máquinas do Meridiano-9, porque a sala tem id `maquinas` e a resposta tem a
+   chave `'maquinas'`. É a segunda vez que esse id colide nesta suíte (a
+   primeira derrubou a checagem de vazamento), e a lição é a mesma: um id de
+   conteúdo pode ser igual a uma palavra do vocabulário do motor, e a busca tem
+   de olhar o CONTEXTO em vez do texto.
+
+   Uma chave de `jsonb_build_object` é `'maquinas', <valor>`. Um id cravado é
+   `= 'biblioteca'`, `-> 'biblioteca'` ou `array['biblioteca'`. São formas
+   diferentes, e só a segunda é o defeito. */
+const CONTEXTOS = ["= '", "<> '", "-> '", "->> '", "array['", "in ('", ", '"];
+const cravados = [];
+for (const f of corpos) {
+  for (const id of idsDosCasos) {
+    for (const ctx of CONTEXTOS.slice(0, 6)) {
+      if (f.corpo.includes(`${ctx}${id}'`)) {
+        cravados.push(`${id} em ${f.nome} (como \`${ctx}${id}'\`)`);
+        break;
+      }
+    }
+  }
+}
+ok(
+  cravados.length === 0,
+  cravados.length === 0
+    ? `nenhuma das ${corpos.length} funções do Dossiê cita um dos ${idsDosCasos.size} ids dos quatro casos`
+    : `O MOTOR APRENDEU UM NOME: ${cravados.join(", ")}`,
+);
+
+/* E QUEM NÃO JOGA NÃO RECEBE MÃO NENHUMA.
+
+   A primeira versão deste teste usou `P[2]` como espectador, e `P[2]` é o
+   terceiro JOGADOR desta partida — ele leu uma mão, a dele, corretamente. Uma
+   asserção sobre "de fora" precisa de alguém que esteja de fora. */
+const forasteiro = await player(`dos-fora-${stamp}@mesa.invalid`);
+const maosDoForasteiro = await get(
+  forasteiro.token,
+  `match_private_state?select=data&match_id=eq.${partida.id}`,
+);
+ok(
+  Array.isArray(maosDoForasteiro.body) && maosDoForasteiro.body.length === 0,
+  Array.isArray(maosDoForasteiro.body) && maosDoForasteiro.body.length === 0
+    ? "quem não joga esta partida não lê mão nenhuma — e ler a mão dos outros por outra aba" +
+      " seria a trapaça mais barata que existe"
+    : `alguém de fora leu ${maosDoForasteiro.body?.length} mão(s)`,
+);
+await admin(`/admin/users/${forasteiro.id}`, { method: "DELETE" });
+
 /* ── 6. AS REVIRAVOLTAS ────────────────────────────────────────
 
    Cada caso carrega exatamente uma regra própria (PRD 03 §6.7). Elas são a

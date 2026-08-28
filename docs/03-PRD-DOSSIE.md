@@ -635,18 +635,27 @@ automáticos em tinta impressa; suas anotações, em tinta de caneta. A diferen�
 ## 11. Critérios de aceite
 
 **Segurança — o mais importante deste jogo**
-- [ ] O `solution` nunca aparece em nenhuma resposta de rede antes do fim, para nenhum cliente
-- [ ] Jogador A não lê a mão de B em nenhuma circunstância (teste de RLS automatizado)
-- [ ] Refutar com carta que não está na mão falha no servidor
-- [ ] `dossie_pass_refute` falha se o jogador tem alguma das três cartas
-- [ ] O payload de `match_events` de uma refutação **não** contém a carta mostrada
+- [x] O `solution` nunca aparece em nenhuma resposta de rede antes do fim — `select=*` na partida
+      dá 403, `dossie_start` não o carrega, e a coluna não tem grant de SELECT para papel de
+      cliente nenhum
+- [x] Jogador A não lê a mão de B — e quem não joga a partida não lê mão nenhuma
+- [x] Refutar com carta que não está na mão falha no servidor — e com carta que não é do palpite
+      também
+- [x] `dossie_pass_refute` falha se o jogador tem alguma das três cartas
+- [x] A linha de refutação no registro **não** contém a carta mostrada — o registro vive em
+      `public_state.log` e não numa tabela `match_events`, que nunca foi construída
 - [ ] No modo Surpresa, o tema não aparece em nenhuma resposta antes do início da partida
-- [ ] Espectador não recebe nenhuma mão nem a solução
+- [x] Espectador não recebe nenhuma mão nem a solução
 
 **Temas**
-- [ ] Os quatro pacotes passam no validador de [PRD 07 §5](07-SISTEMA-DE-TEMAS.md#5-validador--roda-no-ci-reprova-o-build)
-- [ ] Adicionar um caso novo não toca em nenhum arquivo do motor
-- [ ] Nenhuma RPC contém um `id` de cômodo, suspeito ou objeto escrito à mão
+- [x] Os quatro pacotes passam no validador de [PRD 07 §5](07-SISTEMA-DE-TEMAS.md#5-validador--roda-no-ci-reprova-o-build)
+      — `npm run dossie`, e nada é publicado se um reprovar
+- [x] Adicionar um caso novo não toca em nenhum arquivo do motor — os três casos novos entraram
+      sem uma linha de SQL e sem uma linha de React
+- [x] Nenhuma RPC contém um `id` de cômodo, suspeito ou objeto escrito à mão — auditado a cada
+      rodada: os 83 ids dos quatro casos, procurados nas 39 funções `dossie_*`. É o tipo de
+      promessa que apodrece em silêncio, porque um `if sala = 'biblioteca'` escrito às pressas
+      funciona e passa em todo teste — e quebra o próximo tema
 - [ ] Trocar de caso entre revanches não recarrega a página
 - [ ] Rodízio não repete caso até esgotar
 - [ ] Cada pacote pesa ≤ 900 KB e só baixa quando a partida começa
@@ -663,13 +672,14 @@ automáticos em tinta impressa; suas anotações, em tinta de caneta. A diferen�
 - [x] Reviravolta desligada nas Regras da casa → o caso roda como jogo limpo
 
 **Regras**
-- [ ] Mover para lugar não adjacente **no grafo daquele caso** é rejeitado
+- [x] Mover para lugar não adjacente **no grafo daquele caso** é rejeitado
 - [ ] Palpitar fora de um lugar é rejeitado
-- [ ] Palpitar encerra o turno mesmo com ação sobrando
-- [ ] Palpitar move o suspeito e o objeto nomeados
-- [ ] A cadeia de refutação segue a ordem e para no primeiro que refuta
-- [ ] Segundo fechamento de caso do mesmo jogador é rejeitado
-- [ ] Fantasma continua sendo consultado na cadeia de refutação
+- [x] Palpitar encerra o turno mesmo com ação sobrando
+- [x] Palpitar move o suspeito e o objeto nomeados — menos para dentro de lugar fechado pela
+      tempestade, que seria porta dos fundos
+- [x] A cadeia de refutação segue a ordem e para no primeiro que refuta
+- [x] Segundo fechamento de caso do mesmo jogador é rejeitado
+- [x] Fantasma continua sendo consultado na cadeia de refutação — e não recebe mais turno
 
 **Bloco**
 - [ ] Fato público é marcado automaticamente, igual para todos
@@ -679,7 +689,8 @@ automáticos em tinta impressa; suas anotações, em tinta de caneta. A diferen�
 
 **Fluxo**
 - [ ] Quem não refuta em 30s tem a carta escolhida pelo servidor e o jogo segue
-- [ ] Todos desconectados: a partida termina sozinha e revela o envelope
+- [x] Todos desconectados: a partida termina sozinha e revela o envelope — a faxina encerra, e
+      desde 0071 ela pula a mesa abandonada em vez de jogá-la para uma plateia vazia
 - [ ] Reconectar restaura mão, bloco, posição e o estado da reviravolta
 
 **Sensação**

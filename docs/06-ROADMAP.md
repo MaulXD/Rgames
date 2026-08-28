@@ -68,7 +68,7 @@ gente e terminar uma partida.
 |---|---|---|---|---|
 | **Letreiro** | ✅ | ✅ | 143 | nêmesis (precisa de tabela própria) |
 | **Dossiê** | ✅ | ✅ | 128 | cartas de pista (§6.8) |
-| **Domínio** | ✅ | ✅ | 180 | modo Relâmpago (falta o mapa de 24) |
+| **Domínio** | ✅ | ✅ | 187 | — |
 | **Metrópole** | ✅ | ✅ | 285 | animação de construção |
 
 **Letreiro** — dicionário de 248.632 palavras com frequência de fala, bandeja de 4×4 ou 5×5,
@@ -168,6 +168,7 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | As quatro bandejas do Letreiro | ✅ seis tokens de CSS, zero regra, e a escolha congela na partida |
 | Estatísticas do Letreiro (§6.9) | ✅ três das quatro. A "palavra mais rara" guardou `sodomia` na primeira rodada de teste — o seletor procura o incomum, e é ali que mora o palavrão |
 | As suítes deixam de morrer com a conexão | ✅ `pg.Pool` no lugar de `pg.Client`: suíte vermelha por causa da rede é o pior vermelho que existe |
+| Modo Relâmpago do Domínio | ✅ o último modo que faltava nos quatro jogos. 24 territórios recortados de Vantara por programa, e o mesmo validador para os dois mapas |
 
 ---
 

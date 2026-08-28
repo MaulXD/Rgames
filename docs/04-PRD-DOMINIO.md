@@ -55,6 +55,28 @@ para que Meridiana seja a abertura óbvia e Khadar a aposta de longo prazo.
 Nauria + oeste de Khadar), para partidas de 30–40 min. É um segundo arquivo de dados, não um segundo
 jogo.
 
+> **CONSTRUÍDO** — migração 0098. O recorte é GERADO de Vantara por
+> `scripts/gera-mapa-relampago.mjs`, e não escrito à mão: os mesmos lugares, os mesmos nomes, as
+> mesmas fronteiras. Dois arquivos com 24 territórios em comum acabam discordando sobre onde
+> termina a Velária, e a discordância aparece como um ataque que o mapa mostra e o servidor recusa.
+>
+> **A FATIA DE KHADAR NÃO É "O OESTE".** Os quatro continentes dão 21 e faltam três. Os três mais
+> a oeste pela coluna — `sarn`, `guran`, `ryn` — deixariam o mapa PARTIDO: a Nauria tem uma porta
+> de terra só, `corais → amur`, e `amur` fica na coluna 9. A fatia é `guran`, `ryn`, `amur`: a
+> mesma quantidade, e a que forma a ponte. Eles viram Sarnath, que é com quem fazem fronteira.
+>
+> **O VALIDADOR É O MESMO PARA OS DOIS MAPAS**, e é isso que faz o recorte ser dado em vez de
+> engenharia: conexidade, simetria, contiguidade de continente, grau médio entre 3 e 5, e duas
+> checagens novas que só um recorte precisa — nenhum objetivo fala de continente que este mapa
+> não tem, e nenhum pede mais territórios do que ele tem. Objetivo impossível é a pior carta do
+> baralho: a pessoa joga a partida inteira atrás de uma coisa que não pode acontecer.
+>
+> **E O CLIENTE PAROU DE IMPORTAR VANTARA.** `lib/dominio/vantara.ts` exportava `TERRITORIOS`,
+> `POR_ID` e `GRADE` como constantes de módulo. Com dois mapas isso é armadilha silenciosa: numa
+> partida Relâmpago a tela desenharia Vantara sobre um estado de 24 territórios, e o resultado é
+> um mapa com metade dos lugares vazios — sem erro, sem aviso. As constantes saíram e viraram
+> `mapaDe(st.map)`; quem encontrou os usos esquecidos foi o compilador.
+
 ---
 
 ## 4. Regras base
@@ -442,8 +464,8 @@ som de papel rasgando quando é quebrada.
 ## 10. Escopo
 
 ### v1
-- Mapa Vantara completo (42 territórios) + mapa Relâmpago (24)
-- Modos Clássico, **Campanha** (padrão) e Relâmpago
+- Mapa Vantara completo (42 territórios) + mapa Relâmpago (24) ✅
+- Modos Clássico, **Campanha** (padrão) e Relâmpago ✅
 - Três fases com timer e auto-pass
 - Batalha em lote com as 4 intenções, incluindo limite de segurança
 - 8 objetivos secretos reescritos + contratos públicos

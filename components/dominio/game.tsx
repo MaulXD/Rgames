@@ -10,7 +10,7 @@ import { useSession } from "@/components/session";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { parseAvatar } from "@/lib/avatar";
 import { COLORS, type ColorKey } from "@/lib/avatar";
-import { POR_ID, TERRITORIOS, conectados, placar } from "@/lib/dominio/vantara";
+import { conectados, mapaDe, placar, type Mapa } from "@/lib/dominio/mapas";
 import * as sfx from "@/lib/sfx";
 
 /* ── o estado que o servidor publica ─────────────────────────────────────── */
@@ -99,8 +99,8 @@ const PENSA_MS = 850;
  * mudar cinco vezes seguidas sem saber o que está acontecendo — e no Domínio o
  * que está acontecendo é literalmente um ataque contra ela.
  */
-function frasePasso(passo: string): string {
-  const nome = (id?: string) => (id ? (POR_ID[id]?.nome ?? id) : "");
+function frasePasso(mapa: Mapa, passo: string): string {
+  const nome = (id?: string) => (id ? (mapa.porId[id]?.nome ?? id) : "");
   const m = /^(\w+)\(\d+\)\s*(.*)$/.exec(passo);
   if (!m) return passo;
   const [, k, resto] = m;
@@ -162,6 +162,10 @@ export function DominioGame({
 }) {
   const { user } = useSession();
   const st = match.public_state;
+  /* QUAL MAPA. Vantara ou o recorte Relâmpago, e a resposta vem do ESTADO da
+     partida — nunca das regras da sala. O anântrio pode trocar de modo entre
+     duas partidas, e o mapa de uma partida em curso é o que ela começou com. */
+  const mapa = mapaDe(st.map);
 
   const [origem, setOrigem] = useState<string | null>(null);
   /* `destinoBruto` é o que foi tocado; `destino` é o que VALE — e sem origem
@@ -425,24 +429,24 @@ export function DominioGame({
   const alvos = useMemo(() => {
     if (!minhaVez || acabou) return [];
     if (visto.phase === "reforco") {
-      return TERRITORIOS.filter((t) => visto.donos[t.id] === meuAssento).map((t) => t.id);
+      return mapa.territorios.filter((t) => visto.donos[t.id] === meuAssento).map((t) => t.id);
     }
     if (visto.avanco) return [visto.avanco.para];
     if (!origem) {
       // sem origem escolhida, acende de onde a jogada PODE partir
-      return TERRITORIOS.filter(
+      return mapa.territorios.filter(
         (t) => visto.donos[t.id] === meuAssento && (visto.exercitos[t.id] ?? 0) >= 2,
       ).map((t) => t.id);
     }
     const out: string[] = [];
     if (podeAtacar) {
-      out.push(...(POR_ID[origem]?.vizinhos ?? []).filter((v) => visto.donos[v] !== meuAssento));
+      out.push(...(mapa.porId[origem]?.vizinhos ?? []).filter((v) => visto.donos[v] !== meuAssento));
     }
     if (podeRemanejar) {
-      out.push(...conectados(visto.donos, meuAssento!, origem));
+      out.push(...conectados(mapa, visto.donos, meuAssento!, origem));
     }
     return out;
-  }, [minhaVez, acabou, visto, origem, meuAssento, podeAtacar, podeRemanejar]);
+  }, [mapa, minhaVez, acabou, visto, origem, meuAssento, podeAtacar, podeRemanejar]);
 
   /* ── a diplomacia ───────────────────────────────────────
 
@@ -594,7 +598,7 @@ export function DominioGame({
   }
 
   /* ── placar lateral ─────────────────────────────────────────────────── */
-  const conta = useMemo(() => placar(visto.donos, visto.exercitos), [visto]);
+  const conta = useMemo(() => placar(mapa, visto.donos, visto.exercitos), [mapa, visto]);
   const ehCampanha = (st.mode ?? "campanha") === "campanha";
   const aguarda = (seat: number) =>
     st.aguardando?.[String(seat)] !== undefined &&
@@ -620,6 +624,7 @@ export function DominioGame({
         </p>
 
         <MapaVantara
+          mapa={mapa}
           donos={st.donos}
           exercitos={st.exercitos}
           cores={cores}
@@ -717,13 +722,14 @@ export function DominioGame({
              primeira e começaria do passo errado */
           key={`${briga.de}-${briga.para}-${briga.assaltos.length}`}
           assaltos={briga.assaltos}
-          nomeAtac={POR_ID[briga.de]?.nome ?? briga.de}
-          nomeDefe={POR_ID[briga.para]?.nome ?? briga.para}
+          nomeAtac={mapa.porId[briga.de]?.nome ?? briga.de}
+          nomeDefe={mapa.porId[briga.para]?.nome ?? briga.para}
           onFim={() => setBriga(null)}
         />
       )}
 
       <MapaVantara
+        mapa={mapa}
         donos={visto.donos}
         exercitos={visto.exercitos}
         cores={cores}
@@ -794,7 +800,7 @@ export function DominioGame({
                 <i />
               </span>
               {nomePorAssento[st.turnSeat]} está jogando
-              {passoBot ? <span className="dim"> · {frasePasso(passoBot)}</span> : null}
+              {passoBot ? <span className="dim"> · {frasePasso(mapa, passoBot)}</span> : null}
             </p>
           )}
 
@@ -883,8 +889,8 @@ export function DominioGame({
           {minhaVez && st.avanco && (
             <div className="acao-bloco">
               <p className="acao-titulo">
-                {POR_ID[st.avanco.para]?.nome} é seu. Mandar mais quantos de{" "}
-                {POR_ID[st.avanco.de]?.nome}?
+                {mapa.porId[st.avanco.para]?.nome} é seu. Mandar mais quantos de{" "}
+                {mapa.porId[st.avanco.de]?.nome}?
               </p>
               <p className="acao-nota dim">
                 Até {st.avanco.max}. Quem avança segura o que tomou; quem fica defende a
@@ -910,7 +916,7 @@ export function DominioGame({
             <div className="acao-bloco">
               <p className="acao-titulo">
                 {origem
-                  ? `Quantos em ${POR_ID[origem]?.nome}?`
+                  ? `Quantos em ${mapa.porId[origem]?.nome}?`
                   : `Coloque ${st.reforcoLeft} ${st.reforcoLeft === 1 ? "exército" : "exércitos"}`}
               </p>
               {!origem && (
@@ -982,7 +988,7 @@ export function DominioGame({
               {origem && !destino && (
                 <>
                   <p className="acao-titulo">
-                    De {POR_ID[origem]?.nome} ({visto.exercitos[origem]}) para onde?
+                    De {mapa.porId[origem]?.nome} ({visto.exercitos[origem]}) para onde?
                   </p>
                   <p className="acao-nota dim">
                     {alvos.length === 0
@@ -994,8 +1000,8 @@ export function DominioGame({
               {origem && destino && !destinoEhMeu && (
                 <>
                   <p className="acao-titulo">
-                    {POR_ID[origem]?.nome} ({visto.exercitos[origem]}) ataca{" "}
-                    {POR_ID[destino]?.nome} ({visto.exercitos[destino]})
+                    {mapa.porId[origem]?.nome} ({visto.exercitos[origem]}) ataca{" "}
+                    {mapa.porId[destino]?.nome} ({visto.exercitos[destino]})
                   </p>
                   {/* O AVISO ANTES DE ROMPER.
 
@@ -1048,7 +1054,7 @@ export function DominioGame({
               {origem && destino && destinoEhMeu && (
                 <>
                   <p className="acao-titulo">
-                    Mandar tropa de {POR_ID[origem]?.nome} para {POR_ID[destino]?.nome}
+                    Mandar tropa de {mapa.porId[origem]?.nome} para {mapa.porId[destino]?.nome}
                   </p>
                   {/* a consequência tem de estar visível ANTES do toque, não
                       numa mensagem de erro depois */}
@@ -1196,6 +1202,7 @@ export function DominioGame({
       <Objetivo texto={priv.objetivo?.texto ?? null} />
 
       <Mao
+        mapa={mapa}
         cartas={priv.cartas ?? []}
         donos={st.donos}
         meuAssento={meuAssento}
@@ -1206,10 +1213,10 @@ export function DominioGame({
 
       <div className="panel dominio-continentes">
         <p className="eyebrow">Continentes</p>
-        <LegendaContinentes donos={visto.donos} cores={cores} />
+        <LegendaContinentes mapa={mapa} donos={visto.donos} cores={cores} />
       </div>
 
-      <Registro log={st.log ?? []} nomes={nomePorAssento} />
+      <Registro mapa={mapa} log={st.log ?? []} nomes={nomePorAssento} />
     </div>
   );
 }
@@ -1280,10 +1287,18 @@ function Contador({
 }
 
 /** O registro: a partida contada em linhas curtas, a mais nova em cima. */
-function Registro({ log, nomes }: { log: LinhaLog[]; nomes: Record<number, string> }) {
+function Registro({
+  mapa,
+  log,
+  nomes,
+}: {
+  mapa: Mapa;
+  log: LinhaLog[];
+  nomes: Record<number, string>;
+}) {
   if (log.length === 0) return null;
   const quem = (s?: number) => (s === undefined ? "alguém" : (nomes[s] ?? `assento ${s}`));
-  const onde = (id?: string) => (id ? (POR_ID[id]?.nome ?? id) : "?");
+  const onde = (id?: string) => (id ? (mapa.porId[id]?.nome ?? id) : "?");
 
   function frase(l: LinhaLog): string {
     switch (l.k) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { POR_ID } from "@/lib/dominio/vantara";
+import type { Mapa } from "@/lib/dominio/mapas";
 
 /**
  * A mão e a troca.
@@ -77,6 +77,7 @@ export function porQueNaoFecha(sel: Carta[]): string | null {
 }
 
 export function Mao({
+  mapa,
   cartas,
   donos,
   meuAssento,
@@ -84,6 +85,8 @@ export function Mao({
   obrigado,
   onTrocar,
 }: {
+  /** qual mapa esta partida usa — o nome do território da carta sai dele */
+  mapa: Mapa;
   cartas: Carta[];
   donos: Record<string, number>;
   meuAssento: number | null;
@@ -143,7 +146,7 @@ export function Mao({
                   <Glifo s={c.simbolo} />
                 </span>
                 <span className="carta-nome">
-                  {c.ter ? (POR_ID[c.ter]?.nome ?? c.ter) : NOME.coringa}
+                  {c.ter ? (mapa.porId[c.ter]?.nome ?? c.ter) : NOME.coringa}
                 </span>
                 <span className="carta-naipe">{NOME[c.simbolo]}</span>
                 {/* Carta do próprio território vale dois exércitos ALI na hora

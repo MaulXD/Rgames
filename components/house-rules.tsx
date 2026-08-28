@@ -186,9 +186,10 @@ const CASA_MET = [
    O Clássico continua ali inteiro, com eliminação de verdade, para quem quer a
    experiência original — e o texto diz o preço em vez de esconder.
 
-   O Relâmpago do PRD não está aqui: ele pede um mapa de 24 territórios que
-   ainda não existe, e um rótulo que o jogo não cumpre é pior que rótulo
-   nenhum. Quando o mapa existir, ele aparece.
+   O Relâmpago é a Campanha em cima do mapa menor, e o texto dele diz isso: ele
+   troca DUAS coisas, o mapa e o número de rodadas. Nada mais. Prometer "outro
+   jeito de jogar" seria vender uma diferença que não existe — o que ele vende é
+   uma hora em vez de duas, e isso é uma diferença e tanto.
    ══════════════════════════════════════════════════════════════════════════ */
 
 const MODOS_DOM = [
@@ -203,6 +204,12 @@ const MODOS_DOM = [
     nome: "Clássico",
     nota: "Acaba quando alguém cumpre o objetivo secreto, e quem perde todos os territórios sai da partida. É a experiência original — inclusive a parte em que alguém assiste o resto da noite.",
     tempo: "60 a 90 min",
+  },
+  {
+    id: "relampago",
+    nome: "Relâmpago",
+    nota: "A Campanha no sul de Vantara: 24 territórios em vez de 42, dez rodadas em vez de doze. Mesmas regras, metade do mapa — cada reforço pesa mais e ninguém tem canto para se esconder.",
+    tempo: "30 a 40 min",
   },
 ] as const;
 

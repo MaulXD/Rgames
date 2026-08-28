@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { COLORS, type ColorKey } from "@/lib/avatar";
-import { CONTINENTES, GRADE, POR_ID, TERRITORIOS } from "@/lib/dominio/vantara";
+import type { Mapa } from "@/lib/dominio/mapas";
 
 /**
  * O tabuleiro de Vantara.
@@ -28,6 +28,8 @@ const CELULA = 100;
 const PECA = 78;
 
 type Props = {
+  /** qual mapa esta partida usa — Vantara ou o recorte Relâmpago */
+  mapa: Mapa;
   donos: Record<string, number>;
   exercitos: Record<string, number>;
   /** assento → chave de cor (a mesma cor do avatar dele) */
@@ -44,6 +46,7 @@ type Props = {
 };
 
 export function MapaVantara({
+  mapa,
   donos,
   exercitos,
   cores,
@@ -54,11 +57,11 @@ export function MapaVantara({
   onEscolher,
   disabled,
 }: Props) {
-  const largura = GRADE.cols * CELULA;
-  const altura = GRADE.rows * CELULA;
+  const largura = mapa.grade.cols * CELULA;
+  const altura = mapa.grade.rows * CELULA;
 
   const centro = (id: string) => {
-    const t = POR_ID[id];
+    const t = mapa.porId[id];
     return { x: t.col * CELULA + CELULA / 2, y: t.row * CELULA + CELULA / 2 };
   };
 
@@ -66,7 +69,7 @@ export function MapaVantara({
   const arestas = useMemo(() => {
     const vistas = new Set<string>();
     const out: { a: string; b: string }[] = [];
-    for (const t of TERRITORIOS) {
+    for (const t of mapa.territorios) {
       for (const v of t.vizinhos) {
         const chave = [t.id, v].sort().join("~");
         if (vistas.has(chave)) continue;
@@ -75,7 +78,10 @@ export function MapaVantara({
       }
     }
     return out;
-  }, []);
+    /* `mapa` é constante de módulo (VANTARA ou RELAMPAGO), então a dependência
+       não custa nada em recálculo — e sem ela o compilador do React desiste do
+       componente inteiro, que custa muito. */
+  }, [mapa]);
 
   const alvoSet = useMemo(() => new Set(alvos), [alvos]);
   const mexeuSet = useMemo(() => new Set(mexeu), [mexeu]);
@@ -99,14 +105,14 @@ export function MapaVantara({
   useEffect(() => {
     const caixa = rolo.current;
     if (!caixa || !primeiroMexeu) return;
-    const t = POR_ID[primeiroMexeu];
+    const t = mapa.porId[primeiroMexeu];
     if (!t) return;
     if (caixa.scrollWidth <= caixa.clientWidth) return;   // nada a rolar
 
     const svg = caixa.querySelector("svg");
     if (!svg) return;
     // do sistema do viewBox para o pixel da tela
-    const escala = svg.clientWidth / (GRADE.cols * CELULA);
+    const escala = svg.clientWidth / (mapa.grade.cols * CELULA);
     const x = (t.col * CELULA + CELULA / 2) * escala;
     const alvoX = Math.max(0, x - caixa.clientWidth / 2);
 
@@ -116,7 +122,7 @@ export function MapaVantara({
       return;
     }
     caixa.scrollTo({ left: alvoX, behavior: "smooth" });
-  }, [primeiroMexeu]);
+  }, [mapa, primeiroMexeu]);
 
   return (
     <div className="mapa-rolo" ref={rolo}>
@@ -177,9 +183,9 @@ export function MapaVantara({
             Cada continente é um grupo com opacidade ÚNICA. Se a opacidade
             fosse por retângulo, as sobreposições entre células vizinhas
             escureceriam e apareceriam costuras onde não há divisão. */}
-        {CONTINENTES.map((c) => (
+        {mapa.continentes.map((c) => (
           <g key={c.id} opacity={0.17}>
-            {TERRITORIOS.filter((t) => t.continente === c.id).map((t) => (
+            {mapa.territorios.filter((t) => t.continente === c.id).map((t) => (
               <rect
                 key={t.id}
                 x={t.col * CELULA + 2}
@@ -216,7 +222,7 @@ export function MapaVantara({
         </g>
 
         {/* ── territórios ─────────────────────────────────────────────── */}
-        {TERRITORIOS.map((t) => {
+        {mapa.territorios.map((t) => {
           const dono = donos[t.id];
           const cor = COLORS[cores[dono] ?? "grafite"];
           const meu = dono === meuAssento;
@@ -309,16 +315,18 @@ export function MapaVantara({
 
 /** A legenda: qual continente vale quanto, e quem está perto de fechar. */
 export function LegendaContinentes({
+  mapa,
   donos,
   cores,
 }: {
+  mapa: Mapa;
   donos: Record<string, number>;
   cores: Record<number, ColorKey>;
 }) {
   return (
     <ul className="continentes">
-      {CONTINENTES.map((c) => {
-        const meus = TERRITORIOS.filter((t) => t.continente === c.id);
+      {mapa.continentes.map((c) => {
+        const meus = mapa.porContinente[c.id] ?? [];
         const contagem = new Map<number, number>();
         for (const t of meus) {
           const d = donos[t.id];

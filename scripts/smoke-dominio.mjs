@@ -1166,12 +1166,115 @@ ok(
 const salaC = (await rpc(P[0].token, "create_room", { p_game: "dominio" })).body;
 const modoRuimD = await rpc(P[0].token, "set_room_settings", {
   p_room: salaC.id,
-  p_settings: { modo: "relampago" },
+  p_settings: { modo: "blitzkrieg" },
 });
 ok(
   /BAD_MODE/.test(JSON.stringify(modoRuimD.body)),
-  "o Relâmpago é RECUSADO: o PRD o define com um mapa de 24 territórios que não existe, e rótulo que o jogo não cumpre não entra",
+  "modo fora do vocabulário é recusado",
 );
+
+/* ── O RELÂMPAGO ─────────────────────────────────────────────
+
+   Este teste dizia o contrário até agora, e por um bom motivo: o Relâmpago era
+   RECUSADO porque o mapa de 24 territórios não existia, e rótulo que o jogo não
+   cumpre não entra.
+
+   O mapa existe (0098). O que ele troca são DUAS coisas — o mapa e o número de
+   rodadas — e as duas são conferidas aqui. A terceira checagem é a que importa
+   mais: que ele NÃO troque nada além disso. "É um arquivo de dados, não um
+   segundo jogo" (PRD 04 §3) é uma promessa que dá para medir. */
+
+const salaRelampago = (await rpc(P[0].token, "create_room", { p_game: "dominio" })).body;
+for (const p of P.slice(1, 3)) await rpc(p.token, "join_room", { p_code: salaRelampago.code });
+const cfgRelampago = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaRelampago.id,
+  p_settings: { modo: "relampago" },
+});
+ok(
+  cfgRelampago.status === 200 && cfgRelampago.body?.settings?.modo === "relampago",
+  cfgRelampago.status === 200
+    ? "o Relâmpago é aceito nas Regras da Casa — o mapa de 24 existe agora"
+    : `recusado: ${JSON.stringify(cfgRelampago.body)}`,
+);
+
+const iniRelampago = await rpc(P[0].token, "dominio_start", { p_room: salaRelampago.id });
+ok(iniRelampago.status === 200, `a partida Relâmpago começou${iniRelampago.status === 200 ? "" : ": " + JSON.stringify(iniRelampago.body)}`);
+
+if (iniRelampago.status === 200) {
+  const stRelampago = (
+    await db.query(
+      "select public_state st from matches where room_id = $1 order by started_at desc limit 1",
+      [salaRelampago.id],
+    )
+  ).rows[0].st;
+
+  ok(stRelampago.map === "relampago", `o estado aponta para o mapa recortado (${stRelampago.map})`);
+  ok(
+    Object.keys(stRelampago.donos).length === 24,
+    `e a mesa nasce com 24 territórios repartidos (${Object.keys(stRelampago.donos).length})`,
+  );
+  ok(stRelampago.rodadaFinal === 10, `dez rodadas, e não doze (${stRelampago.rodadaFinal})`);
+
+  /* NENHUM TERRITÓRIO DE FORA. Um id de Vantara que sobrasse no estado seria um
+     lugar que o mapa do cliente não desenha — dono invisível, exército
+     invisível, e uma partida que ninguém consegue terminar. */
+  const doRecorte = new Set(
+    (
+      await db.query(
+        `select value ->> 'id' id from game_themes gt,
+                lateral jsonb_array_elements(gt.data -> 'territorios')
+          where gt.id = 'relampago'`,
+      )
+    ).rows.map((r) => r.id),
+  );
+  const intrusos = Object.keys(stRelampago.donos).filter((t) => !doRecorte.has(t));
+  ok(
+    intrusos.length === 0,
+    intrusos.length === 0
+      ? "e nenhum território de Vantara vazou para dentro do recorte"
+      : `VAZOU: ${intrusos.slice(0, 5).join(", ")}`,
+  );
+
+  /* E O RESTO É IGUAL À CAMPANHA. Esta é a promessa do PRD, e ela se mede
+     comparando o estado inicial dos dois modos campo a campo: só `map`,
+     `mode`, `rodadaFinal`, `donos` e `exercitos` podem diferir. */
+  const salaK = (await rpc(P[0].token, "create_room", { p_game: "dominio" })).body;
+  for (const p of P.slice(1, 3)) await rpc(p.token, "join_room", { p_code: salaK.code });
+  await rpc(P[0].token, "dominio_start", { p_room: salaK.id });
+  const stK = (
+    await db.query(
+      "select public_state st from matches where room_id = $1 order by started_at desc limit 1",
+      [salaK.id],
+    )
+  ).rows[0].st;
+
+  /* `reforcoLeft` também difere, e é CONSEQUÊNCIA do mapa e não regra nova: o
+     reforço é `max(3, territórios ÷ 2)`, e com 24 repartidos entre três dá 4 em
+     vez dos 7 de Vantara. A fórmula é a mesma; o que mudou foi a entrada.
+
+     Por isso ele não é só liberado — é CONFERIDO logo abaixo. Liberar sem
+     conferir seria abrir um buraco por onde a próxima diferença de verdade
+     passaria sem ninguém ver. */
+  const meusInicio = Object.values(stRelampago.donos).filter((d) => d === stRelampago.turnSeat).length;
+  ok(
+    stRelampago.reforcoLeft === Math.max(3, Math.floor(meusInicio / 2)),
+    `o reforço inicial sai da MESMA fórmula, com o mapa menor:` +
+      ` ${meusInicio} territórios → ${stRelampago.reforcoLeft} exércitos`,
+  );
+
+  const PODEM_DIFERIR = new Set([
+    "map", "mode", "rodadaFinal", "donos", "exercitos", "reforcoLeft",
+  ]);
+  const diferentes = [...new Set([...Object.keys(stRelampago), ...Object.keys(stK)])].filter(
+    (k) => !PODEM_DIFERIR.has(k) && JSON.stringify(stRelampago[k]) !== JSON.stringify(stK[k]),
+  );
+  ok(
+    diferentes.length === 0,
+    diferentes.length === 0
+      ? "e o resto do estado inicial é idêntico ao da Campanha — arquivo de dados, não segundo jogo"
+      : `o Relâmpago mudou mais do que devia: ${diferentes.join(", ")}`,
+  );
+}
 
 const chaveRuimD = await rpc(P[0].token, "set_room_settings", {
   p_room: salaC.id,

@@ -172,6 +172,7 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | O cliente tinha TRUNCATE em quatro tabelas | ✅ **RLS não se aplica a TRUNCATE**. Em `matches`, `anon` podia apagar a tabela e não podia lê-la. Mesma causa de 0022: o default do Supabase é `GRANT ALL`, e ALL inclui TRUNCATE |
 | Os critérios de aceite conferidos contra a EVIDÊNCIA | ✅ os PRDs subestimavam o que está construído, e checklist desatualizado é pior que nenhum. Domínio 17→6, Letreiro 24→11, Dossiê 31→15, Plataforma 11→8 — e o que fica aberto fica com o motivo escrito |
 | O bloco de dedução ganhou testes | ✅ ele é "o que separa quem joga bem de quem joga mal" e não tinha nenhum. O Node 24 tira os tipos sozinho: 16 verificações de lógica pura, zero dependência nova |
+| Cliente e servidor concordam sobre o remanejo | ✅ `conectados` (TypeScript) e `dominio_conectado` (PL/pgSQL) respondem a mesma pergunta e não compartilham código. 3.200 comparações nos dois mapas: a tela não acende o que o servidor recusa |
 
 ---
 

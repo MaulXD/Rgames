@@ -69,12 +69,21 @@ const db = new pg.Pool({ connectionString: conn.toString(), max: 4, keepAlive: t
    blip de rede e o teste tem de ficar vermelho mesmo. Retentativa sem teto
    transforma banco fora do ar em suíte que trava. */
 const CONEXAO_CAIU = /Connection terminated|ECONNRESET|socket hang up|Client has encountered/i;
+/* E os erros de ABRIR conexao, que sao outros: o Pool cria uma nova quando a
+   anterior morreu, e essa criacao tambem falha de vez em quando. O `ETIMEDOUT`
+   chega como AggregateError de MENSAGEM VAZIA -- so o `code` identifica --, e
+   por isso a checagem olha os dois lugares. */
+const CODIGO_DE_REDE = new Set([
+  "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EPIPE",
+]);
+const ehDaRede = (e) =>
+  CODIGO_DE_REDE.has(e?.code ?? "") || CONEXAO_CAIU.test(e?.message ?? "");
 const consultaCrua = db.query.bind(db);
 db.query = async (...args) => {
   try {
     return await consultaCrua(...args);
   } catch (e) {
-    if (!CONEXAO_CAIU.test(e?.message ?? "")) throw e;
+    if (!ehDaRede(e)) throw e;
     return await consultaCrua(...args);
   }
 };

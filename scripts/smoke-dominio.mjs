@@ -71,12 +71,21 @@ const db = new pg.Pool({ connectionString: conn.toString(), max: 4, keepAlive: t
    blip de rede e o teste tem de ficar vermelho mesmo. Retentativa sem teto
    transforma banco fora do ar em suíte que trava. */
 const CONEXAO_CAIU = /Connection terminated|ECONNRESET|socket hang up|Client has encountered/i;
+/* E os erros de ABRIR conexao, que sao outros: o Pool cria uma nova quando a
+   anterior morreu, e essa criacao tambem falha de vez em quando. O `ETIMEDOUT`
+   chega como AggregateError de MENSAGEM VAZIA -- so o `code` identifica --, e
+   por isso a checagem olha os dois lugares. */
+const CODIGO_DE_REDE = new Set([
+  "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EPIPE",
+]);
+const ehDaRede = (e) =>
+  CODIGO_DE_REDE.has(e?.code ?? "") || CONEXAO_CAIU.test(e?.message ?? "");
 const consultaCrua = db.query.bind(db);
 db.query = async (...args) => {
   try {
     return await consultaCrua(...args);
   } catch (e) {
-    if (!CONEXAO_CAIU.test(e?.message ?? "")) throw e;
+    if (!ehDaRede(e)) throw e;
     return await consultaCrua(...args);
   }
 };
@@ -2402,6 +2411,80 @@ ok(
 ok(
   semUm === semUmComIntruso,
   "e tanto faz se o território virou de outro ou ficou sem dono — o continente não é seu nos dois casos",
+);
+
+
+/* ── O CLIENTE E O SERVIDOR CONCORDAM SOBRE O REMANEJO? ────────────────────
+
+   `conectados` (lib/dominio/mapas.ts) e `dominio_conectado` (PL/pgSQL) respondem
+   a MESMA pergunta — "por onde eu chego a partir daqui passando só pelo que é
+   meu" — e não compartilham uma linha de código. Não deveriam mesmo: uma é
+   TypeScript sobre objetos, a outra é SQL sobre jsonb.
+
+   Compartilham a REGRA, e é aí que mora o risco. O cliente usa a dele para
+   ACENDER os destinos válidos antes de você tocar; o servidor usa a dele para
+   AUTORIZAR. Se discordarem, a tela acende um território que o servidor recusa
+   — a pessoa toca, não acontece nada, e ela acha que o jogo travou.
+
+   O comentário no cliente já dizia "se as duas discordarem, o servidor recusa,
+   e é assim que tem de ser". Está certo sobre quem MANDA, e não diz nada sobre
+   quem AVISA. Este teste é o aviso.
+
+   Cinquenta repartições por mapa, cada uma conferida contra TODOS os
+   territórios. Cinquenta porque a discordância, se existir, mora numa topologia
+   específica — uma repartição só provaria uma. E a semente é o próprio índice,
+   para a falha ser reproduzível: "divergiu na rodada 37 do relampago" tem de
+   dar para repetir. */
+
+console.log("\nDOMÍNIO: o cliente e o servidor concordam sobre o remanejo\n");
+
+const { conectados, mapaDe } = await import("@/lib/dominio/mapas");
+
+const divergencias = [];
+let comparacoes = 0;
+for (const qualMapa of ["vantara", "relampago"]) {
+  const oMapa = mapaDe(qualMapa);
+  const publicado = (
+    await db.query("select data from public.game_themes where id = $1", [qualMapa])
+  ).rows[0].data;
+  const ids = oMapa.territorios.map((t) => t.id);
+
+  for (let rodada = 0; rodada < 50; rodada++) {
+    const donos = {};
+    ids.forEach((id, i) => {
+      donos[id] = (i * 7 + rodada * 13) % 3;
+    });
+
+    const de = ids[rodada % ids.length];
+    const meu = donos[de];
+
+    const doCliente = conectados(oMapa, donos, meu, de);
+    const doServidor = (
+      await db.query(
+        `select t.id,
+                public.dominio_conectado($1::jsonb, $2::jsonb, $3::smallint, $4::text, t.id) alcanca
+           from unnest($5::text[]) t(id)`,
+        [JSON.stringify(publicado), JSON.stringify({ donos }), meu, de, ids],
+      )
+    ).rows;
+
+    for (const linha of doServidor) {
+      if (linha.id === de) continue; // a origem não conta para nenhum dos dois
+      comparacoes++;
+      if (doCliente.has(linha.id) !== linha.alcanca) {
+        divergencias.push(
+          `${qualMapa} r${rodada}: de ${de} para ${linha.id} — cliente ${doCliente.has(linha.id)}, servidor ${linha.alcanca}`,
+        );
+      }
+    }
+  }
+}
+
+ok(
+  divergencias.length === 0,
+  divergencias.length === 0
+    ? `as duas buscas concordam em ${comparacoes} comparações, nos dois mapas — a tela não acende o que o servidor recusa`
+    : `A TELA ACENDE O QUE O SERVIDOR RECUSA (${divergencias.length}): ${divergencias.slice(0, 3).join(" · ")}`,
 );
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });

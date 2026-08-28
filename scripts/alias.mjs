@@ -43,12 +43,27 @@ register(
      }
      return url;
    }
-   export function resolve(especificador, contexto, proximo) {
+   /* O TypeScript importa JSON sem cerimonia (resolveJsonModule); o Node exige
+      um atributo de importacao. Poe-lo no codigo da aplicacao para agradar um
+      carregador de teste seria o rabo abanando o cachorro -- o atributo entra
+      aqui, onde o teste mora. */
+   /* O atributo tem de sair no RESULTADO do gancho, e nao no contexto que se
+      passa adiante: o contexto e o que o gancho RECEBEU, e o Node valida contra
+      o que ele DEVOLVE. Perdi duas tentativas nisso. */
+   async function comJson(promessa) {
+     const resultado = await promessa;
+     return resultado.url.endsWith(".json")
+       ? { ...resultado, importAttributes: { type: "json" }, format: "json" }
+       : resultado;
+   }
+   export async function resolve(especificador, contexto, proximo) {
      if (especificador.startsWith("@/")) {
-       return proximo(comExtensao(new URL(especificador.slice(2), RAIZ).href), contexto);
+       const u = comExtensao(new URL(especificador.slice(2), RAIZ).href);
+       return comJson(proximo(u, contexto));
      }
      if (especificador.startsWith("./") || especificador.startsWith("../")) {
-       return proximo(comExtensao(new URL(especificador, contexto.parentURL).href), contexto);
+       const u = comExtensao(new URL(especificador, contexto.parentURL).href);
+       return comJson(proximo(u, contexto));
      }
      return proximo(especificador, contexto);
    }`,

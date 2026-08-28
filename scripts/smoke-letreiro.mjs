@@ -1156,6 +1156,91 @@ ok(
   "e quem fechou a aba aparece no placar do dia — placar com gente faltando é placar errado",
 );
 
+/* ── A QUALIDADE DO POOL DE GRADES ────────────────────────────────
+
+   Três critérios de aceite do PRD 02 §12, e nenhum deles se mede numa partida:
+   eles falam do POOL inteiro, e o pool é sorteado. Uma partida só amostra uma
+   grade, e amostra não prova qualidade de conjunto — é a mesma armadilha do
+   "teste de sorteio mede DISTRIBUIÇÃO" que este projeto já pagou.
+
+   O terceiro reprovou quando foi medido pela primeira vez: 72 das 866 grades de
+   4×A4 sorteáveis tinham menos de três palavras de sete letras, e nove tinham
+   ZERO. O Letreiro é um jogo de achar palavra longa — a pontuação cresce com o
+   tamanho e a conversa depois da rodada é sempre sobre a palavra grande. Numa
+   grade dessas a rodada fica plana e todo mundo acha que jogou mal. 0102 tirou
+   as 72 do sorteio; este teste é o que impede a próxima de entrar. */
+
+console.log("\nLETREIRO: a qualidade do pool\n");
+
+const pool = (
+  await db.query(
+    `select size,
+            count(*)::int usaveis,
+            min(word_count)::int menos_palavras,
+            min(public.letreiro_longas(solution, 7))::int menos_longas,
+            min((select count(*) from unnest(grid) g where g ~ '^[AEIOU]'))::int menos_vogais,
+            max((select count(*) from unnest(grid) g where g ~ '^[AEIOU]'))::int mais_vogais,
+            count(*) filter (
+              where exists (select 1 from unnest(grid) g where g ~ '[KWY]')
+            )::int com_kwy
+       from public.letreiro_boards
+      where usavel
+      group by size order by size`,
+  )
+).rows;
+
+for (const b of pool) {
+  ok(
+    b.menos_palavras >= 60,
+    `${b.size}×${b.size}: as ${b.usaveis} grades sorteáveis têm pelo menos` +
+      ` ${b.menos_palavras} palavras (piso 60)`,
+  );
+  ok(
+    b.menos_longas >= 3,
+    b.menos_longas >= 3
+      ? `${b.size}×${b.size}: e pelo menos ${b.menos_longas} palavras de sete letras ou mais` +
+        " — com menos de três, quem achar a única ganha sozinho e o resto assiste"
+      : `${b.size}×${b.size}: há grade com só ${b.menos_longas} palavra(s) longa(s)`,
+  );
+  ok(
+    b.com_kwy === 0,
+    `${b.size}×${b.size}: nenhuma grade traz K, W ou Y — letras que o português só usa em nome e estrangeirismo`,
+  );
+  /* A faixa de vogais escala com o tamanho, como tudo neste jogo: o PRD escreve
+     "entre 5 e 9" pensando nas 16 letras do 4×4, e a proporção é o que vale. */
+  const piso = b.size === 4 ? 5 : 8;
+  const teto = b.size === 4 ? 9 : 14;
+  ok(
+    b.menos_vogais >= piso && b.mais_vogais <= teto,
+    `${b.size}×${b.size}: vogais entre ${b.menos_vogais} e ${b.mais_vogais}` +
+      ` (faixa ${piso}–${teto}) — pouca vogal trava, muita vira sopa`,
+  );
+}
+
+/* E O `QU` É UMA FACE SÓ QUE VALE POR DUAS LETRAS.
+
+   No dado ele ocupa uma célula — do contrário nenhuma palavra com Q caberia numa
+   grade de dezesseis. Na pontuação ele conta por dois, senão QUEDA valeria menos
+   que MESAS por ter "quatro" letras. */
+const faces = (
+  await db.query("select distinct g face from public.letreiro_boards, unnest(grid) g order by 1")
+).rows.map((r) => r.face);
+ok(
+  faces.includes("QU") && !faces.includes("Q"),
+  `o Q só aparece como face única QU (${faces.length} faces no total)`,
+);
+const pts = (
+  await db.query(
+    `select public.letreiro_pontos_palavra('QUEDA') qu,
+            public.letreiro_pontos_palavra('MESAS') comum,
+            public.letreiro_pontos(5) piso5`,
+  )
+).rows[0];
+ok(
+  Number(pts.qu) > Number(pts.comum),
+  `e na pontuação ele vale por duas letras: QUEDA ${pts.qu} contra MESAS ${pts.comum}`,
+);
+
 /* ── AS QUATRO BANDEJAS ──────────────────────────────────────
 
    O tema mais barato dos quatro jogos: troca SÓ o material (PRD 07 §7). Duas

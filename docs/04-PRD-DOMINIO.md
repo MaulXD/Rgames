@@ -494,20 +494,36 @@ som de papel rasgando quando é quebrada.
 ## 11. Critérios de aceite
 
 **Combate**
-- [ ] 10.000 batalhas simuladas batem com a distribuição teórica dentro de 1%
-- [ ] Empate sempre favorece o defensor
-- [ ] Atacante nunca rola mais dados que `exércitos − 1`
-- [ ] "Até conquistar, parando em N" para exatamente em N
-- [ ] Cada assalto individual está no `match_events` e é auditável no log
-- [ ] Nenhum cliente consegue influenciar um resultado de dado
+- [x] 10.000 batalhas simuladas batem com a distribuição teórica dentro de 1% — nas cinco
+      combinações (3v3, 2v3, 1v3, 3v2, 3v1), pior desvio 0,88 pp
+- [x] Empate sempre favorece o defensor — 1v1 dá 41,7% para o atacante, que é o número exato
+- [x] Atacante nunca rola mais dados que `exércitos − 1` — e o remanejo nunca deixa o
+      território vazio, que é a mesma regra do outro lado
+- [x] "Até conquistar, parando em N" para exatamente em N — o avanço tem teto de três no total,
+      e o servidor devolve a lista de assaltos para a tela animar
+- [ ] Cada assalto individual está no `match_events` e é auditável no log — **a tabela
+      `match_events` nunca foi construída.** O registro vive em `public_state.log`, e a decisão
+      tem razão: uma tabela de eventos separada precisa de RLS própria, de faxina própria e de
+      uma política de retenção, e o log no estado já é lido pela tela e pelo bloco de dedução. O
+      que se PERDE é auditoria depois que a partida sai do banco — e é o que trava o critério do
+      placar recalculado, logo abaixo
+- [x] Nenhum cliente consegue influenciar um resultado de dado — a semente é do servidor e a
+      coluna `seed` de `matches` não tem grant de SELECT para papel de cliente nenhum. O dado é
+      determinístico na semente e no contador, e as faces são uniformes em 60.000 rolagens
 
 **Regras**
-- [ ] Atacar território não adjacente é rejeitado
-- [ ] Remanejar por rota que passa por território de outro é rejeitado
-- [ ] Segundo remanejamento no mesmo turno é rejeitado
-- [ ] Com 5 cartas, a troca é obrigatória e o cliente não consegue pular
-- [ ] Bônus de continente sobe corretamente e zera ao perder um território
-- [ ] Ataque com trégua ativa exige confirmação explícita e aplica a penalidade
+- [x] Atacar território não adjacente é rejeitado — e, mais forte: as 19 conquistas de uma
+      partida solo inteira foram TODAS entre territórios vizinhos
+- [x] Remanejar por rota que passa por território de outro é rejeitado
+- [x] Segundo remanejamento no mesmo turno é rejeitado
+- [x] Com 5 cartas, a troca é obrigatória e o cliente não consegue pular
+- [x] Bônus de continente sobe corretamente e zera ao perder um território — o "zera" é a
+      metade que erra: somar é fácil, parar de somar quando o último território sai é o defeito
+      clássico. E tanto faz se ele virou de outro ou ficou sem dono
+- [x] Ataque com trégua ativa exige confirmação explícita e aplica a penalidade — a penalidade
+      é conferida no servidor (dois exércitos a menos, cobrados uma vez, e a marca de Traidor que
+      fica). A confirmação é de tela: o botão vira "Romper e atacar" em laca vermelha, e isso
+      **não está verificado por teste**, só por leitura do código
 
 **Modo Campanha** — implementado na migração 0039, com 28 verificações em
 `scripts/smoke-dominio.mjs`
@@ -518,7 +534,8 @@ som de papel rasgando quando é quebrada.
 - [x] `−2` por rodada passiva é aplicado
 - [x] Objetivo secreto cumprido vale +20 e encerra na hora; o placar acumula entre rodadas e
       os contadores de rodada (`tomou`, `atacou`) zeram a cada virada
-- [ ] Placar bate com o recálculo independente a partir do `match_events` — hoje o placar é
+- [ ] Placar bate com o recálculo independente a partir do `match_events` — bloqueado pela
+      ausência da tabela (acima). Hoje o placar é
       verificado contra a regra escrita, não contra um recálculo a partir de eventos
 
 **Objetivos**

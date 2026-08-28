@@ -2351,6 +2351,59 @@ if (iniTr.status === 200) {
   }
 }
 
+/* ── O BÔNUS DE CONTINENTE SOBE, E ZERA AO PERDER UM TERRITÓRIO ─────────
+
+   Critério de aceite do PRD 04 §12, e o único do bloco de regras que ainda não
+   tinha teste. É uma função pura do estado, então dá para conferir a DECISÃO
+   direto em vez de montar uma partida inteira e torcer para o mapa cair certo.
+
+   O "zera" é a metade que erra: somar um bônus é fácil, e esquecer de PARAR de
+   somar quando o último território sai é o defeito clássico — quem perdeu a
+   Meridiana continuaria recebendo por ela até o fim da partida. */
+
+console.log("\nDOMÍNIO: o bônus de continente\n");
+
+const mapaV = (await db.query("select data from game_themes where id = 'vantara'")).rows[0].data;
+const meridiana = mapaV.territorios.filter((t) => t.continente === "meridiana").map((t) => t.id);
+const bonusMeridiana = mapaV.continentes.find((c) => c.id === "meridiana").bonus;
+
+async function reforcoCom(donos) {
+  return Number(
+    (
+      await db.query("select public.dominio_reforco($1::jsonb, $2::jsonb, 0::smallint) r", [
+        JSON.stringify(mapaV),
+        JSON.stringify({ donos }),
+      ])
+    ).rows[0].r,
+  );
+}
+
+/* Um continente inteiro e nada mais: o piso de três mais o bônus. */
+const soMeridiana = Object.fromEntries(meridiana.map((t) => [t, 0]));
+const comContinente = await reforcoCom(soMeridiana);
+const semUm = await reforcoCom(
+  Object.fromEntries(meridiana.slice(1).map((t) => [t, 0])),
+);
+const semUmComIntruso = await reforcoCom({
+  ...soMeridiana,
+  [meridiana[0]]: 1, // um vizinho tomou exatamente um território
+});
+
+const piso = Math.max(3, Math.floor(meridiana.length / 2));
+ok(
+  comContinente === piso + bonusMeridiana,
+  `fechar a Meridiana dá ${comContinente} = piso ${piso} + bônus ${bonusMeridiana}`,
+);
+ok(
+  semUmComIntruso === Math.max(3, Math.floor((meridiana.length - 1) / 2)),
+  `e perder UM território dela zera o bônus inteiro:` +
+    ` ${comContinente} → ${semUmComIntruso}, sem sobra de ${bonusMeridiana}`,
+);
+ok(
+  semUm === semUmComIntruso,
+  "e tanto faz se o território virou de outro ou ficou sem dono — o continente não é seu nos dois casos",
+);
+
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();
 

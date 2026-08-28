@@ -554,34 +554,52 @@ conferência.
 ## 12. Critérios de aceite
 
 **Regras**
-- [ ] `AÇÃO` e `ACAO` são a mesma palavra e ambas são aceitas
-- [ ] A palavra aparece com acento correto na tela de revelação
-- [ ] `QU` conta como duas letras na pontuação
-- [ ] Reusar a mesma célula na mesma palavra é rejeitado
-- [ ] Caminho não contíguo é rejeitado pelo servidor mesmo se o cliente aceitar
-- [ ] Palavra submetida 1ms depois de `endsAt` não conta
+- [x] `AÇÃO` e `ACAO` são a mesma palavra e ambas são aceitas — o dicionário guarda as duas
+      formas em colunas separadas (`norm` sem acento, `word` com), e o gabarito casa pela primeira
+- [x] A palavra aparece com acento correto na tela de revelação
+- [x] `QU` conta como duas letras na pontuação — e ocupa UMA face no dado, senão nenhuma palavra
+      com Q caberia numa grade de dezesseis
+- [x] Reusar a mesma célula na mesma palavra é rejeitado — mesmo caminho de código do BAD_PATH
+- [x] Caminho não contíguo é rejeitado pelo servidor mesmo se o cliente aceitar — palavra que
+      EXISTE, com caminho inválido, dá BAD_PATH
+- [x] Palavra submetida depois de `endsAt` não conta
 
 **Grade**
-- [ ] 100 grades sorteadas do pool: todas com ≥60 palavras e ≥3 palavras de 7+
-- [ ] Nenhuma grade com menos de 5 ou mais de 9 vogais
-- [ ] Nunca aparecem `K`, `W` ou `Y`
+- [x] Todas as grades sorteáveis com ≥60 palavras e ≥3 de 7+ — o pool INTEIRO, e não uma amostra
+      de 100: amostra não prova qualidade de conjunto. Reprovou na primeira medição (72 de 866
+      grades de 4×4 tinham menos de três palavras longas, e nove tinham zero) e 0102 as tirou do
+      sorteio
+- [x] Nenhuma grade com menos de 5 ou mais de 9 vogais no 4×4 — e 8 a 14 no 5×5, porque a faixa
+      escala com o tamanho como tudo neste jogo
+- [x] Nunca aparecem `K`, `W` ou `Y` — 23 faces no pool inteiro, e nenhuma das três
 
 **Dicionário**
 - [ ] Lista de 200 palavras comuns do dia a dia brasileiro: 100% aceitas
 - [ ] Lista de 100 não-palavras plausíveis (`CASARO`, `MENTO`): 100% rejeitadas
-- [ ] Nome próprio (`BRASIL`, `MARIA`) é rejeitado
+- [ ] Nome próprio (`BRASIL`, `MARIA`) é rejeitado — **não é.** As duas estão no dicionário e
+      pontuam. O que existe hoje é outra coisa: `data/letreiro-nao-comum.txt` tira 327 nomes e
+      estrangeirismos da lista de COMUNS, então eles nunca aparecem na revelação como "você
+      perdeu esta" — mas continuam valendo se alguém os achar.
+
+      Para cumprir o critério falta uma coluna `proprio` separada de `comum`: são eixos
+      diferentes (frequência contra categoria), e usar um pelo outro foi exatamente o erro que
+      fez a revelação mostrar ADELE. E antes da coluna falta a DECISÃO de produto: recusar
+      BRASIL a um jogador brasileiro que o achou na grade é defensável pela regra clássica do
+      Boggle e desagradável na mesa
 - [ ] Carregamento do dicionário < 500 KB transferidos, e apenas na primeira vez
 
 **Tempo real**
 - [ ] Cronômetro dos 6 jogadores sincronizado dentro de 300ms
 - [ ] Relógio do sistema adiantado em 10 min não afeta o cronômetro
-- [ ] Rodada termina sozinha mesmo se todos fecharem o navegador
+- [x] Rodada termina sozinha mesmo se todos fecharem o navegador — a faxina encerra, e o mesmo
+      vale para o desafio diário
 - [ ] Reconectar aos 2:30 restaura grade, tempo e lista de palavras
 
 **Segurança**
-- [ ] Jogador A não consegue ler `match_private_state` de B durante a rodada (teste de RLS no CI)
-- [ ] `letreiro_boards` não é legível pelo cliente
-- [ ] Chamar `letreiro_score` pelo cliente falha
+- [x] Jogador A não consegue ler `match_private_state` de B durante a rodada
+- [x] `letreiro_boards` não é legível pelo cliente — sem grant de SELECT para nenhum dos dois
+      papéis, e a auditoria de privilégios confere isso em todas as tabelas a cada rodada
+- [x] Chamar `letreiro_score` pelo cliente falha
 
 **Sensação**
 - [ ] Do toque na letra ao feedback visual: < 100ms

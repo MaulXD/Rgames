@@ -28,8 +28,56 @@ const ok = (c, m) => {
 
 const conn = new URL(process.env.POSTGRES_URL_NON_POOLING);
 conn.searchParams.set("uselibpqcompat", "true");
-const db = new pg.Client({ connectionString: conn.toString() });
-await db.connect();
+/* POR QUE POOL E NÃO CLIENT.
+
+   Um `pg.Client` é UMA conexão, aberta no começo e mantida até o fim. Quando
+   ela cai — e ela cai, porque estas suítes passam minutos entre consultas —, o
+   `pg` emite `error` num objeto sem ouvinte e o Node derruba o processo:
+
+       Error: Connection terminated unexpectedly
+       Emitted 'error' event on Client instance
+
+   A suíte fica vermelha por causa da rede, que é o pior vermelho que existe: o
+   que ensina a olhar para a saída e pensar "ah, deve ser aquilo".
+
+   O Pool abre conexão sob demanda e devolve ao fim de cada consulta — uma que
+   morreu enquanto ninguém a usava simplesmente não volta, e a próxima consulta
+   abre outra. `keepAlive` é o cinto: impede que um NAT ou proxy no caminho
+   desligue por ociosidade, que é a causa mais provável.
+
+   Nada aqui depende de sessão: sem `set local`, sem tabela temporária, sem
+   trava consultiva. A API de `query` e `end` é a mesma. */
+const db = new pg.Pool({ connectionString: conn.toString(), max: 4, keepAlive: true });
+/* Sem `connect()`: no Pool ele reserva uma conexão que precisa ser devolvida,
+   e descartar o retorno segura uma das quatro pela partida inteira. O Pool
+   abre sozinho na primeira consulta. */
+
+/* UMA REPETIÇÃO QUANDO A CONEXÃO CAI, e só quando ela cai.
+
+   O Pool já resolveu a conexão que morre OCIOSA — a próxima consulta abre
+   outra. O que ele não resolve é a que morre NO MEIO de uma consulta, e essas
+   suítes provocam isso: a do Dossiê joga duas partidas solo inteiras, centenas
+   de ida e volta ao Supabase, e uma delas leva "Connection terminated
+   unexpectedly" a cada poucas centenas.
+
+   O estrago não era o passo perdido. Era a MENSAGEM: o laço solo reporta
+   qualquer erro como "TRAPAÇA OU DEDUÇÃO ERRADA", e uma queda de TCP saía
+   escrita como acusação de trapaça da máquina. Saída que mente sobre a causa é
+   pior que saída nenhuma — ela manda consertar o que não está quebrado.
+
+   UMA repetição, e não um laço: se a segunda também cair, o problema não é
+   blip de rede e o teste tem de ficar vermelho mesmo. Retentativa sem teto
+   transforma banco fora do ar em suíte que trava. */
+const CONEXAO_CAIU = /Connection terminated|ECONNRESET|socket hang up|Client has encountered/i;
+const consultaCrua = db.query.bind(db);
+db.query = async (...args) => {
+  try {
+    return await consultaCrua(...args);
+  } catch (e) {
+    if (!CONEXAO_CAIU.test(e?.message ?? "")) throw e;
+    return await consultaCrua(...args);
+  }
+};
 
 async function admin(path, opts = {}) {
   const r = await fetch(`${URL_}/auth/v1${path}`, {
@@ -695,6 +743,206 @@ ok(
   `e a gente da mesma mesa ganhou normalmente (${gentePremiada.map((g) => g.xp).join(", ")} de XP) — o portão filtra máquina, não premiação`,
 );
 
+/* ── AS ESTATÍSTICAS QUE VALEM ALGUMA COISA (PRD 02 §6.9) ─────────────
+
+   A régua do PRD é boa: "não 'partidas jogadas'; coisas que a pessoa quer contar
+   para os amigos". Duas entraram em 0094, e as duas têm uma armadilha própria.
+
+   A PALAVRA MAIS RARA: `dict_pt.freq` é um POSTO e é NULO para a maior parte do
+   dicionário. Ler nulo como "raríssima" premiaria `ababalhar` e `aaleniano` — o
+   mesmo defeito que fez a revelação mostrar ONO, ADE e ADELE. Aqui se confere
+   que a palavra guardada TEM posto e que ela é a de maior posto entre as achadas.
+
+   O APROVEITAMENTO: guardado como FRAÇÃO, nunca como porcentagem, porque média
+   de porcentagens não é a porcentagem da soma. */
+
+const estat = (
+  await db.query(
+    `select coalesce(p.stats, '{}'::jsonb) s
+       from match_players mp join profiles p on p.id = mp.user_id
+      where mp.match_id = $1 and not p.is_bot
+      order by mp.score desc limit 1`,
+    [partidaM.id],
+  )
+).rows[0]?.s ?? {};
+
+const achadas = (
+  await db.query(
+    /* Tudo com JOIN explícito. Misturar vírgula com JOIN faz o `join` seguinte
+       se prender ao LATERAL em vez da tabela de trás, e o Postgres responde
+       "invalid reference to FROM-clause entry for table mps". */
+    `select w ->> 'w' palavra
+       from match_private_state mps
+       join match_players mp on mp.match_id = mps.match_id and mp.user_id = mps.user_id
+       join profiles p on p.id = mps.user_id
+       cross join lateral jsonb_array_elements(coalesce(mps.data -> 'words', '[]'::jsonb)) w
+      where mps.match_id = $1 and not p.is_bot
+      order by mp.score desc`,
+    [partidaM.id],
+  )
+).rows.map((r) => r.palavra);
+
+if (achadas.length > 0) {
+  /* A COMPARAÇÃO QUE ESTE TESTE JÁ ERROU: `stats.rara` é recorde de VIDA, e
+     `achadas` é uma partida. Conferir um contra o outro reprovou por
+     `amentos` (posto 687.004, achada numa partida anterior desta mesma suíte)
+     contra `esperanto` (89.849, achada nesta) — e a função estava certa.
+
+     A regra que eu venho repetindo a sessão inteira vale aqui também: confere-se
+     a DECISÃO onde ela mora. A política é "posto maior ganha", e ela se prova em
+     três chamadas, sem depender de que palavra caiu na grade. */
+  const posto0 = (
+    await db.query("select stats -> 'rara' r from profiles where id = $1", [A.id])
+  ).rows[0]?.r;
+
+  ok(
+    !!posto0?.w && Number(posto0.posto) > 0,
+    posto0
+      ? `a partida guardou uma palavra rara: ${posto0.w}, posto ${posto0.posto}`
+      : "nenhuma palavra rara foi guardada depois de uma partida inteira",
+  );
+
+  /* E ELA TEM POSTO DE VERDADE. Esta é a checagem que guarda a lição do
+     ONO/ADE/ADELE: `freq` é nulo para a maior parte do dicionário, e ler nulo
+     como "raríssima" premiaria `ababalhar` e `aaleniano`. */
+  const semPosto = (
+    await db.query(
+      `select count(*)::int n from public.dict_pt d
+        where d.norm = any($1::text[]) and d.freq is null`,
+      [achadas],
+    )
+  ).rows[0].n;
+  const postoDaGuardada = posto0
+    ? (await db.query("select freq from public.dict_pt where word = $1", [posto0.w])).rows[0]
+        ?.freq
+    : null;
+  ok(
+    !posto0 || postoDaGuardada !== null,
+    postoDaGuardada !== null
+      ? `e ela tem posto no corpus (${semPosto} das achadas nesta grade não têm, e nenhuma delas foi escolhida)`
+      : `guardou ${posto0?.w}, que o corpus nunca ouviu — ruído com cara de troféu`,
+  );
+
+  /* E O TROFÉU TEM DE SER APRESENTÁVEL (0095/0096).
+
+     A primeira rodada de teste desta estatística guardou `sodomia`, e não foi
+     azar: o seletor procura o INCOMUM, e num dicionário completo de português
+     é exatamente ali que mora o palavrão. O perfil existe para ser mostrado.
+
+     A palavra continua valendo na partida — pontua, aparece na revelação, conta
+     para as conquistas. O que ela não faz é virar troéu permanente.
+
+     E o teste confere as DUAS direções, porque uma lista de bloqueio que bloqueia
+     demais é tão defeituosa quanto uma que bloqueia de menos: `cágado` e
+     `trepadeira` passaram a vida de radical mal escolhido e têm de continuar
+     passáveis. */
+  const veredicto = {};
+  for (const w of ["SODOMIA", "CARALHO", "FLOGISTO", "CAGADO", "TREPADEIRA"]) {
+    veredicto[w] = (
+      await db.query("select public.palavra_apresentavel($1) a", [w])
+    ).rows[0].a;
+  }
+  ok(
+    veredicto.SODOMIA === false && veredicto.CARALHO === false,
+    veredicto.SODOMIA === false
+      ? "palavrão não vira troéu do perfil (e continua valendo na partida)"
+      : "SODOMIA passaria como a palavra mais rara do perfil de alguém",
+  );
+  ok(
+    veredicto.FLOGISTO && veredicto.CAGADO && veredicto.TREPADEIRA,
+    veredicto.CAGADO && veredicto.TREPADEIRA
+      ? "e a lista não bloqueia demais: cágado, trepadeira e flogisto continuam podendo"
+      : `a lista pegou palavra inocente: ${Object.entries(veredicto)
+          .filter(([, v]) => !v)
+          .map(([k]) => k)
+          .join(", ")}`,
+  );
+
+  await db.query("select public.palavra_rara($1::uuid, 'CARALHO', 999998)", [A.id]);
+  const naoEntrou = (
+    await db.query("select stats -> 'rara' ->> 'w' w from profiles where id = $1", [A.id])
+  ).rows[0].w;
+  ok(
+    naoEntrou !== "CARALHO",
+    naoEntrou !== "CARALHO"
+      ? "— e nem por posto altíssimo ela entra: o filtro está na apuração, antes de gravar"
+      : "gravou CARALHO como troéu por ter posto alto",
+  );
+
+  /* A POLÍTICA, em três chamadas. */
+  const grande = Number(posto0?.posto ?? 0) + 1000;
+  await db.query("select public.palavra_rara($1::uuid, 'PARADIGMA', $2::int)", [A.id, grande]);
+  const subiu = (await db.query("select stats -> 'rara' r from profiles where id = $1", [A.id]))
+    .rows[0].r;
+  ok(
+    subiu?.w === "PARADIGMA",
+    subiu?.w === "PARADIGMA"
+      ? `posto maior toma o lugar (${posto0?.posto ?? 0} → ${subiu.posto})`
+      : `posto maior NÃO tomou o lugar: continua ${subiu?.w}`,
+  );
+
+  await db.query("select public.palavra_rara($1::uuid, 'CASA', 95)", [A.id]);
+  const naoCaiu = (await db.query("select stats -> 'rara' r from profiles where id = $1", [A.id]))
+    .rows[0].r;
+  ok(
+    naoCaiu?.w === "PARADIGMA",
+    naoCaiu?.w === "PARADIGMA"
+      ? "e uma palavra comum não derruba o recorde — recorde que anda para trás não é recorde"
+      : `CASA derrubou o recorde: virou ${naoCaiu?.w}`,
+  );
+
+  /* E máquina não coleciona palavra rara, pelo mesmo motivo de sempre: "a
+     palavra mais rara que você já achou" é uma frase sobre uma pessoa. */
+  const umBot = (
+    await db.query("select id, display_name from profiles where is_bot limit 1")
+  ).rows[0];
+  await db.query("select public.palavra_rara($1::uuid, 'PARADIGMA', 999999)", [umBot.id]);
+  await db.query("select public.aproveitamento($1::uuid, 100, 100)", [umBot.id]);
+  const statsBot = (
+    await db.query("select coalesce(stats, '{}'::jsonb) s from profiles where id = $1", [umBot.id])
+  ).rows[0].s;
+  ok(
+    !statsBot.rara && !statsBot.aproveita,
+    !statsBot.rara && !statsBot.aproveita
+      ? `e ${umBot.display_name} não coleciona nem palavra rara nem aproveitamento`
+      : `a máquina colecionou: ${JSON.stringify(statsBot)}`,
+  );
+}
+
+const ap = estat.aproveita ?? {};
+ok(
+  Number(ap.teto) > 0 && Number(ap.pontos) >= 0 && Number(ap.melhorDen) > 0,
+  ap.teto
+    ? `o aproveitamento guardou fração e não porcentagem:` +
+      ` melhor ${ap.melhorNum}/${ap.melhorDen}, vida ${ap.pontos}/${ap.teto}`
+    : `o aproveitamento não foi creditado: ${JSON.stringify(ap)}`,
+);
+ok(
+  Number(ap.melhorNum) <= Number(ap.melhorDen) && Number(ap.pontos) <= Number(ap.teto),
+  `e nenhuma fração passa de 1 — ninguém pontua mais que o teto da grade`,
+);
+
+/* A MÉDIA É A PORCENTAGEM DA SOMA, e não a soma das porcentagens. Duas rodadas
+   com tetos diferentes provam a diferença; guardar percentual arredondado daria
+   outro número, e daria um número mais errado a cada rodada. */
+const antesAp = { ...ap };
+await db.query("select public.aproveitamento($1::uuid, 10, 100)", [A.id]);
+await db.query("select public.aproveitamento($1::uuid, 90, 100)", [A.id]);
+const depoisAp =
+  (await db.query("select stats -> 'aproveita' a from profiles where id = $1", [A.id])).rows[0]
+    ?.a ?? {};
+ok(
+  Number(depoisAp.teto) === Number(antesAp.teto ?? 0) + 200 &&
+    Number(depoisAp.pontos) === Number(antesAp.pontos ?? 0) + 100,
+  `duas rodadas somam nos totais de vida (${antesAp.pontos ?? 0}/${antesAp.teto ?? 0}` +
+    ` → ${depoisAp.pontos}/${depoisAp.teto}) — e é a soma que vira média, não a média das partes`,
+);
+ok(
+  Number(depoisAp.melhorNum) * 100 >= 90 * Number(depoisAp.melhorDen),
+  `e o recorde subiu para a rodada de 90% (${depoisAp.melhorNum}/${depoisAp.melhorDen}),` +
+    " comparado por multiplicação cruzada e nunca por divisão",
+);
+
 /* ── o nível significa alguma coisa? ──────────────────────────────────────
    Na MESMA grade, difícil tem de pontuar mais que médio, e médio mais que
    fácil. Sem isso, o nível é rótulo. */
@@ -906,6 +1154,94 @@ const placarFinal = await rpc(A.token, "letreiro_diario_placar", {});
 ok(
   placarFinal.body?.length === 2,
   "e quem fechou a aba aparece no placar do dia — placar com gente faltando é placar errado",
+);
+
+/* ── AS QUATRO BANDEJAS ──────────────────────────────────────
+
+   O tema mais barato dos quatro jogos: troca SÓ o material (PRD 07 §7). Duas
+   coisas precisam ser verdade, e nenhuma delas é sobre cor:
+
+     1. o vocabulário é FECHADO. `bandeja` podia ser texto livre, porque nada no
+        servidor depende do valor — e aí um `"roxo"` que o CSS não conhece
+        deixaria a mesa sem material nenhum, com o defeito aparecendo só na tela
+        de quem escolheu.
+
+     2. a escolha CONGELA na partida. É o slogan do jogo: todo mundo olha a mesma
+        grade. Lida da sala, o anfitrião troca de bandeja entre duas partidas e
+        quem tem a tela da anterior aberta vê outro material sob a mesma grade. */
+
+console.log("\nLETREIRO: as quatro bandejas\n");
+
+const salaB = (await rpc(A.token, "create_room", { p_game: "letreiro" })).body;
+
+const aceitas = [];
+for (const b of ["nogueira", "osso", "fliperama", "meridiano"]) {
+  const r = await rpc(A.token, "set_room_settings", {
+    p_room: salaB.id,
+    p_settings: { bandeja: b },
+  });
+  if (r.status === 200 && r.body?.settings?.bandeja === b) aceitas.push(b);
+}
+ok(
+  aceitas.length === 4,
+  aceitas.length === 4
+    ? `as quatro bandejas são aceitas e persistem: ${aceitas.join(", ")}`
+    : `só ${aceitas.length} das quatro colaram: ${aceitas.join(", ") || "nenhuma"}`,
+);
+
+const inventada = await rpc(A.token, "set_room_settings", {
+  p_room: salaB.id,
+  p_settings: { bandeja: "roxo" },
+});
+ok(
+  inventada.status >= 400 && /BAD_TRAY/.test(JSON.stringify(inventada.body)),
+  inventada.status >= 400
+    ? "e uma quinta inventada é recusada — material que o CSS não conhece é mesa sem material"
+    : `o servidor aceitou \`bandeja: "roxo"\`: ${JSON.stringify(inventada.body?.settings)}`,
+);
+
+/* E a escolha chega CONGELADA na partida. */
+await rpc(A.token, "set_room_settings", {
+  p_room: salaB.id,
+  p_settings: { bandeja: "fliperama" },
+});
+const iniB = await rpc(A.token, "letreiro_start", { p_room: salaB.id });
+ok(
+  iniB.status === 200 && iniB.body?.public_state?.tray === "fliperama",
+  iniB.status === 200
+    ? `a partida nasce com a bandeja escolhida (${iniB.body?.public_state?.tray})`
+    : `letreiro_start falhou: ${JSON.stringify(iniB.body)}`,
+);
+
+/* Trocar a bandeja da sala DEPOIS não mexe na partida que já começou. Este é o
+   teste que justifica a decisão de congelar: sem ele, "mora no estado" é uma
+   preferência de estilo em vez de uma garantia. */
+const trocaTarde = await rpc(A.token, "set_room_settings", {
+  p_room: salaB.id,
+  p_settings: { bandeja: "meridiano" },
+});
+const aindaFliperama = (
+  await db.query("select public_state ->> 'tray' t from matches where id = $1", [
+    iniB.body?.id,
+  ])
+).rows[0]?.t;
+ok(
+  aindaFliperama === "fliperama",
+  aindaFliperama === "fliperama"
+    ? `e trocar a bandeja da sala com partida rolando não muda a mesa de ninguém` +
+      ` (recusa: ${trocaTarde.status >= 400 ? "MATCH_IN_PROGRESS" : "aceita, mas só na sala"})`
+    : `a partida em curso trocou de material sozinha: virou ${aindaFliperama}`,
+);
+
+/* E a bandeja não toca em regra nenhuma: mesma grade, mesmo relógio. */
+const semBandeja = iniB.body?.public_state ?? {};
+ok(
+  Array.isArray(semBandeja.grid) &&
+    semBandeja.grid.length === 16 &&
+    semBandeja.seconds === 180 &&
+    semBandeja.scoring === "classica",
+  `e ela não mexeu em regra nenhuma: ${semBandeja.grid?.length} letras,` +
+    ` ${semBandeja.seconds}s, anulação ${semBandeja.scoring}`,
 );
 
 // faxina

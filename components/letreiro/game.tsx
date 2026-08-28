@@ -38,6 +38,14 @@ export type MatchRow = {
     mode?: string;
     scoring?: string;
     seconds?: number;
+    /**
+     * A bandeja: nogueira, osso, fliperama ou meridiano.
+     *
+     * Congelada pelo servidor no início da partida, e não lida da sala — senão o
+     * anfitrião troca de material entre duas partidas e quem ainda tem a tela da
+     * anterior aberta vê outra bandeja sob a mesma grade. Ver 0093.
+     */
+    tray?: string;
     counts?: Record<string, number>;
     found?: Record<
       string,
@@ -369,6 +377,7 @@ export function LetreiroGame({
 
       <Board
         grid={grid}
+        bandeja={match.public_state.tray}
         path={path}
         state={trailState}
         onPathChange={(p) => {

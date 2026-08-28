@@ -25,6 +25,7 @@ import { areNeighbors, faceLabel, letterValue, sizeOf } from "@/lib/letreiro";
  */
 export function Board({
   grid,
+  bandeja,
   path,
   state,
   onPathChange,
@@ -32,6 +33,8 @@ export function Board({
   disabled,
 }: {
   grid: string[];
+  /** o material: nogueira (padrão), osso, fliperama ou meridiano */
+  bandeja?: string;
   path: number[];
   /** idle | path | bad — pinta o dado e a trilha */
   state: "idle" | "path" | "bad";
@@ -80,7 +83,10 @@ export function Board({
   }, [onCommit, path.length]);
 
   return (
-    <div className="tray">
+    /* O material inteiro sai daqui: seis tokens de CSS trocam por `data-bandeja`,
+       e nem o componente nem a grade sabem qual foi escolhida. É o que faz uma
+       bandeja nova custar dez linhas de CSS e nenhuma de React. */
+    <div className="tray" data-bandeja={bandeja ?? "nogueira"}>
       <div
         className="tray-grid"
         role="grid"

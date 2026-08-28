@@ -1,0 +1,114 @@
+# Radicais que não viram troféu no perfil.
+#
+# POR QUE ESTE ARQUIVO EXISTE
+#
+# A estatística "palavra mais rara já encontrada" (PRD 02 §6.9) escolhe, entre
+# as palavras que você achou, a de maior posto na lista de frequência de fala.
+# É um seletor que procura o incomum — e num dicionário completo de português,
+# procurar o incomum encontra, mais cedo ou mais tarde, palavrão, termo sexual e
+# xingamento racial.
+#
+# O troféu fica no seu perfil, e o perfil existe para ser mostrado: o próprio PRD
+# define esta seção como "coisas que a pessoa quer contar para os amigos". Um
+# jogo de mesa para jogar com amigos não pode escolher sozinho a palavra que vai
+# ficar escrita ali.
+#
+# A palavra continua VALENDO na partida. Ela pontua, aparece na revelação, entra
+# na contagem. O que ela não faz é virar o troféu permanente de alguém — que é
+# uma decisão diferente, e a única que este arquivo toma.
+#
+# COMO ELE FUNCIONA
+#
+# Cada linha é um RADICAL, e ele casa por prefixo. Radical rende muito mais que
+# palavra solta: `caralh` pega `caralho`, `caralhos`, `caralhada` e o que mais o
+# dicionário tiver, sem precisar enumerar.
+#
+# Por isso todo radical aqui tem no mínimo cinco letras e foi conferido contra o
+# dicionário: `scripts/seed-trofeu.mjs` imprime tudo o que cada um captura, e um
+# radical que pegue palavra inocente é radical errado — `cag` pegaria `cágado`,
+# então o que está aqui é `cagalh`, não `cag`.
+#
+# ISTO É UM PISO, E NÃO UMA GARANTIA. Nenhuma lista de 60 linhas cobre o
+# português inteiro. Ela tira o que é óbvio e frequente; o resto é conserto
+# quando aparecer, e é para isso que ela é um arquivo de dados e não código.
+
+# ── sexual e escatológico ───────────────────────────────────────────────────
+caralh
+bucet
+xoxot
+punhet
+boquet
+piroca
+foder
+fodid
+fodeu
+gozada
+gozado
+esporr
+pentelh
+cagalh
+cagada
+merdinh
+bosta
+peido
+peidar
+peidad
+mijada
+mijado
+mijar
+priapis
+orgasm
+masturb
+felac
+sodom
+zoofil
+pedofil
+pederast
+prostitu
+puteir
+putaria
+vadiag
+tesudo
+cornud
+viado
+sapatao
+
+# ── xingamento e termo pejorativo de grupo ──────────────────────────────────
+crioul
+mulambo
+mocreia
+mongoloid
+retardad
+
+# ── crime sexual ────────────────────────────────────────────────────────
+estupr
+necrofil
+
+# ── o que esta lista deliberadamente NÃO tenta ──────────────────────────────
+#
+# Palavras cujo sentido depende inteiramente do contexto ficaram de fora, porque
+# um radical não sabe o contexto e bloquear pelo pior sentido tira do troféu
+# palavra inocente:
+#
+#   cagado   o CÁGADO é um cágado, e a normalização tira o acento — este
+#            arquivo usava o cágado como EXEMPLO da armadilha e caiu nela
+#            mesmo assim, na primeira rodada de `npm run trofeu`
+#   trepad   "trepadeira" é uma planta e "trepador" é um pássaro
+#   necrof   "necófago" é biologia e "necrofobia" é clínica — só `necrofil`
+#   macac    "macacão" é uma roupa e "macaco" é o do pneu
+#   retard   "retardatário" é quem chegou tarde — só `retardad` xinga
+#   bicha    é fila em Portugal e verme no Brasil
+#   rola     é o verbo rolar e é uma ave
+#   sacana   "sacanagem" é palavra de todo dia
+#   anão     é descritivo, não xingamento — os pejorativos estão na lista acima
+#
+# Preferir o falso negativo aqui é a escolha certa: uma palavra ofensiva que
+# escapa é um conserto de uma linha neste arquivo; uma palavra inocente
+# bloqueada é um troféu que a pessoa nunca entende por que não recebeu.
+#
+# E a seção de VIOLÊNCIA saiu inteira. `degolar`, `enforcado` e `esquartejar` são
+# palavras de história e de jornal: "a mais rara que você achou foi ESQUARTEJAR"
+# é sombrio, e sombrio não é o critério. O critério é o que alguém não mostraria
+# a um amigo. Ficaram `estupr` e `necrof`, que não são sobre violência — são
+# sobre crime sexual. `corcunda` e `aleijado` saíram pelo mesmo motivo de `anão`:
+# são palavras desagradáveis, não palavras que envergonham quem as achou.

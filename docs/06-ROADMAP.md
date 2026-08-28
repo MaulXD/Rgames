@@ -66,7 +66,7 @@ gente e terminar uma partida.
 
 | | Motor | Interface | Verificações | O que falta |
 |---|---|---|---|---|
-| **Letreiro** | ✅ | ✅ | 129 | estatísticas, as 4 bandejas temáticas |
+| **Letreiro** | ✅ | ✅ | 143 | nêmesis (precisa de tabela própria) |
 | **Dossiê** | ✅ | ✅ | 128 | cartas de pista (§6.8) |
 | **Domínio** | ✅ | ✅ | 180 | modo Relâmpago (falta o mapa de 24) |
 | **Metrópole** | ✅ | ✅ | 285 | animação de construção |
@@ -165,6 +165,9 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | As três reviravoltas do Dossiê (§6.7 do PRD) | ✅ Apagão, Tempestade de Areia e Registro da Estação, com 23 verificações — a da tempestade confere a conexidade por enumeração COMPLETA dos 144 pares |
 | Todo campo de digitação tem nome acessível | ✅ `npm run css` prova, e achou cinco |
 | Contraste e alvo de toque medidos | ✅ a maior lacuna do projeto encolheu pelo lado que é aritmética — 6 pares de cor abaixo do piso da WCAG e 6 botões menores que o dedo |
+| As quatro bandejas do Letreiro | ✅ seis tokens de CSS, zero regra, e a escolha congela na partida |
+| Estatísticas do Letreiro (§6.9) | ✅ três das quatro. A "palavra mais rara" guardou `sodomia` na primeira rodada de teste — o seletor procura o incomum, e é ali que mora o palavrão |
+| As suítes deixam de morrer com a conexão | ✅ `pg.Pool` no lugar de `pg.Client`: suíte vermelha por causa da rede é o pior vermelho que existe |
 
 ---
 

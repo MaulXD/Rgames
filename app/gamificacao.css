@@ -240,3 +240,20 @@
 
 /* cabeçalho: nível + bichinho */
 .header-dir { display: flex; align-items: center; gap: 0.9rem; }
+
+/* A palavra, no lugar onde os outros quadros põem um número.
+
+   Os cinco quadros de "Sua carreira" têm todos um número grande em cima e uma
+   legenda embaixo. "Mais rara" quebra o padrão de propósito: o que a pessoa
+   conta para o amigo é MOSTARDA, não 41.208. A palavra fica no lugar do número,
+   e o posto desce para a legenda, que é onde a escala pertence.
+
+   Ela é menor que os números porque uma palavra tem muito mais caracteres que
+   uma pontuação, e `overflow-wrap` porque PARALELEPIPEDO existe. */
+.numero-palavra {
+  display: block;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}

@@ -258,6 +258,30 @@ Trivial de fazer e resolve o "enjoa em 4 rodadas" de graça, porque o jogo em si
 
 Mesmo mesh, mesmo código. Muda material, HDRI, som e paleta. **Um dia de trabalho por tema.**
 
+> **CONSTRUÍDO** — migração 0093. As quatro estão no ar, escolhíveis nas Regras da Casa.
+>
+> **O material inteiro são SEIS TOKENS de CSS**, e essa restrição é o que faz uma bandeja nova
+> custar dez linhas em vez de um arquivo: bandeja, sombra da bandeja, forro, dado, sombra do
+> dado, tinta do dado. Se um tema precisar de um sétimo, ou o token faltava mesmo, ou aquele
+> tema está querendo mudar o jogo.
+>
+> O contorno de tinta NÃO virou token, e não vira: ele é a assinatura da plataforma inteira, e
+> uma bandeja sem contorno não seria outra bandeja — seria outro produto.
+>
+> **A escolha mora no ESTADO DA PARTIDA, não na sala.** A bandeja é cosmética e mesmo assim
+> é congelada em `public_state`, pelo motivo que é o slogan do jogo: *todo mundo olha a mesma
+> grade*. Lida de `rooms.settings`, o anfitrião troca de bandeja entre duas partidas e quem
+> ainda tem a tela da anterior aberta vê outro material sob a mesma grade.
+>
+> **E o vocabulário é fechado.** `bandeja` podia ser texto livre, porque nada no servidor
+> depende do valor — e aí um `"roxo"` que o CSS não conhece deixaria a mesa sem material
+> nenhum, com o defeito aparecendo só na tela de quem escolheu. É a mesma disciplina do
+> validador de reviravoltas: liberdade que o motor não sustenta é armadilha.
+>
+> A prévia nas Regras da Casa usa o próprio `[data-bandeja]`, e não uma cópia dos
+> hexadecimais: no dia em que a cor do Fliperama mudar, muda num lugar só, e a prévia continua
+> dizendo a verdade sobre o que vem depois.
+
 ### Domínio — quatro cartas [v1.1]
 
 | Tema | O mapa |

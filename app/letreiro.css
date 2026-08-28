@@ -68,12 +68,71 @@
 
 /* ── bandeja ───────────────────────────────────────────────────────────── */
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   AS QUATRO BANDEJAS
+
+   O tema mais barato dos quatro jogos (PRD 07 §7): troca SÓ O MATERIAL. Mesmo
+   código, mesma grade, mesmas regras — muda a madeira, o forro, o dado e a luz.
+
+   Seis tokens, e só seis. É a restrição que faz uma bandeja nova custar dez
+   linhas em vez de um arquivo: se um tema precisar de um sétimo token, ou o
+   token faltava mesmo, ou aquele tema está querendo mudar o jogo.
+
+   O contorno de tinta NÃO é token e não vira: ele é a assinatura da plataforma
+   inteira, e uma bandeja sem contorno não seria outra bandeja — seria outro
+   produto.
+   ══════════════════════════════════════════════════════════════════════════ */
+
 .tray {
+  /* nogueira — o padrão, e o que o jogo sempre foi */
+  --bandeja: var(--vivo-menta);
+  --bandeja-sombra: #12855d;
+  --forro: #0d3a30;
+  --dado: #fdf6e2;
+  --dado-sombra: #b9a983;
+  --dado-tinta: var(--ink);
+
   padding: clamp(0.7rem, 2.6vw, 1.15rem);
   border: 3px solid var(--ink);
   border-radius: var(--r-lg);
-  background: var(--vivo-menta);
-  box-shadow: 0 6px 0 #12855d, var(--shadow-rest);
+  background: var(--bandeja);
+  box-shadow: 0 6px 0 var(--bandeja-sombra), var(--shadow-rest);
+}
+
+/* OSSO E AREIA — couro cru sobre areia, dado de osso talhado, sol vertical.
+   O forro é mais claro que o de todas as outras: é areia ao sol, e areia ao sol
+   não tem sombra. Por isso o dado aqui é o único mais ESCURO que o forro. */
+.tray[data-bandeja="osso"] {
+  --bandeja: #b98d5c;
+  --bandeja-sombra: #7d5a33;
+  --forro: #d9c39a;
+  --dado: #f3e9d4;
+  --dado-sombra: #a8946f;
+  --dado-tinta: #3b2d1c;
+}
+
+/* FLIPERAMA — fórmica Memphis, acrílico translúcido iluminado por baixo.
+   A sombra do dado é uma cor VIVA e não um marrom: acrílico com luz embaixo
+   não projeta sombra, ele vaza cor. */
+.tray[data-bandeja="fliperama"] {
+  --bandeja: #ff6fa5;
+  --bandeja-sombra: #b23b6c;
+  --forro: #201436;
+  --dado: #f2e7ff;
+  --dado-sombra: #8b4fd0;
+  --dado-tinta: #2a1348;
+}
+
+/* MERIDIANO — alumínio escovado, cerâmica gravada a laser, âmbar de CRT.
+   A única das quatro em que a tinta do dado não é escura: gravação a laser em
+   cerâmica clara devolve luz, e o âmbar do CRT é a luz que existe na sala. */
+.tray[data-bandeja="meridiano"] {
+  --bandeja: #7f8a91;
+  --bandeja-sombra: #4d565c;
+  --forro: #14181b;
+  --dado: #2b3136;
+  --dado-sombra: #171c1f;
+  --dado-tinta: #ffb545;
 }
 
 .tray-grid {
@@ -86,7 +145,7 @@
   aspect-ratio: 1;
   padding: clamp(0.45rem, 2vw, 0.8rem);
   border-radius: var(--r-md);
-  background: #0d3a30;
+  background: var(--forro);
   box-shadow: inset 0 4px 0 rgb(0 0 0 / 0.35);
   touch-action: none;
 }
@@ -100,8 +159,8 @@
   border: 3px solid var(--ink);
   border-radius: clamp(6px, 2.4vw, 12px);
   cursor: pointer;
-  background: #fdf6e2;
-  box-shadow: 0 4px 0 #b9a983;
+  background: var(--dado);
+  box-shadow: 0 4px 0 var(--dado-sombra);
   transition:
     transform var(--dur-instant) var(--ease-out),
     box-shadow var(--dur-instant) var(--ease-out),
@@ -112,7 +171,7 @@
   font-weight: 800;
   font-size: clamp(1.15rem, 6.4vw, 2.1rem);
   line-height: 1;
-  color: var(--ink);
+  color: var(--dado-tinta);
 }
 .die-order {
   position: absolute;
@@ -1112,4 +1171,48 @@
   padding-right: 0.6rem;
   font-size: 0.68rem;
   letter-spacing: 0.06em;
+}
+
+/* ── a prévia do material, nas regras da casa ────────────────────────────────
+
+   A bandeja, o forro e um dado, em 42 pixels.
+
+   Ela reaproveita os mesmos seis tokens de `.tray` — os seletores
+   `[data-bandeja]` lá em cima os definem, e esta regra só os USA. É por isso
+   que ela não repete nenhum hexadecimal: no dia em que a cor do Fliperama
+   mudar, muda num lugar só, e a prévia continua dizendo a verdade sobre o que
+   vem depois de começar a partida.
+
+   "Osso e Areia" não significa nada para quem nunca viu. Três retângulos
+   significam. */
+
+.rule-bandeja {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 30px;
+  padding: 4px;
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+  background: var(--bandeja);
+  box-shadow: 0 3px 0 var(--bandeja-sombra);
+}
+.rule-bandeja::before {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--forro);
+}
+.rule-bandeja::after {
+  content: "";
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--ink);
+  border-radius: 2px;
+  background: var(--dado);
 }

@@ -2,7 +2,7 @@
 
 import { Medalha } from "@/components/medalha";
 import { useSession } from "@/components/session";
-import { CONQUISTAS, parseStats, patente, progresso } from "@/lib/gamificacao";
+import { CONQUISTAS, parseStats, patente, pct, progresso } from "@/lib/gamificacao";
 
 /**
  * A coleção e os números da vida.
@@ -58,6 +58,45 @@ export function Conquistas() {
             <dd>
               {s.melhor?.pts ?? 0}
               <small>{s.melhor?.w ?? "ainda nenhuma"}</small>
+            </dd>
+          </div>
+
+          {/* A MAIS RARA.
+
+              O número grande é a PALAVRA e não o posto, ao contrário dos
+              outros quatro. É de propósito: "41208" não é uma coisa que
+              alguém conta para um amigo, e "MOSTARDA" é. O posto vai embaixo,
+              como a escala que dá sentido à palavra.
+
+              A frase diz "mais falada" e não "mais comum" porque o corpus é de
+              FALA — legenda de filme e transcrição —, e essa diferença é o
+              motivo de VERDADE aparecer antes de PARADIGMA. */}
+          <div className="numero">
+            <dt>Mais rara</dt>
+            <dd>
+              <span className="numero-palavra">{s.rara?.w ?? "—"}</span>
+              <small>
+                {s.rara
+                  ? `${s.rara.posto.toLocaleString("pt-BR")}ª mais falada`
+                  : "ainda nenhuma"}
+              </small>
+            </dd>
+          </div>
+
+          {/* O APROVEITAMENTO.
+
+              Duas divisões, feitas UMA vez cada, aqui — o servidor guarda as
+              frações inteiras justamente para que a média da vida seja a
+              porcentagem da soma, e não a soma das porcentagens. */}
+          <div className="numero">
+            <dt>Aproveitamento</dt>
+            <dd>
+              {pct(s.aproveita?.melhorNum, s.aproveita?.melhorDen) ?? 0}
+              <small>
+                {s.aproveita?.teto
+                  ? `melhor rodada · ${pct(s.aproveita.pontos, s.aproveita.teto)}% na média`
+                  : "da grade, na sua melhor rodada"}
+              </small>
             </dd>
           </div>
         </dl>

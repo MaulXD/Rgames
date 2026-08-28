@@ -12,8 +12,29 @@ export type Stats = {
   vitorias?: number;
   palavras?: number;
   melhor?: { w: string; pts: number };
+  /**
+   * A palavra mais rara já achada, e o posto dela na lista de frequência de
+   * fala. Posto MAIOR é mais raro — e só entram palavras que TÊM posto: sem
+   * posto, o corpus nunca ouviu a palavra, e aí ela não é troéu, é ruído
+   * (ver 0094).
+   */
+  rara?: { w: string; posto: number };
+  /**
+   * O aproveitamento, guardado como FRAÇÃO e não como porcentagem.
+   *
+   * `melhorNum/melhorDen` é a melhor rodada; `pontos/teto` são os totais de
+   * vida. Média de porcentagens não é a porcentagem da soma, e é por isso que
+   * o servidor guarda as duas frações inteiras e quem divide é a tela, uma vez.
+   */
+  aproveita?: { melhorNum: number; melhorDen: number; pontos: number; teto: number };
   conquistas?: string[];
 };
+
+/** Uma fração em porcentagem inteira, ou nulo quando ainda não há o que dividir. */
+export function pct(num?: number, den?: number): number | null {
+  if (!den || den <= 0) return null;
+  return Math.round(((num ?? 0) * 100) / den);
+}
 
 /** Cada nível custa um pouco mais que o anterior — curva de raiz, não linear. */
 const CUSTO = 60;
@@ -154,6 +175,8 @@ export function parseStats(raw: unknown): Stats {
     vitorias: Number(s.vitorias ?? 0),
     palavras: Number(s.palavras ?? 0),
     melhor: s.melhor,
+    rara: s.rara,
+    aproveita: s.aproveita,
     conquistas: Array.isArray(s.conquistas) ? s.conquistas : [],
   };
 }

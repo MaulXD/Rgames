@@ -30,8 +30,56 @@ const ok = (c, m) => {
 
 const conn = new URL(process.env.POSTGRES_URL_NON_POOLING);
 conn.searchParams.set("uselibpqcompat", "true");
-const db = new pg.Client({ connectionString: conn.toString() });
-await db.connect();
+/* POR QUE POOL E NÃO CLIENT.
+
+   Um `pg.Client` é UMA conexão, aberta no começo e mantida até o fim. Quando
+   ela cai — e ela cai, porque estas suítes passam minutos entre consultas —, o
+   `pg` emite `error` num objeto sem ouvinte e o Node derruba o processo:
+
+       Error: Connection terminated unexpectedly
+       Emitted 'error' event on Client instance
+
+   A suíte fica vermelha por causa da rede, que é o pior vermelho que existe: o
+   que ensina a olhar para a saída e pensar "ah, deve ser aquilo".
+
+   O Pool abre conexão sob demanda e devolve ao fim de cada consulta — uma que
+   morreu enquanto ninguém a usava simplesmente não volta, e a próxima consulta
+   abre outra. `keepAlive` é o cinto: impede que um NAT ou proxy no caminho
+   desligue por ociosidade, que é a causa mais provável.
+
+   Nada aqui depende de sessão: sem `set local`, sem tabela temporária, sem
+   trava consultiva. A API de `query` e `end` é a mesma. */
+const db = new pg.Pool({ connectionString: conn.toString(), max: 4, keepAlive: true });
+/* Sem `connect()`: no Pool ele reserva uma conexão que precisa ser devolvida,
+   e descartar o retorno segura uma das quatro pela partida inteira. O Pool
+   abre sozinho na primeira consulta. */
+
+/* UMA REPETIÇÃO QUANDO A CONEXÃO CAI, e só quando ela cai.
+
+   O Pool já resolveu a conexão que morre OCIOSA — a próxima consulta abre
+   outra. O que ele não resolve é a que morre NO MEIO de uma consulta, e essas
+   suítes provocam isso: a do Dossiê joga duas partidas solo inteiras, centenas
+   de ida e volta ao Supabase, e uma delas leva "Connection terminated
+   unexpectedly" a cada poucas centenas.
+
+   O estrago não era o passo perdido. Era a MENSAGEM: o laço solo reporta
+   qualquer erro como "TRAPAÇA OU DEDUÇÃO ERRADA", e uma queda de TCP saía
+   escrita como acusação de trapaça da máquina. Saída que mente sobre a causa é
+   pior que saída nenhuma — ela manda consertar o que não está quebrado.
+
+   UMA repetição, e não um laço: se a segunda também cair, o problema não é
+   blip de rede e o teste tem de ficar vermelho mesmo. Retentativa sem teto
+   transforma banco fora do ar em suíte que trava. */
+const CONEXAO_CAIU = /Connection terminated|ECONNRESET|socket hang up|Client has encountered/i;
+const consultaCrua = db.query.bind(db);
+db.query = async (...args) => {
+  try {
+    return await consultaCrua(...args);
+  } catch (e) {
+    if (!CONEXAO_CAIU.test(e?.message ?? "")) throw e;
+    return await consultaCrua(...args);
+  }
+};
 
 /**
  * Chama a faxina até três vezes, e devolve quantas partidas ela atendeu.

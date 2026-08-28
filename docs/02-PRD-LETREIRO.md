@@ -333,10 +333,38 @@ Este é o mecanismo de retenção mais barato do projeto inteiro.
 
 Não "partidas jogadas". Coisas que a pessoa quer contar para os amigos:
 
-- **Melhor palavra da vida** (mais pontos numa única palavra)
-- **Palavra mais rara já encontrada** (índice de raridade do corpus)
-- **Aproveitamento**: seus pontos ÷ pontuação máxima da grade
-- **Nêmesis**: contra quem você mais anula palavra
+- **Melhor palavra da vida** (mais pontos numa única palavra) ✅
+- **Palavra mais rara já encontrada** (índice de raridade do corpus) ✅
+- **Aproveitamento**: seus pontos ÷ pontuação máxima da grade ✅
+- **Nêmesis**: contra quem você mais anula palavra — *adiada, ver abaixo*
+
+> **CONSTRUÍDO** — migrações 0094–0097. Três das quatro.
+>
+> **A RARIDADE É ENTRE AS PALAVRAS QUE O CORPUS CONHECE.** `dict_pt.freq` é um POSTO e é nulo
+> para a maior parte do dicionário: a lista de frequência de fala cobre uma fração das 248.632
+> palavras. Ler nulo como "raríssima" premiaria `ababalhar` e `aaleniano` — o MESMO defeito que
+> fez a revelação mostrar ONO, ADE e ADELE. Sem posto, o corpus nunca ouviu a palavra, e palavra
+> que ninguém diz não é troéu.
+>
+> **E O TROFÉU PRECISA SER APRESENTÁVEL.** A primeira rodada de teste guardou `sodomia`. Não foi
+> azar: o seletor procura o INCOMUM, e num dicionário completo de português é exatamente ali que
+> mora o palavrão. A palavra continua valendo na partida — pontua, aparece na revelação, conta
+> para as conquistas. O que ela não faz é virar o troéu permanente do perfil, que existe para
+> ser mostrado. A lista está em `data/letreiro-fora-do-trofeu.txt`, é de RADICAIS, e
+> `npm run trofeu` imprime tudo o que cada um captura — porque prefixo é fácil de errar, e a
+> primeira versão bloqueou `cágado` e `trepadeira`.
+>
+> **O APROVEITAMENTO GUARDA A FRAÇÃO, NÃO A PORCENTAGEM.** Média de porcentagens não é a
+> porcentagem da soma. O servidor guarda `pontos/teto` de vida e a melhor rodada como fração
+> inteira; quem divide é a tela, uma vez. Recordes são comparados por multiplicação cruzada —
+> recorde decidido por arredondamento é recorde que muda sozinho.
+>
+> **POR QUE O NÊMESIS NÃO ENTROU.** "Contra quem você mais anula palavra" precisa de contagem
+> POR PAR de jogadores. Isso não cabe em `profiles.stats`: seria um objeto que cresce sem teto
+> com o id de todo mundo com quem você já jogou, dentro de um jsonb lido inteiro a cada
+> carregamento de perfil — e guardar id de terceiro no registro de alguém é uma decisão de
+> privacidade que merece uma tabela e uma política de RLS, não um campo que apareceu de lado.
+> Meia estatística com o dado no lugar errado é pior que nenhuma, porque ela fica.
 
 ---
 
@@ -501,9 +529,12 @@ conferência.
 - Revelação em 3 atos
 - Anulação: as três variantes
 - Dados 3D com física + fallback 2D
-- Estatísticas: melhor palavra, aproveitamento
-- **As quatro bandejas**: Nogueira, Osso e Areia, Fliperama, Meridiano — mesmo código, só material,
-  luz, som e paleta ([PRD 07 §7](07-SISTEMA-DE-TEMAS.md#7-temas-nos-outros-três-jogos))
+- Estatísticas ✅: melhor palavra, palavra mais rara, aproveitamento
+- **As quatro bandejas** ✅: Nogueira, Osso e Areia, Fliperama, Meridiano — mesmo código, só
+  material e paleta ([PRD 07 §7](07-SISTEMA-DE-TEMAS.md#7-temas-nos-outros-três-jogos)). Seis
+  tokens de CSS, escolhíveis nas Regras da Casa, e a escolha congela no estado da partida. O SOM
+  ainda é o mesmo nas quatro: a trilha do Letreiro não tem eixo de material como a do Dossiê tem
+  de clima, e inventar um só para isto seria fazer engenharia para caber num item de lista
 - Revanche e "mesma grade"
 
 ### v1.1

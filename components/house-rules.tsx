@@ -49,6 +49,42 @@ const TAMANHOS = [
   },
 ] as const;
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   AS QUATRO BANDEJAS
+
+   É a única regra da casa deste jogo que NÃO muda nada na partida — e o texto
+   diz isso na cara, em vez de fingir que é uma escolha de estratégia. O que ela
+   resolve é outro problema, e um real: o jogo enjoa em quatro rodadas se a mesa
+   for sempre a mesma.
+
+   A prévia é o próprio material, e não um rótulo colorido. "Osso e Areia" não
+   diz nada para quem nunca viu; três retângulos com a cor da bandeja, do forro e
+   do dado dizem tudo, e dizem antes de começar a partida.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const BANDEJAS = [
+  {
+    id: "nogueira",
+    nome: "Nogueira",
+    nota: "Madeira, feltro escuro e dados de baquelite creme. A mesa de sempre.",
+  },
+  {
+    id: "osso",
+    nome: "Osso e Areia",
+    nota: "Couro cru sobre areia, dados de osso talhado, sol a pino. A única clara.",
+  },
+  {
+    id: "fliperama",
+    nome: "Fliperama",
+    nota: "Fórmica rosa e acrílico iluminado por baixo. Barulhenta até parada.",
+  },
+  {
+    id: "meridiano",
+    nome: "Meridiano",
+    nota: "Alumínio escovado e cerâmica gravada a laser, sob âmbar de tubo.",
+  },
+] as const;
+
 const ANULACOES = [
   {
     id: "classica",
@@ -622,6 +658,7 @@ function RegrasLetreiro({
   const modo = (room.settings?.modo as string) ?? "classico";
   const anulacao = (room.settings?.anulacao as string) ?? "classica";
   const tamanho = Number(room.settings?.tamanho ?? 4);
+  const bandeja = (room.settings?.bandeja as string) ?? "nogueira";
   const MODOS = modos(tamanho);
 
   async function salvar(patch: Record<string, string | number>) {
@@ -650,7 +687,7 @@ function RegrasLetreiro({
 
   const resumo = `${tamanho}×${tamanho} · ${
     MODOS.find((m) => m.id === modo)?.nome
-  } · anulação ${ANULACOES.find((a) => a.id === anulacao)?.nome?.toLowerCase()}`;
+  } · ${BANDEJAS.find((b) => b.id === bandeja)?.nome}`;
 
   return (
     <div className="panel mt-4 p-5 sm:p-6">
@@ -706,6 +743,25 @@ function RegrasLetreiro({
                 />
               ))}
             </div>
+          </fieldset>
+
+          <fieldset disabled={!isHost || busy} style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="eyebrow mb-3">A bandeja</legend>
+            <div className="flex flex-col gap-2">
+              {BANDEJAS.map((b) => (
+                <Opcao
+                  key={b.id}
+                  ativo={bandeja === b.id}
+                  nome={b.nome}
+                  nota={b.nota}
+                  previa={<BandejaMini id={b.id} />}
+                  onClick={() => void salvar({ bandeja: b.id })}
+                />
+              ))}
+            </div>
+            <p className="text-sm dim mt-2">
+              Só o material muda. A grade, o relógio e as regras são os mesmos.
+            </p>
           </fieldset>
 
           <fieldset disabled={!isHost || busy} style={{ border: 0, padding: 0, margin: 0 }}>
@@ -767,6 +823,18 @@ function Opcao({
 }
 
 /** A bandeja em miniatura: dá para ver a diferença sem começar a partida. */
+/**
+ * A prévia de uma bandeja: a bandeja, o forro e um dado.
+ *
+ * Ela não repete as cores em JavaScript — usa `data-bandeja`, exatamente como a
+ * bandeja de verdade, e herda os mesmos seis tokens. Repetir os hexadecimais
+ * aqui seria criar um segundo lugar para a cor de cada tema morar, e o dia em
+ * que os dois divergissem a prévia passaria a mentir sobre o que vem depois.
+ */
+function BandejaMini({ id }: { id: string }) {
+  return <span className="rule-bandeja" data-bandeja={id} aria-hidden />;
+}
+
 function GradeMini({ lado }: { lado: number }) {
   return (
     <span

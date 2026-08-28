@@ -122,9 +122,26 @@ contra o banco real e as páginas respondendo 200 num servidor de verdade — ma
 contraste, o que cabe num celular e se a coisa é agradável de usar estão fundamentados no
 código, não observados. É a primeira coisa a fazer com olhos humanos.
 
-Ela continua sendo a maior lacuna — mas encolheu um pouco: `npm run css` agora prova que
-toda classe usada num componente tem estilo, que era o jeito mais fácil de um pedaço sair
-torto sem nada acusar. Achou dois de primeira, e um deles no botão de ENTRAR NUMA SALA.
+Ela continua sendo a maior lacuna — mas encolheu, e encolheu pelo único lado que dá para
+encolher sem olhos: **a parte dela que é aritmética**. `npm run css` faz quatro perguntas e
+todas têm resposta calculável a partir do código:
+
+| | o que prova | o que achou |
+|---|---|---|
+| classe sem CSS | todo `className` do projeto tem estilo | 2, um deles no botão de ENTRAR NUMA SALA |
+| campo sem nome | todo `<input>` tem nome acessível | 5 campos de cláusula da Metrópole |
+| contraste | toda regra que pinta texto e fundo passa no piso da WCAG AA | 6 pares |
+| alvo de toque | nenhum botão abaixo de 44px | 6 botões, de 36px a 42px |
+
+Os seis de contraste eram todos o mesmo erro, e ele é estrutural: a paleta viva deste projeto
+é CLARA de propósito — é o que faz o tabuleiro parecer brinquedo e não planilha —, e branco
+por cima não passa em nenhum dos dez tons (de 1.48:1 no limão a 3.58:1 no roxo). A tinta passa
+em todos, de 4.94:1 a 11.99:1. Os botões principais já faziam certo; cinco etiquetas e um botão
+tinham escorregado para branco.
+
+O que a auditoria NÃO vê, e importa dizer: cor herdada de um pai, fundo de gradiente ou com
+alfa, layout, ritmo, e se a coisa é agradável de usar. Ela cobre 47 das 81 regras que pintam
+as duas coisas, e diz isso na saída — senão "0 problemas" mentiria sobre a cobertura.
 
 E `npm run css` ganhou a segunda metade: todo `<input>` tem nome acessível. Achou cinco campos
 de cláusula da Metrópole cercados de `<span>` que explicam tudo para quem enxerga e nada para
@@ -147,6 +164,7 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | Auditoria do `jsonb_set` com pai ausente | ✅ o mesmo defeito apareceu **cinco vezes**, cada uma ao lado de um comentário meu explicando a armadilha — a quinta foi dentro de um TESTE, e a auditoria agora varre as suítes também |
 | As três reviravoltas do Dossiê (§6.7 do PRD) | ✅ Apagão, Tempestade de Areia e Registro da Estação, com 23 verificações — a da tempestade confere a conexidade por enumeração COMPLETA dos 144 pares |
 | Todo campo de digitação tem nome acessível | ✅ `npm run css` prova, e achou cinco |
+| Contraste e alvo de toque medidos | ✅ a maior lacuna do projeto encolheu pelo lado que é aritmética — 6 pares de cor abaixo do piso da WCAG e 6 botões menores que o dedo |
 
 ---
 

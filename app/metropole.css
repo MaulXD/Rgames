@@ -793,7 +793,7 @@
 .prop-btn {
   flex: 1 1 auto;
   min-width: 9rem;
-  min-height: 40px;
+  min-height: 44px;
   font-size: 0.78rem;
 }
 .prop-dica {
@@ -859,13 +859,22 @@
   background: #4a4038;
   color: #d8cbb8;
 }
+/* TINTA SOBRE COR VIVA, e nunca branco.
+
+   A paleta viva deste projeto é CLARA — os dez tons têm luminância alta de
+   propósito, porque é o que faz o tabuleiro parecer brinquedo e não planilha.
+   Consequência direta: branco por cima NÃO PASSA em nenhum dos dez (de 1.48:1
+   no limão a 3.58:1 no roxo), e a tinta passa em todos (4.94:1 a 11.99:1).
+
+   Não é gosto: é aritmética, e `npm run css` calcula. Cinco etiquetas tinham
+   escorregado para branco, e num celular ao sol elas eram texto que some. */
 .met-devendo {
   background: var(--vivo-vermelho);
-  color: #fff4f5;
+  color: var(--ink);
 }
 .met-fora {
   background: var(--vivo-roxo);
-  color: #fff;
+  color: var(--ink);
 }
 .met-mesa-nota {
   margin-top: 0.7rem;
@@ -1037,7 +1046,7 @@
   border: 2.5px solid var(--ink);
   border-radius: 999px;
   background: var(--vivo-vermelho);
-  color: #fff4f5;
+  color: var(--ink);
   font-family: var(--font-archivo), sans-serif;
   font-size: 0.7rem;
   font-weight: 800;
@@ -1098,7 +1107,7 @@
 }
 .proposta-btn {
   flex: 1;
-  min-height: 40px;
+  min-height: 44px;
   margin-top: 0.5rem;
   font-size: 0.82rem;
 }
@@ -1163,7 +1172,7 @@
 }
 .contrato-btn {
   flex: none;
-  min-height: 36px;
+  min-height: 44px;
   padding: 0 0.7rem;
   font-size: 0.78rem;
 }
@@ -1596,7 +1605,7 @@
   border: 2.5px solid var(--ink);
   border-radius: 999px;
   background: var(--vivo-roxo);
-  color: #fff;
+  color: var(--ink);
   font-family: var(--font-archivo), sans-serif;
   font-size: 0.64rem;
   font-weight: 800;
@@ -1609,7 +1618,7 @@
   padding: 0.08rem 0.4rem;
   border-radius: 999px;
   background: var(--vivo-roxo);
-  color: #fff;
+  color: var(--ink);
   font-size: 0.62rem;
   font-weight: 800;
 }

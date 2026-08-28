@@ -231,7 +231,13 @@ a {
 .btn-lacquer {
   --btn-sob: var(--sob-vermelho);
   background: var(--vivo-vermelho);
-  color: #fff4f5;
+  /* TINTA, e não branco.
+     `#fff4f5` sobre `--vivo-vermelho` dá 3.01:1, e o piso da WCAG AA é 4.5:1.
+     A tinta dá 5.45:1 e é o que os outros dois botões sólidos já usam — o bloco
+     compartilhado três regras acima já dizia `color: var(--ink)`, e esta linha
+     estava desfazendo isso só aqui.
+     O alarme mora no vermelho, não na cor da letra. */
+  color: var(--ink);
 }
 
 .btn-ghost {
@@ -269,8 +275,16 @@ a {
    menor que a polpa de um polegar. As duas diretrizes que existem pedem 44 (iOS)
    e 48 (Android); 40 com o respiro do padding em volta chega perto e não
    desequilibra o cartão onde ele mora. */
+/* 44px, e não 40.
+
+   Este botão já subiu uma vez, de 34 para 40, "porque 34 é pouco no dedo". A
+   segunda subida não é mais um chute: 44 é o piso do guia da Apple e o mais
+   exigente dos dois grandes, e `npm run css` agora mede.
+
+   Quarenta é o número que parece grande num monitor. No polegar, quatro pixels
+   é a diferença entre acertar e acertar o vizinho. */
 .btn-mini {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 0.8rem;
   border-width: 2px;
   font-size: 0.66rem;

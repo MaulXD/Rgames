@@ -1080,3 +1080,87 @@
   text-transform: uppercase;
   opacity: 0.7;
 }
+
+/* ── a diplomacia ──────────────────────────────────────────
+
+   A proposta RECEBIDA tem a borda quente do jogo, porque é uma decisão com
+   prazo. A de PROPOR fica fechada num `details`: ela está sempre disponível na
+   sua vez e quase nunca é o que você quer fazer, então ocupar espaço o tempo
+   todo custaria mais do que vale. */
+.tregua-proposta {
+  border-color: var(--vivo-amarelo);
+}
+
+.tregua-propor {
+  padding: 0.7rem 0.9rem;
+}
+.tregua-abre {
+  cursor: pointer;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-mid);
+  list-style: none;
+}
+.tregua-abre::-webkit-details-marker {
+  display: none;
+}
+.tregua-abre::before {
+  content: "\203A";
+  display: inline-block;
+  margin-right: 0.5rem;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+.tregua-propor[open] .tregua-abre::before {
+  transform: rotate(90deg);
+}
+
+.tregua-quem {
+  flex-wrap: wrap;
+}
+
+/* A marca de Traidor. Sem cor sozinha: um traço riscado no fundo, para quem não
+   separa vermelho de verde ver a mesma coisa — a regra das facções de novo. */
+.traidor::after {
+  content: "traidor";
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.35rem;
+  border: 1.5px solid var(--vivo-vermelho);
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent 0 3px,
+    rgb(255 77 94 / 0.22) 3px 6px
+  );
+  color: var(--vivo-vermelho);
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  vertical-align: 0.12em;
+}
+
+/* A trégua em vigor, ao lado do nome de quem a tem comigo. */
+.dominio-tregua {
+  flex: none;
+  padding: 0.05rem 0.4rem;
+  border: 1.5px solid var(--vivo-limao);
+  border-radius: 999px;
+  color: var(--vivo-limao);
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* O aviso de que o próximo toque rompe uma trégua. O botão vira laca vermelha
+   junto — o texto explica, a cor interrompe. */
+.tregua-aviso {
+  color: var(--vivo-vermelho);
+  font-weight: 600;
+}

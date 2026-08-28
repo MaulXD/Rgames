@@ -90,6 +90,12 @@ lento e confuso. Digitalmente, leva 20 segundos e é o momento mais tenso da fas
 **Leilão também acontece** quando alguém quebra: as propriedades dele vão a leilão em vez de voltar
 ao banco.
 
+> **Como ficou** (migrações 0072–0073). As escrituras entram numa FILA e vão a leilão uma por vez —
+> o mecanismo de leilão sabe cuidar de uma só, e a fila é o que transforma isso numa sequência. A
+> construção volta ao banco; o que vai a leilão é a escritura limpa, como na regra oficial. E a fila
+> só começa depois de conferir se sobrou mais de um jogador: leiloar para uma pessoa sozinha não é
+> leilão, é doação.
+
 ### 5.2 Contratos que o jogo cobra [v1] — a melhoria que não existe no papel
 
 **Resolve o problema #6.** A mesa de negociação aceita muito mais que dinheiro e escritura:

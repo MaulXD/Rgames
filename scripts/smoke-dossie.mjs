@@ -31,6 +31,29 @@ conn.searchParams.set("uselibpqcompat", "true");
 const db = new pg.Client({ connectionString: conn.toString() });
 await db.connect();
 
+/**
+ * Chama a faxina até três vezes, e devolve quantas partidas ela atendeu.
+ *
+ * As faxinas percorrem as partidas com `for update skip locked` — e têm de ser
+ * assim, porque uma mesa travada não pode parar a varredura das outras. Mas isso
+ * significa que, se o `pg_cron` estiver segurando a linha neste instante (ele
+ * roda as mesmas funções sozinho, a cada minuto ou a cada dez segundos), a
+ * chamada do teste PULA a partida e volta sem ter feito nada.
+ *
+ * Não é defeito da faxina: é o teste dependendo de ganhar uma corrida. Insistir
+ * resolve, e diz a verdade sobre o que está sendo medido — "o turno foi
+ * atendido", não "foi atendido por esta chamada específica".
+ */
+async function varre(fn) {
+  let atendidas = 0;
+  for (let i = 0; i < 3; i++) {
+    const r = await db.query(`select public.${fn}() n`);
+    atendidas += Number(r.rows[0].n ?? 0);
+  }
+  return atendidas;
+}
+
+
 async function admin(path, opts = {}) {
   const r = await fetch(`${URL_}/auth/v1${path}`, {
     ...opts,
@@ -287,7 +310,7 @@ const atAntes = antes.pending?.at ?? null;
 
 await db.query("update matches set turn_deadline = now() - interval '1 second' where id = $1", [partida.id]);
 // idem: o pg_cron pode ter varrido antes. Mede o efeito, nao o contador.
-await db.query("select public.dossie_sweep()");
+await varre("dossie_sweep");
 ok(true, "a varredura rodou sem erro");
 
 est = (await get(eu.token, `matches?select=public_state&id=eq.${partida.id}`)).body[0].public_state;
@@ -299,7 +322,7 @@ ok(est.pending === null || (est.pending.at ?? 0) > (atAntes ?? -1),
 let guarda = 0;
 while (est.pending && guarda < 6) {
   await db.query("update matches set turn_deadline = now() - interval '1 second' where id = $1", [partida.id]);
-  await db.query("select public.dossie_sweep()");
+  await varre("dossie_sweep");
   est = (await get(eu.token, `matches?select=public_state&id=eq.${partida.id}`)).body[0].public_state;
   guarda++;
 }
@@ -753,7 +776,10 @@ ok(
 const solo = await dossieSolo({
   token: P[0].token,
   niveis: ["dificil", "medio"],
-  tetoPassos: 600,
+  /* 400 e não 600: a partida termina em ~135 passos nas medições, e o teto é
+     folga contra travamento — não orçamento. Cada passo do humano é um
+     round-trip HTTP, e suíte que demora é suíte que se deixa de rodar. */
+  tetoPassos: 400,
 });
 ok(!solo.erro, `a partida solo montou${solo.erro ? ": " + solo.erro : ""}`);
 if (!solo.erro) {
@@ -827,14 +853,8 @@ const botG = Number(
     )
   ).rows[0].seat,
 );
-await db.query(
-  `update matches set
-     public_state = jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
-       '{phase}', '\"turn\"'),
-     turn_deadline = now() - interval '1 second'
-   where id = $1`,
-  [idG, botG],
-);
+/* A FOTO VEM ANTES DE ESTOURAR O RELÓGIO — ver o comentário igual na suíte do
+   Domínio. Aqui é mais urgente: `dossie_sweep()` roda a cada DEZ SEGUNDOS. */
 const antesG = Number(
   (
     await db.query(
@@ -843,7 +863,22 @@ const antesG = Number(
     )
   ).rows[0].n,
 );
-await db.query("select public.dossie_sweep()");
+
+await db.query(
+  `update matches set
+     public_state = jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
+       '{phase}', '\"turn\"'),
+     turn_deadline = now() - interval '1 second'
+   where id = $1`,
+  [idG, botG],
+);
+/* A faxina só age em mesa com gente por perto (0071), então o teste diz que há
+   gente — que é a verdade que ele está simulando. `last_seen_at` nasce em `now()`,
+   mas uma suíte longa pode passar dos quinze minutos, e teste que reprova por
+   ter demorado é teste que ensina a ignorar a saída vermelha. */
+await rpc(P[0].token, "touch_presence", { p_room: salaG.id });
+
+await varre("dossie_sweep");
 const depoisG = (
   await db.query(
     `select jsonb_array_length(coalesce(public_state -> 'log', '[]'::jsonb)) n,
@@ -928,39 +963,127 @@ if (solo.acabou) {
   );
 }
 
-/* ── 3. o nível é o quanto ela infere ────────────────────────────────────── */
+/* ── 3. o nível é o quanto ela infere ───────────────────────────
 
-/* A tranquila usa só o que está na cara: a própria mão e o que mostraram a ela.
-   A impiedosa cruza os "passou", as restrições abertas e o "ninguém refutou".
-   Na MESMA partida, a impiedosa tem de saber MAIS. */
+   A tranquila usa só o que está na cara: a própria mão e o que mostraram a ela.
+   A firme cruza os "passou". A impiedosa cruza tudo — restrições abertas e o
+   "ninguém refutou".
 
-const comparativo = await dossieSolo({
+   ESTE TESTE JÁ COMPAROU DUAS PARTIDAS e reprovou por sorte: mediu 17 contra 13
+   numa rodada e 9 contra 10 noutra. Em 260 passos, uma máquina que recebe uma
+   mão grande e vê muita carta mostrada pode ter riscado mais que a impiedosa
+   sem inferir nada — e aí o número mede a sorte da distribuição, não o nível.
+
+   É a mesma lição do Domínio (0062) e da Metrópole (0055), pela quarta vez:
+   confere-se a decisão ONDE ELA MORA. Aqui dá para fazer melhor que nos outros
+   dois, porque a dedução é uma função PURA da informação disponível: a MESMA
+   mão, a MESMA mesa, o MESMO registro, deduzidos nos três níveis. A única coisa
+   que muda é o quanto ela cruza — e é exatamente isso que se quer medir. */
+
+/* A MEDIDA É NUMA PARTIDA CURTA, e a razão é o registro.
+
+   `dossie_log` guarda 80 linhas. Numa partida de 135 passos, refazer a dedução
+   do zero lê um registro JÁ TRUNCADO — e aí os três níveis chegam ao mesmo
+   lugar por falta de material, não por serem iguais. Foi o que a primeira
+   versão deste teste mediu: 11, 11, 11.
+
+   No jogo de verdade isso não acontece, porque a máquina deduz a cada turno e
+   guarda o que aprendeu — ela nunca relê o registro inteiro. O teste é que
+   precisa de uma partida onde a janela ainda cabe. */
+const curta = await dossieSolo({
   token: P[0].token,
-  niveis: ["dificil", "facil"],
-  tetoPassos: 260,
+  niveis: ["medio", "dificil"],
+  tetoPassos: 55,
 });
-ok(
-  !comparativo.erro && comparativo.problemas.length === 0,
-  comparativo.problemas.length === 0 && !comparativo.erro
-    ? "a partida de comparação rodou sem trapaça"
-    : `TRAPAÇA OU ERRO: ${comparativo.erro ?? comparativo.problemas[0]}`,
-);
-if (!comparativo.erro && comparativo.problemas.length === 0) {
-  const porNivel = {};
-  for (const b of comparativo.bots) {
-    const nivel = (
-      await db.query(
-        `select rm.bot_nivel n from room_members rm
-          join matches m on m.room_id = rm.room_id
-         where m.id = $1 and rm.user_id = $2`,
-        [comparativo.id, b.user_id],
-      )
-    ).rows[0]?.n;
-    porNivel[nivel] = comparativo.dedus[b.display_name] ?? 0;
+
+if (!curta.erro && curta.bots.length > 0) {
+  const cobaia = curta.bots[0];
+  const solo = curta;
+  const nivelOriginal = (
+    await db.query(
+      `select rm.bot_nivel n from room_members rm
+        join matches m on m.room_id = rm.room_id
+       where m.id = $1 and rm.user_id = $2`,
+      [solo.id, cobaia.user_id],
+    )
+  ).rows[0]?.n;
+
+  const riscadasCom = {};
+  const abertasCom = {};
+  for (const nivel of ["facil", "medio", "dificil"]) {
+    await db.query(
+      `update room_members rm set bot_nivel = $3
+         from matches m
+        where m.id = $1 and rm.room_id = m.room_id and rm.user_id = $2`,
+      [solo.id, cobaia.user_id, nivel],
+    );
+    // o caderno começa em branco: senão o nível seguinte herda o anterior
+    await db.query(
+      "update match_private_state set data = data - 'dedu' where match_id = $1 and user_id = $2",
+      [solo.id, cobaia.user_id],
+    );
+    await db.query("select public.dossie_deduz($1::uuid, $2::smallint)", [
+      solo.id,
+      Number(cobaia.seat),
+    ]);
+    abertasCom[nivel] = (
+      (
+        await db.query(
+          "select data -> 'dedu' -> 'abertos' a from match_private_state where match_id = $1 and user_id = $2",
+          [solo.id, cobaia.user_id],
+        )
+      ).rows[0]?.a ?? []
+    ).length;
+    riscadasCom[nivel] = (
+      (
+        await db.query(
+          "select data -> 'dedu' -> 'fora' f from match_private_state where match_id = $1 and user_id = $2",
+          [solo.id, cobaia.user_id],
+        )
+      ).rows[0]?.f ?? []
+    ).length;
   }
+
+  if (nivelOriginal) {
+    await db.query(
+      `update room_members rm set bot_nivel = $3
+         from matches m
+        where m.id = $1 and rm.room_id = m.room_id and rm.user_id = $2`,
+      [solo.id, cobaia.user_id, nivelOriginal],
+    );
+  }
+
+  /* O QUE SE MEDE É O MECANISMO, e não o resultado numa amostra.
+
+     `fora` é o que ela JÁ CONCLUIU; `abertos` é o que ela está CRUZANDO. Uma
+     restrição ("fulano tem uma destas três") só vira carta riscada quando duas
+     das três caem por outro caminho — e numa partida curta isso pode
+     simplesmente ainda não ter acontecido. Medido: 10, 10, 10 riscadas e 0, 3, 4
+     restrições abertas.
+
+     Então `fora` responde "ela chegou lá?", que depende da partida, e `abertos`
+     responde "ela está cruzando?", que é exatamente o que o nível define. A
+     segunda pergunta é a do teste; a primeira vira relatório.
+
+     E a prova de que o cruzamento CHEGA a algum lugar já está na partida solo lá
+     em cima: a máquina acusa, e acusar exige um candidato único em cada
+     categoria. */
   ok(
-    (porNivel.dificil ?? 0) >= (porNivel.facil ?? 0),
-    `o nível é o quanto ela INFERE, não o que ela vê: a impiedosa riscou ${porNivel.dificil} cartas e a tranquila ${porNivel.facil} na mesma mesa`,
+    abertasCom.facil === 0,
+    `a tranquila não cruza nada: ${abertasCom.facil} restrições abertas — ela usa só o que está na cara`,
+  );
+  ok(
+    abertasCom.medio > 0 && abertasCom.dificil >= abertasCom.medio,
+    `e a escada é de verdade: firme cruza ${abertasCom.medio} restrições, impiedosa ${abertasCom.dificil}` +
+      " — a diferença das duas é o «ninguém refutou», a jogada mais forte do jogo",
+  );
+  ok(
+    riscadasCom.facil <= riscadasCom.medio && riscadasCom.medio <= riscadasCom.dificil,
+    `e cruzar nunca risca MENOS: ${riscadasCom.facil}, ${riscadasCom.medio}, ${riscadasCom.dificil} cartas`,
+  );
+  console.log(
+    `         (0085 consertou o firme, que anotava os «passou» e jogava fora o resultado:` +
+      " cruzar era exclusivo do impiedoso, e o intermediário pagava o custo sem o benefício)",
   );
 }
 

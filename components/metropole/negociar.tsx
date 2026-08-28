@@ -512,6 +512,7 @@ function LadoEditor({
                 <input
                   className="mono lado-campo"
                   type="number"
+                  aria-label="Valor de cada parcela"
                   min={100}
                   step={100}
                   value={lado.parcela.valor}
@@ -526,6 +527,7 @@ function LadoEditor({
                 <input
                   className="mono lado-campo lado-campo-curto"
                   type="number"
+                  aria-label="Quantas rodadas de parcela"
                   min={1}
                   max={20}
                   value={lado.parcela.rodadas}
@@ -568,6 +570,7 @@ function LadoEditor({
                 <input
                   className="mono lado-campo lado-campo-curto"
                   type="number"
+                  aria-label="Quantas rodadas de isenção"
                   min={1}
                   max={20}
                   value={lado.isencao.rodadas}
@@ -644,6 +647,7 @@ function LadoEditor({
                 <input
                   className="mono lado-campo"
                   type="number"
+                  aria-label="Preço da opção de compra"
                   min={0}
                   step={100}
                   value={lado.opcao.preco}
@@ -658,6 +662,7 @@ function LadoEditor({
                 <input
                   className="mono lado-campo lado-campo-curto"
                   type="number"
+                  aria-label="Opção válida até a rodada"
                   min={rodada + 1}
                   max={rodadaFinal ?? rodada + 30}
                   value={lado.opcao.ate}

@@ -37,6 +37,14 @@ export type DominioState = {
   reforcoLeft: number;
   avanco: { de: string; para: string; max: number } | null;
   abates?: Record<string, number>;
+  /** tréguas em vigor: "a:b" → rodada até a qual valem, com a < b sempre */
+  treguas?: Record<string, number>;
+  /** propostas de trégua abertas: "a:b" → { de } */
+  tregProp?: Record<string, { de: number; rodada: number }>;
+  /** quem rompeu trégua, pelo resto da partida */
+  traidores?: number[];
+  /** multa de reforço pendente por ter rompido */
+  multaReforco?: Record<string, number>;
   log: LinhaLog[];
   vencedor: number | null;
 };
@@ -53,6 +61,10 @@ type LinhaLog = {
   por?: number;
   vale?: number;
   bonus?: number;
+  /** o outro lado de uma trégua */
+  com?: number;
+  /** até que rodada a trégua vale */
+  ate?: number;
 };
 
 export type DominioMatch = {
@@ -432,6 +444,42 @@ export function DominioGame({
     return out;
   }, [minhaVez, acabou, visto, origem, meuAssento, podeAtacar, podeRemanejar]);
 
+  /* ── a diplomacia ───────────────────────────────────────
+
+     A chave de uma trégua é sempre "menor:maior", para que 2:5 e 5:2 sejam a
+     mesma coisa e não dê para ter duas tréguas do mesmo par. */
+  const chaveTregua = (a: number, b: number) =>
+    `${Math.min(a, b)}:${Math.max(a, b)}`;
+
+  const temTregua = (outro: number) =>
+    meuAssento !== null &&
+    (st.treguas?.[chaveTregua(meuAssento, outro)] ?? -1) >= st.round;
+
+  /** A proposta que está esperando UMA resposta minha, se houver. */
+  const propostaParaMim =
+    meuAssento === null
+      ? null
+      : (Object.entries(st.tregProp ?? {})
+          .map(([chave, v]) => ({ chave, de: v.de }))
+          .find(
+            (x) =>
+              x.de !== meuAssento &&
+              x.chave.split(":").map(Number).includes(meuAssento),
+          ) ?? null);
+
+  /** O dono do destino, se atacar ali rompesse uma trégua minha. */
+  const romperia =
+    destino !== null && meuAssento !== null
+      ? (() => {
+          const dono = visto.donos[destino];
+          return dono !== undefined && dono !== meuAssento && temTregua(dono) ? dono : null;
+        })()
+      : null;
+
+  const souFantasmaDominio =
+    meuAssento !== null && !st.players.find((j) => j.seat === meuAssento)?.ativo;
+
+
   /** O destino escolhido é meu? Então é remanejo, não ataque. */
   const destinoEhMeu = destino !== null && visto.donos[destino] === meuAssento;
 
@@ -690,6 +738,54 @@ export function DominioGame({
       {/* ── painel de ação ──────────────────────────────────────────── */}
       {!briga && (
         <div className="acao">
+          {/* A PROPOSTA RECEBIDA VEM ANTES DE TUDO, e fora da sua vez.
+
+              Uma proposta de trégua chega no turno de quem propôs. Se ela só
+              aparecesse na sua vez, ficaria pendurada uma volta inteira do
+              tabuleiro — e proposta pendurada é proposta que ninguém lembra de
+              responder. */}
+          {propostaParaMim && !acabou && (
+            <div className="acao-bloco tregua-proposta">
+              <p className="acao-titulo">
+                {nomePorAssento[propostaParaMim.de]} propõe trégua.
+              </p>
+              <p className="acao-nota dim">
+                Vale até o fim da próxima rodada. Você PODE romper depois — custa dois
+                exércitos de reforço e a marca de Traidor pelo resto da partida.
+              </p>
+              <div className="acao-botoes">
+                <button
+                  type="button"
+                  className="btn btn-brass"
+                  disabled={ocupado}
+                  onClick={() =>
+                    void chama("dominio_responder_tregua", {
+                      p_match: match.id,
+                      p_de: propostaParaMim.de,
+                      p_aceita: true,
+                    })
+                  }
+                >
+                  Aceitar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={ocupado}
+                  onClick={() =>
+                    void chama("dominio_responder_tregua", {
+                      p_match: match.id,
+                      p_de: propostaParaMim.de,
+                      p_aceita: false,
+                    })
+                  }
+                >
+                  Recusar
+                </button>
+              </div>
+            </div>
+          )}
+
           {!minhaVez && maquinaNaVez && !maquinaEmpacou && (
             <p className="acao-espera acao-pensando">
               <span className="pensa-pontos" aria-hidden>
@@ -728,6 +824,60 @@ export function DominioGame({
             <p className="acao-espera dim">
               Esperando {nomePorAssento[st.turnSeat]}. O turno passa sozinho se ninguém jogar.
             </p>
+          )}
+
+          {/* PROPOR TRÉGUA, na sua vez e sem gastar ação nenhuma.
+
+              Diplomacia não custa turno de propósito: se custasse, ninguém
+              negociaria, e a mecânica existiria só no papel. O que custa é
+              ROMPER. */}
+          {minhaVez && !st.avanco && !acabou && !souFantasmaDominio && (
+            <details className="acao-bloco tregua-propor">
+              <summary className="tregua-abre">Propor trégua</summary>
+              <p className="acao-nota dim">
+                Vale até o fim da próxima rodada. Qualquer um dos dois pode romper — e
+                quem romper perde dois exércitos de reforço e carrega a marca de
+                Traidor até o fim.
+              </p>
+              <div className="acao-botoes tregua-quem">
+                {st.players
+                  .filter(
+                    (j) =>
+                      j.seat !== meuAssento &&
+                      j.ativo &&
+                      !temTregua(j.seat) &&
+                      !(st.tregProp ?? {})[chaveTregua(meuAssento ?? 0, j.seat)],
+                  )
+                  .map((j) => (
+                    <button
+                      key={j.seat}
+                      type="button"
+                      className="btn btn-ghost btn-mini"
+                      disabled={ocupado}
+                      onClick={() =>
+                        void chama("dominio_propor_tregua", {
+                          p_match: match.id,
+                          p_com: j.seat,
+                        })
+                      }
+                    >
+                      <span
+                        className="dominio-cor"
+                        style={{ background: COLORS[j.cor].enamel }}
+                        aria-hidden
+                      />
+                      {nomePorAssento[j.seat]}
+                    </button>
+                  ))}
+              </div>
+              {st.players.filter(
+                (j) => j.seat !== meuAssento && j.ativo && !temTregua(j.seat),
+              ).length === 0 && (
+                <p className="acao-nota dim">
+                  Não há com quem — ou já há trégua com todo mundo.
+                </p>
+              )}
+            </details>
           )}
 
           {minhaVez && st.avanco && (
@@ -847,27 +997,43 @@ export function DominioGame({
                     {POR_ID[origem]?.nome} ({visto.exercitos[origem]}) ataca{" "}
                     {POR_ID[destino]?.nome} ({visto.exercitos[destino]})
                   </p>
-                  <p className="acao-nota dim">
-                    {visto.exercitos[origem] >= 4 && visto.exercitos[destino] <= 2
-                      ? "Com essa diferença, ir até o fim costuma valer."
-                      : "Um assalto por vez dá para desistir no meio; ir até o fim resolve numa vez."}
-                  </p>
+                  {/* O AVISO ANTES DE ROMPER.
+
+                      O servidor deixa romper, e é o ponto do §6.6. Mas romper
+                      sem saber que se está rompendo não é traição — é acidente,
+                      e acidente não vira história, vira reclamação.
+
+                      A marca de Traidor dura o resto da partida. Ninguém deve
+                      ganhá-la por ter tocado no território errado. */}
+                  {romperia !== null ? (
+                    <p className="acao-nota tregua-aviso">
+                      Isso ROMPE a trégua com {nomePorAssento[romperia]}. Você começa o
+                      próximo reforço com dois exércitos a menos e fica marcado como
+                      Traidor pelo resto da partida.
+                    </p>
+                  ) : (
+                    <p className="acao-nota dim">
+                      {visto.exercitos[origem] >= 4 && visto.exercitos[destino] <= 2
+                        ? "Com essa diferença, ir até o fim costuma valer."
+                        : "Um assalto por vez dá para desistir no meio; ir até o fim resolve numa vez."}
+                    </p>
+                  )}
                   <div className="acao-botoes">
                     <button
                       type="button"
-                      className="btn btn-brass"
+                      className={romperia !== null ? "btn btn-lacquer" : "btn btn-brass"}
                       disabled={ocupado}
                       onClick={() => void atacar(1)}
                     >
-                      Um assalto
+                      {romperia !== null ? "Romper e atacar" : "Um assalto"}
                     </button>
                     <button
                       type="button"
-                      className="btn btn-vivo"
+                      className={romperia !== null ? "btn btn-lacquer" : "btn btn-vivo"}
                       disabled={ocupado}
                       onClick={() => void atacar(12)}
                     >
-                      Até acabar
+                      {romperia !== null ? "Romper e ir até o fim" : "Até acabar"}
                     </button>
                     <button
                       type="button"
@@ -962,7 +1128,23 @@ export function DominioGame({
                   style={{ background: COLORS[p.cor ?? "grafite"].enamel }}
                   aria-hidden
                 />
-                <span className="dominio-jogador-nome">{nomePorAssento[p.seat]}</span>
+                <span
+                  className={
+                    (st.traidores ?? []).includes(p.seat)
+                      ? "dominio-jogador-nome traidor"
+                      : "dominio-jogador-nome"
+                  }
+                >
+                  {nomePorAssento[p.seat]}
+                </span>
+                {/* A TRÉGUA APARECE NA MESA, e não num painel à parte. O PRD pede
+                    que ela seja pública com contador: é informação de negociação,
+                    e informação de negociação escondida não negocia nada. */}
+                {meuAssento !== null && p.seat !== meuAssento && temTregua(p.seat) && (
+                  <span className="dominio-tregua" title="trégua em vigor">
+                    trégua até {st.treguas![chaveTregua(meuAssento, p.seat)]}
+                  </span>
+                )}
                 {aguarda(p.seat) ? (
                   <span className="dominio-volta">
                     volta na rodada {st.aguardando![String(p.seat)]}
@@ -1125,6 +1307,18 @@ function Registro({ log, nomes }: { log: LinhaLog[]; nomes: Record<number, strin
         return `vez de ${quem(l.seat)}`;
       case "tempo-esgotado":
         return `${quem(l.seat)} perdeu o turno no relógio`;
+      case "tregua-propoe":
+        return `${quem(l.seat)} propôs trégua a ${quem(l.com)}`;
+      case "tregua-aceita":
+        return `${quem(l.seat)} e ${quem(l.com)} fecharam trégua até a rodada ${l.ate}`;
+      case "tregua-recusa":
+        return `${quem(l.seat)} recusou a trégua de ${quem(l.com)}`;
+      case "tregua-rompe":
+        /* A ÚNICA LINHA DO REGISTRO QUE PRECISA GRITAR. O PRD pede vermelho de
+           laca, e a razão é que esta é a linha que a mesa vai lembrar. */
+        return `${quem(l.seat)} ROMPEU A TRÉGUA com ${quem(l.vitima)} e atacou ${onde(l.ter)}`;
+      case "tregua-multa":
+        return `${quem(l.seat)} começa com ${l.n} exército(s) a menos — o preço da traição`;
       case "vitoria":
         return `${quem(l.seat)} cumpriu o objetivo`;
       case "placar":

@@ -35,6 +35,29 @@ if (!URL_ || !ANON || !SVC || !PG) {
 const db = new pg.Client({ connectionString: `${PG}&uselibpqcompat=true` });
 await db.connect();
 
+/**
+ * Chama a faxina até três vezes, e devolve quantas partidas ela atendeu.
+ *
+ * As faxinas percorrem as partidas com `for update skip locked` — e têm de ser
+ * assim, porque uma mesa travada não pode parar a varredura das outras. Mas isso
+ * significa que, se o `pg_cron` estiver segurando a linha neste instante (ele
+ * roda as mesmas funções sozinho, a cada minuto ou a cada dez segundos), a
+ * chamada do teste PULA a partida e volta sem ter feito nada.
+ *
+ * Não é defeito da faxina: é o teste dependendo de ganhar uma corrida. Insistir
+ * resolve, e diz a verdade sobre o que está sendo medido — "o turno foi
+ * atendido", não "foi atendido por esta chamada específica".
+ */
+async function varre(fn) {
+  let atendidas = 0;
+  for (let i = 0; i < 3; i++) {
+    const r = await db.query(`select public.${fn}() n`);
+    atendidas += Number(r.rows[0].n ?? 0);
+  }
+  return atendidas;
+}
+
+
 let falhas = 0;
 function ok(cond, msg) {
   if (cond) console.log(`  ok     ${msg}`);
@@ -2217,7 +2240,7 @@ async function metSolo({ token, niveis, tetoPassos }) {
         "update matches set turn_deadline = now() - interval '1 second' where id = $1",
         [idP],
       );
-      await db.query("select public.met_sweep()");
+      await varre("met_sweep");
       semNada = 0;
       n++;
       continue;
@@ -2529,6 +2552,16 @@ const botF = Number(
     )
   ).rows[0].seat,
 );
+/* A FOTO VEM ANTES DE ESTOURAR O RELÓGIO — ver o comentário igual na suíte do
+   Domínio. O `pg_cron` roda `met_sweep()` a cada minuto, e na ordem inversa a
+   corrida decidia o resultado do teste. */
+const antesF = (
+  await db.query(
+    "select jsonb_array_length(coalesce(public_state -> 'log', '[]'::jsonb)) n from matches where id = $1",
+    [iniF.body.id],
+  )
+).rows[0].n;
+
 await db.query(
   `update matches set
      public_state = jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
@@ -2537,13 +2570,13 @@ await db.query(
    where id = $1`,
   [iniF.body.id, botF],
 );
-const antesF = (
-  await db.query(
-    "select jsonb_array_length(coalesce(public_state -> 'log', '[]'::jsonb)) n from matches where id = $1",
-    [iniF.body.id],
-  )
-).rows[0].n;
-await db.query("select public.met_sweep()");
+/* A faxina só age em mesa com gente por perto (0071), então o teste diz que há
+   gente — que é a verdade que ele está simulando. `last_seen_at` nasce em `now()`,
+   mas uma suíte longa pode passar dos quinze minutos, e teste que reprova por
+   ter demorado é teste que ensina a ignorar a saída vermelha. */
+await rpc(P[0].token, "touch_presence", { p_room: salaF.id });
+
+await varre("met_sweep");
 const depoisF = (
   await db.query(
     `select jsonb_array_length(coalesce(public_state -> 'log', '[]'::jsonb)) n,
@@ -2653,6 +2686,13 @@ const grupoP = (
 let estadoP = (
   await db.query("select public_state ps from matches where id = $1", [iniP.body.id])
 ).rows[0].ps;
+/* O TABULEIRO COMEÇA LIMPO. Sem isso, as três escrituras do sorteio inicial
+   podiam já fechar um grupo para a máquina — e aí ela CONSTRÓI em vez de propor,
+   que é a decisão certa e faz o teste reprovar pelo motivo errado. Medido:
+   "constroi(1) em jardins por 2000". */
+for (const k of Object.keys(estadoP.props)) {
+  estadoP.props[k] = { owner: null, casas: 0, hotel: false, hipotecada: false };
+}
 grupoP.forEach((c, i) => {
   estadoP.props[c.id] = {
     owner: i === 0 ? meuP : botP,
@@ -2726,6 +2766,9 @@ const meuQ = botQ === 0 ? 1 : 0;
 let estadoQ = (
   await db.query("select public_state ps from matches where id = $1", [iniQ.body.id])
 ).rows[0].ps;
+for (const k of Object.keys(estadoQ.props)) {
+  estadoQ.props[k] = { owner: null, casas: 0, hotel: false, hipotecada: false };
+}
 grupoP.forEach((c, i) => {
   estadoQ.props[c.id] = {
     owner: i === 0 ? meuQ : botQ,
@@ -2857,6 +2900,126 @@ if (!contraFacil.erro && !contraDif.erro) {
       ` · construções: ${constroi(contraFacil)} / ${constroi(contraDif)}` +
       ` · apertos: ${apertos(contraFacil)} / ${apertos(contraDif)}` +
       ` · caixa final: ${caixa(contraFacil)} / ${caixa(contraDif)} (tranquila / impiedosa)`,
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   O LEILÃO DE FALÊNCIA
+
+   O PRD pede desde sempre (§5.1): quando alguém quebra, as propriedades dele vão
+   a LEILÃO em vez de voltar ao banco. Até 0072 voltavam.
+
+   E voltar ao banco é pior do que parece. Num tabuleiro de quarenta casas, uma
+   escritura que volta ao banco só reaparece se alguém CAIR nela — e numa partida
+   de vinte rodadas isso pode não acontecer mais. Uma falência tirava doze
+   propriedades do jogo de uma vez, e a partida ficava mais POBRE justamente no
+   momento em que devia ficar mais tensa.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\n  ── o leilão de falência ──");
+
+const salaFal = (await rpc(P[0].token, "create_room", { p_game: "metropole" })).body;
+await rpc(P[1].token, "join_room", { p_code: salaFal.code });
+await rpc(P[2].token, "join_room", { p_code: salaFal.code });
+const iniFal = await rpc(P[0].token, "met_start", { p_room: salaFal.id });
+ok(iniFal.status === 200, "partida de três para a falência");
+
+if (iniFal.status === 200) {
+  const idFal = iniFal.body.id;
+  const mapaFal = (
+    await db.query(
+      `select gt.data d from game_themes gt join matches m on gt.id = (m.public_state ->> 'map')
+        where m.id = $1`,
+      [idFal],
+    )
+  ).rows[0].d;
+  const bairrosFal = mapaFal.casas.filter((c) => c.t === "bairro").slice(0, 3);
+
+  const estFal = (
+    await db.query("select public_state ps from matches where id = $1", [idFal])
+  ).rows[0].ps;
+  const quebrado = 0;
+  /* O TABULEIRO COMEÇA LIMPO, pelo mesmo motivo do teste da proposta: o sorteio
+     inicial dá três escrituras a cada um, e o falido entrava na conta com elas.
+     A fila saiu com quatro quando o teste esperava duas — e o número errado
+     escondia se o defeito era do código ou da montagem. */
+  for (const k of Object.keys(estFal.props)) {
+    estFal.props[k] = { owner: null, casas: 0, hotel: false, hipotecada: false };
+  }
+  // três escrituras, uma delas com duas casas, e o caixa no vermelho
+  bairrosFal.forEach((c, i) => {
+    estFal.props[c.id] = {
+      owner: quebrado,
+      casas: i === 0 ? 2 : 0,
+      hotel: false,
+      hipotecada: false,
+    };
+  });
+  estFal.players[String(quebrado)].cash = -500;
+  estFal.turnSeat = quebrado;
+  estFal.phase = "resolve";
+  estFal.pendente = { k: "divida", quanto: 500, para: 1, motivo: "teste" };
+  const casasNoBanco = estFal.bank.casas;
+  await db.query("update matches set public_state = $2::jsonb where id = $1", [
+    idFal,
+    JSON.stringify(estFal),
+  ]);
+
+  const declarou = await rpc(P[0].token, "met_bankrupt", { p_match: idFal });
+  ok(
+    declarou.status === 200,
+    `a falência foi declarada${declarou.status !== 200 ? " " + JSON.stringify(declarou.body).slice(0, 130) : ""}`,
+  );
+
+  const depoisFal = (
+    await db.query("select public_state ps from matches where id = $1", [idFal])
+  ).rows[0].ps;
+
+  ok(
+    depoisFal.phase === "leilao" && !!depoisFal.leilao,
+    `as escrituras vão a LEILÃO e não ao banco (fase ${depoisFal.phase})`,
+  );
+  ok(
+    bairrosFal.some((c) => c.id === depoisFal.leilao?.prop),
+    `o primeiro leilão é de uma delas: ${depoisFal.leilao?.prop}`,
+  );
+  ok(
+    (depoisFal.leilaoFila ?? []).length === bairrosFal.length - 1,
+    `e as outras ${bairrosFal.length - 1} ficam na fila (${(depoisFal.leilaoFila ?? []).join(", ")})`,
+  );
+  ok(
+    Number(depoisFal.bank.casas) === Number(casasNoBanco) + 2,
+    `as duas CASAS voltaram ao banco (${casasNoBanco} → ${depoisFal.bank.casas}) — o que vai a leilão é a escritura limpa`,
+  );
+  ok(
+    bairrosFal.every((c) => depoisFal.props[c.id].owner === null),
+    "e nenhuma escritura ficou no nome de quem declarou",
+  );
+
+  /* A FILA ANDA. Todo mundo passa, o leilão fecha, e o próximo abre sozinho —
+     até o último, quando a mesa volta ao turno normal. */
+  let voltas = 0;
+  while (voltas < 12) {
+    const st = (
+      await db.query("select public_state ps from matches where id = $1", [idFal])
+    ).rows[0].ps;
+    if (st.phase !== "leilao") break;
+    for (const jog of [1, 2]) {
+      const quem = jog === 1 ? P[1] : P[2];
+      await rpc(quem.token, "met_pass", { p_match: idFal });
+    }
+    voltas++;
+  }
+  const fimFal = (
+    await db.query("select public_state ps from matches where id = $1", [idFal])
+  ).rows[0].ps;
+  ok(
+    fimFal.phase !== "leilao" && (fimFal.leilaoFila ?? []).length === 0,
+    `a fila andou sozinha até o fim em ${voltas} leilão(ões) — fase agora é ${fimFal.phase}`,
+  );
+  ok(
+    bairrosFal.every((c) => fimFal.props[c.id].casas === 0 && !fimFal.props[c.id].hotel),
+    "e nenhuma escritura voltou ao mercado com construção em cima",
   );
 }
 

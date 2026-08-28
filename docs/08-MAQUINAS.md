@@ -125,7 +125,7 @@ rolar. O nível muda só o quanto ela aproveita a mesma informação.
 | | Tranquila | Firme | Impiedosa |
 |---|---|---|---|
 | **Letreiro** | 25% do teto de palavras comuns | 45% | 72% |
-| **Domínio** | ataca com +2 de vantagem, 2 ataques por turno, reforça até no interior, nunca remaneja | +1, 5 ataques, reforça na fronteira ameaçada | paridade, 12 ataques, concentra no continente quase fechado |
+| **Domínio** | ataca com +2 de vantagem, 2 ataques por turno, reforça até no interior, nunca remaneja, aceita toda trégua | +1, 5 ataques, reforça na fronteira ameaçada | paridade, 12 ataques, concentra no continente quase fechado, só aceita trégua quando está perdendo naquela fronteira |
 | **Metrópole** | reserva R$ 0, valor = preço de tabela, não negocia | reserva R$ 1.500, paga o dobro pelo que fecha grupo | reserva variável, paga 75% a mais pelo que **impede** o grupo de outro |
 | **Dossiê** | usa só a própria mão e o que mostraram a ela | cruza os "passou" | cruza restrições abertas e o "ninguém refutou" |
 
@@ -139,7 +139,7 @@ sem viés, e a lição de 0038: sorteio que parece aleatório e não é faz o jo
 
 ### Como isso é testado
 
-Três versões erradas antes da certa, e as duas primeiras erraram por motivo bom:
+Quatro versões erradas antes da certa, e as primeiras erraram por motivo bom:
 
 - **Patrimônio final** (Metrópole): a tranquila saiu na frente, 49.260 contra 44.320. Fazia sentido —
   ela compra tudo, e patrimônio conta escritura pelo preço de tabela.
@@ -147,6 +147,9 @@ Três versões erradas antes da certa, e as duas primeiras erraram por motivo bo
   converte caixa em **casa**.
 - **Territórios por turno** (Domínio): mediu 0,50 × 3,17; depois 1,63 × 4,32; depois 1,79 × 2,26 — e
   nessa última reprovou, porque o dado foi bom para a tranquila.
+- **Cartas riscadas** (Dossiê): 17 × 13 numa rodada, 9 × 10 na seguinte. Numa partida curta, uma
+  máquina que recebe mão grande e vê muita carta mostrada risca mais que a impiedosa sem inferir
+  nada — o número mede a distribuição, não o nível.
 
 > **A regra que sobrou:** confere-se a decisão **onde ela mora** — nas funções que definem a
 > política, com número exato — e o comportamento observado vira relatório. Uma partida é uma amostra
@@ -155,6 +158,26 @@ Três versões erradas antes da certa, e as duas primeiras erraram por motivo bo
 O que continua sendo cobrado na mesa é o que a política **garante**, não o que ela costuma dar: a
 tranquila ataca no máximo duas vezes por turno, então nunca toma mais de dois territórios num turno.
 Teto não depende de dado.
+
+E o Dossiê permite fazer melhor que os outros três, porque a dedução é uma **função pura** da
+informação disponível: o teste roda `dossie_deduz` sobre a MESMA mão, a MESMA mesa e o MESMO
+registro nos três níveis, e compara. A única coisa que varia é o quanto ela cruza — que é exatamente
+o que se queria medir desde o começo.
+
+### E a trégua
+
+A máquina **responde** proposta de trégua na hora, e fora da própria vez — uma proposta chega no
+turno de quem propôs, e esperar a vez dela seria pendurar a resposta por uma volta inteira do
+tabuleiro. A conta é local e é a única honesta: quanto exército a pessoa tem colado na fronteira
+dela, contra quanto ela tem colada na da pessoa. Se a pessoa é mais forte ali, a trégua serve.
+
+E ela **nunca rompe**. Não porque romper seja proibido — o servidor deixa, e é o ponto do §6.6 —
+mas porque uma máquina que trai não é mais difícil, é só imprevisível; e imprevisível sem intenção
+é ruído. A traição vale justamente por alguém ter **escolhido**.
+
+> Vale como regra de cérebro: tudo que a mesa pode exigir **fora da vez** — leilão, proposta de
+> troca, resposta de trégua, refutação — vem antes de "é a minha vez?". Escrever depois é escrever
+> onde nunca roda, e foi o que aconteceu em 0081.
 
 ---
 

@@ -36,8 +36,8 @@ fecha o navegador e volta, o host sai e outro assume — tudo sem recarregar a p
 ## Onde o projeto está de verdade
 
 Isto não é estimativa — é o que existe e roda, medido no dia em que esta seção foi escrita.
-Números vêm de contar, não de lembrar: 40 migrações aplicadas, 13.600 linhas de SQL,
-31 componentes, e **514 verificações** em cinco suítes de fumaça que rodam contra o
+Números vêm de contar, não de lembrar: **72 migrações** aplicadas, 25.800 linhas de SQL,
+32 componentes, e **666 verificações** em cinco suítes de fumaça que rodam contra o
 Supabase de verdade.
 
 ### A plataforma
@@ -51,6 +51,10 @@ Supabase de verdade.
 | XP, patente, 11 medalhas, confete | ✅ |
 | Som sintetizado por Web Audio nos quatro jogos, sem um único arquivo de áudio | ✅ |
 | Auditoria de privilégio no CI: a lista de funções chamáveis é conferida nos dois sentidos | ✅ |
+| **Jogar sozinho contra a máquina nos quatro jogos**, num toque a partir da carta | ✅ |
+| Auditoria de `_como`: nenhuma delas pode olhar `auth.uid()` — o ator é parâmetro | ✅ |
+| Auditoria de `seat` ambíguo, porque a regra foi quebrada três vezes | ✅ |
+| `npm run css`: toda classe do projeto usada num componente tem estilo | ✅ |
 | Auth com Google, Discord e magic link | ⬜ só convidado e senha, por enquanto |
 | `axe-core`, `size-limit` e regressão visual no CI | ⬜ |
 
@@ -115,9 +119,25 @@ contra o banco real e as páginas respondendo 200 num servidor de verdade — ma
 contraste, o que cabe num celular e se a coisa é agradável de usar estão fundamentados no
 código, não observados. É a primeira coisa a fazer com olhos humanos.
 
+Ela continua sendo a maior lacuna — mas encolheu um pouco: `npm run css` agora prova que
+toda classe usada num componente tem estilo, que era o jeito mais fácil de um pedaço sair
+torto sem nada acusar. Achou dois de primeira, e um deles no botão de ENTRAR NUMA SALA.
+
 Depois disso, em ordem de valor: os temas que faltam (o sistema existe e está provado —
-cada tema novo é conteúdo, não engenharia), o desafio diário do Letreiro, e a trégua com
-preço do Domínio.
+cada tema novo é conteúdo, não engenharia) e a trégua com preço do Domínio.
+
+### E o que entrou depois desta seção ser escrita
+
+| | |
+|---|---|
+| Desafio diário do Letreiro | ✅ mesma grade para todo mundo, placar do dia |
+| Vocabulário do Letreiro consertado | ✅ corte por posto que ESCALA com o tamanho da palavra, mais 327 nomes e estrangeirismos curados — a revelação parou de mostrar ONO, ADE, ADELE e GATE |
+| Máquinas nos quatro jogos | ✅ ver [08 — As Máquinas](08-MAQUINAS.md) |
+| Leilão de falência da Metrópole (§5.1 do PRD) | ✅ as escrituras de quem quebra vão a leilão em fila, e não ao banco |
+| O relógio não corre contra quem está sozinho | ✅ |
+| Mesa abandonada deixa de ser varrida | ✅ 27 partidas rodavam para uma plateia vazia até a sala expirar |
+| Trégua com preço do Domínio (§6.6 do PRD) | ✅ o servidor DEIXA romper, e cobra: dois exércitos e a marca de Traidor |
+| Auditoria do `jsonb_set` com pai ausente | ✅ o mesmo defeito apareceu **quatro vezes**, cada uma ao lado de um comentário meu explicando a armadilha |
 
 ---
 

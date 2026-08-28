@@ -225,7 +225,7 @@ continua jogando, atrapalhando e sendo cortejado — que é o papel mais diverti
 
 O `−2` por rodada passiva é o dente do anti-turtling. Torna a passividade uma escolha com preço.
 
-### 6.6 Diplomacia com preço [v1]
+### 6.6 Diplomacia com preço [v1] — **construída** (migrações 0074–0084)
 
 **Resolve o problema #8.** Uma mecânica só, deliberadamente simples:
 
@@ -239,6 +239,18 @@ Você **pode** quebrar a trégua. O servidor deixa. Mas:
 
 O ponto não é impedir a traição — é **dar peso a ela**. Traição sem custo é ruído; traição com custo
 é história.
+
+> **Como ficou.** O servidor deixa romper, e cobra as três coisas acima. A tela avisa antes: o botão
+> vira laca vermelha e passa a dizer "Romper e atacar", porque romper sem saber que se está rompendo
+> não é traição — é acidente, e acidente não vira história, vira reclamação.
+>
+> A trégua vive como um NÚMERO de rodada (`treguas["a:b"] = rodadaFinal`) e não como um contador que
+> alguém precise decrementar: ela vence sozinha quando o relógio da partida passa por cima, e
+> nenhuma faxina precisa saber que tréguas existem.
+>
+> A máquina responde na hora e fora da própria vez, aceita quando está perdendo naquela fronteira, e
+> **nunca rompe** — máquina que trai não é mais difícil, é só imprevisível, e imprevisível sem
+> intenção é ruído. Ver [08 — As Máquinas](08-MAQUINAS.md).
 
 ### 6.7 O log narrado [v1]
 

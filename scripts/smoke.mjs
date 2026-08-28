@@ -192,6 +192,7 @@ const PERMITIDAS = [
   "dominio_atacar", "dominio_avancar", "dominio_encerrar_turno",
   "dominio_reforcar", "dominio_remanejar", "dominio_start", "dominio_trocar",
   "dominio_tocar",
+  "dominio_propor_tregua", "dominio_responder_tregua",
   // Metrópole
   "met_bankrupt", "met_bid", "met_build", "met_buy", "met_decline", "met_end_turn",
   "met_jail", "met_mortgage", "met_pass", "met_roll", "met_sell", "met_start",
@@ -284,6 +285,73 @@ ok(
   ambiguas.length === 0
     ? "nenhuma função compara `.seat = seat` — variável de assento se chama `assento`"
     : `\`seat\` ambíguo em: ${ambiguas.join(", ")} — o Postgres recusa isso em tempo de execução`,
+);
+
+/* ── a auditoria do `jsonb_set` com pai ausente ─────────────────────
+
+       select jsonb_set('{"a":1}', array['novo','chave'], '[]', true)
+       → {"a": 1}
+
+   O quarto argumento (`create_missing`) cria só o ÚLTIMO degrau do caminho. Se a
+   chave do meio não existe, `jsonb_set` devolve o objeto INTACTO — sem erro,
+   sem aviso, sem nada.
+
+   ISTO ACONTECEU QUATRO VEZES NESTE PROJETO, e cada uma delas tem um comentário
+   meu explicando a armadilha, escrito algumas linhas acima de onde eu caí nela
+   de novo:
+
+     `botTempos`     a barra de tensão da máquina ficaria em zero a partida toda
+     `tregProp`      o jogo dizia ter recebido a proposta e não a encontrava
+     `multaReforco`  a traição continuaria de graça, com aparência de custar
+     `botProp`       o teto de propostas nunca valia, e o laço de propor-recusar
+                     voltava inteiro — 1170 propostas em 2400 passos
+
+   Comentário não é mecanismo. O mecanismo é `jsonb_poe`, que faz a coisa certa e
+   é mais curta de escrever do que a errada, e esta lista.
+
+   COMO ELA FUNCIONA: toda escrita de dois níveis com chave literária é extraída
+   das funções, e a primeira chave tem de estar na lista abaixo — que é a lista
+   das que EXISTEM no estado inicial de algum jogo, conferida uma vez. Chave nova
+   quebra o teste, e aí são dois caminhos: ou ela está garantida no estado
+   inicial e entra na lista, ou usa-se `jsonb_poe`. */
+
+const GARANTIDAS = new Set([
+  // Domínio: no estado inicial de `dominio_start`
+  "donos", "exercitos", "players", "pontos", "tomou", "atacou", "aguardando",
+  // backfill de `dominio_ator` antes de qualquer ação
+  "abates",
+  // Letreiro: no estado inicial de `letreiro_start`
+  "counts",
+  // Metrópole: no estado inicial de `met_start`
+  "props", "bank", "leilao", "cartas",
+  // Dossiê
+  "positions", "weapons",
+  // caminhos de dois níveis sobre parâmetro, não sobre o estado da partida
+  "p_est",
+]);
+
+const dedois = (
+  await db.query(`
+    select p.proname nome, pg_get_functiondef(p.oid) corpo
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public' and p.prokind = 'f'`)
+).rows;
+
+const suspeitas = new Map();
+for (const f of dedois) {
+  for (const m of f.corpo.matchAll(/jsonb_set\s*\(\s*\w+\s*,\s*array\[\s*'([a-zA-Z_]+)'\s*,/g)) {
+    if (GARANTIDAS.has(m[1])) continue;
+    if (!suspeitas.has(m[1])) suspeitas.set(m[1], f.nome);
+  }
+}
+
+ok(
+  suspeitas.size === 0,
+  suspeitas.size === 0
+    ? `nenhuma escrita de dois níveis sobre chave não garantida (${GARANTIDAS.size} na lista)`
+    : `\`jsonb_set\` de dois níveis sobre chave que pode não existir: ` +
+      [...suspeitas].map(([k, f]) => `${k} em ${f}`).join(", ") +
+      " — use `jsonb_poe`, ou garanta a chave no estado inicial e entre na lista",
 );
 
 const expostas = (

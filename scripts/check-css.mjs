@@ -127,4 +127,75 @@ if (mortas.length) {
   console.log(`          ${mortas.slice(0, 14).join(" ")}${mortas.length > 14 ? " …" : ""}\n`);
 }
 
-process.exit(orfas.length === 0 ? 0 : 1);
+/* ── e todo campo tem nome? ──────────────────────────────────────
+
+   Mesma família de defeito que a classe sem CSS, e mesma invisibilidade: um
+   `<input>` sem nome aparece na tela, funciona no dedo, não dá erro em lugar
+   nenhum — e quem usa leitor de tela ouve "campo de número" e mais nada.
+
+   Cinco campos de cláusula da Metrópole estavam assim: o de valor da parcela, o
+   de quantas rodadas, o de isenção, o de preço da opção e o de até quando ela
+   vale. Cada um cercado de `<span>` que explicam tudo para quem enxerga e nada
+   para quem não enxerga.
+
+   VALE COMO NOME: `aria-label`, `aria-labelledby`, um `id` que algum `<label>`
+   aponte, ou estar DENTRO de um `<label>` — a associação implícita, que é a mais
+   comum aqui e a mais fácil de ler no código.
+
+   A varredura conta chaves para achar o fim da tag: `onChange={(e) => …}` tem
+   um `>` dentro, e um regex ingênuo corta a tag no meio e acusa campo nomeado
+   de anônimo. A primeira versão desta auditoria fez exatamente isso e reportou
+   onze — seis eram falso positivo. */
+
+/** O índice do `>` que fecha a tag aberta em `i`, ignorando os de dentro de `{}`. */
+function fimDaTag(texto, i) {
+  let profundidade = 0;
+  for (let k = i; k < texto.length; k++) {
+    const c = texto[k];
+    if (c === "{") profundidade++;
+    else if (c === "}") profundidade--;
+    else if (c === ">" && profundidade === 0) return k;
+  }
+  return -1;
+}
+
+const anonimos = [];
+for (const arq of [...tsx(join(raiz, "components")), ...tsx(join(raiz, "app"))]) {
+  const texto = readFileSync(arq, "utf8");
+  let i = 0;
+  while ((i = texto.indexOf("<input", i)) >= 0) {
+    const fim = fimDaTag(texto, i);
+    if (fim < 0) break;
+    const tag = texto.slice(i, fim + 1);
+    /* O `<label>` em volta conta. Olhar para trás 400 caracteres alcança o
+       `<label className="…">` e o `<span>` do rótulo sem alcançar o campo
+       anterior — e um `</label>` no meio do caminho significa que aquele label
+       já fechou e não é este campo que ele nomeia. */
+    const antes = texto.slice(Math.max(0, i - 400), i);
+    const dentroDeLabel = antes.lastIndexOf("<label") > antes.lastIndexOf("</label>");
+    if (/aria-label|aria-labelledby|[\s"]id=/.test(tag) || dentroDeLabel) {
+      i = fim + 1;
+      continue;
+    }
+    anonimos.push({
+      arquivo: arq.replace(raiz, "").replace(/\\/g, "/"),
+      trecho: tag.replace(/\s+/g, " ").slice(0, 72),
+    });
+    i = fim + 1;
+  }
+}
+
+if (anonimos.length === 0) {
+  console.log("  ok      todo campo de digitação tem nome acessível\n");
+} else {
+  for (const a of anonimos) {
+    console.error(`  FALHA   campo sem nome em ${a.arquivo}: ${a.trecho}`);
+  }
+  console.error(
+    `
+  ${anonimos.length} campo(s) que um leitor de tela anuncia sem dizer o que são.
+`,
+  );
+}
+
+process.exit(orfas.length === 0 && anonimos.length === 0 ? 0 : 1);

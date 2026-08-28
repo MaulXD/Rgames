@@ -57,6 +57,8 @@ export type MetState = {
     | { k: "comprar"; prop: string; preco: number }
     | { k: "divida"; quanto: number; para: number | null; motivo: string }
     | null;
+  /** as escrituras de quem quebrou, esperando a vez de ir a leilão */
+  leilaoFila?: string[];
   leilao: {
     prop: string;
     alto: number;
@@ -84,6 +86,8 @@ type LinhaLog = {
   de?: number;
   para?: number | null;
   valor?: number;
+  /** quantas escrituras ainda vêm na fila da falência */
+  restam?: number;
   motivo?: string;
   prop?: string;
   texto?: string;
@@ -690,7 +694,17 @@ export function MetropoleGame({
       {st.phase === "leilao" && st.leilao && (
         <div className="leilao">
           <div className="leilao-cabeca">
-            <p className="eyebrow">Leilão</p>
+            <p className="eyebrow">
+              Leilão
+              {(st.leilaoFila?.length ?? 0) > 0 && (
+                /* QUANTOS AINDA VÊM. Numa falência entram doze escrituras no
+                   mercado de uma vez, e sem este número a pessoa não sabe se
+                   está no começo de um minuto de leilão ou no fim. Saber
+                   quantos faltam é a diferença entre "por que isso não acaba"
+                   e "ainda tenho três chances". */
+                <span className="dim"> · mais {st.leilaoFila!.length} da falência</span>
+              )}
+            </p>
             <span className="leilao-relogio mono" data-urgente={resto <= 8}>
               {resto}s
             </span>
@@ -1228,6 +1242,14 @@ function Registro({ log, nomes }: { log: LinhaLog[]; nomes: Record<number, strin
         return `${quem(l.seat)} comprou ${onde(l.prop)} por ${reais(l.valor ?? 0)}`;
       case "leilao-abre":
         return `${onde(l.prop)} foi a leilão${l.auto ? " (o relógio decidiu)" : ""}`;
+      case "leilao-falencia":
+        /* A frase diz quantas AINDA VÊM, e não só qual está no pão. Numa
+           falência entram doze escrituras no mercado, e o registro é onde quem
+           voltou de uma pausa entende o que aconteceu com o tabuleiro. */
+        return (
+          `${onde(l.prop)} vai a leilão na falência` +
+          (l.restam ? ` — e mais ${l.restam} depois dela` : " — a última")
+        );
       case "lance":
         return `${quem(l.seat)} deu ${reais(l.valor ?? 0)} em ${onde(l.prop)}`;
       case "leilao-fecha":

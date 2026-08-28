@@ -33,6 +33,29 @@ conn.searchParams.set("uselibpqcompat", "true");
 const db = new pg.Client({ connectionString: conn.toString() });
 await db.connect();
 
+/**
+ * Chama a faxina até três vezes, e devolve quantas partidas ela atendeu.
+ *
+ * As faxinas percorrem as partidas com `for update skip locked` — e têm de ser
+ * assim, porque uma mesa travada não pode parar a varredura das outras. Mas isso
+ * significa que, se o `pg_cron` estiver segurando a linha neste instante (ele
+ * roda as mesmas funções sozinho, a cada minuto ou a cada dez segundos), a
+ * chamada do teste PULA a partida e volta sem ter feito nada.
+ *
+ * Não é defeito da faxina: é o teste dependendo de ganhar uma corrida. Insistir
+ * resolve, e diz a verdade sobre o que está sendo medido — "o turno foi
+ * atendido", não "foi atendido por esta chamada específica".
+ */
+async function varre(fn) {
+  let atendidas = 0;
+  for (let i = 0; i < 3; i++) {
+    const r = await db.query(`select public.${fn}() n`);
+    atendidas += Number(r.rows[0].n ?? 0);
+  }
+  return atendidas;
+}
+
+
 /* ── 1. o dado é uniforme? ───────────────────────────────────────────────── */
 
 const N_DADOS = 60000;
@@ -1284,6 +1307,7 @@ async function partidaSolo({ token, niveis, tetoTurnos }) {
   let turnosBot = 0;
   let conquistasBot = 0;
   let maxPorTurno = 0;
+  let maxPassosTurno = 0;
   let acabou = false;
 
   while (turnos < tetoTurnos) {
@@ -1369,6 +1393,18 @@ async function partidaSolo({ token, niveis, tetoTurnos }) {
         problemas.push(`a máquina do assento ${st.turnSeat} não fez nada`);
         break;
       }
+      /* E NÃO FEZ DEMAIS. Desde 0068 o turno é um laço em cima de
+         `dominio_bot_passo`, e um passo que não avança o estado faria o laço rodar
+         até o teto de 40 sem dar erro nenhum — a máquina "jogaria" quarenta vezes
+         e o mapa ficaria igual. Um turno de verdade cabe em vinte. */
+      if (feito > 30) {
+        problemas.push(
+          `a máquina do assento ${st.turnSeat} deu ${feito} passos num turno só` +
+            " — algum passo não está avançando o estado",
+        );
+        break;
+      }
+      maxPassosTurno = Math.max(maxPassosTurno, feito);
       turnosBot++;
       /* QUANTOS TERRITÓRIOS ELA TOMOU NESTE TURNO, contados no mapa e não no
          registro: `dominio_log` guarda 80 linhas, e uma partida de 36 turnos
@@ -1414,6 +1450,7 @@ async function partidaSolo({ token, niveis, tetoTurnos }) {
     turnosBot,
     conquistasBot,
     maxPorTurno,
+    maxPassosTurno,
     /* A FORÇA DE UM NÍVEL: territórios tomados POR TURNO de máquina.
        É a medida certa por dois motivos. Primeiro, ela não satura: contar
        territórios no fim dá 42 para qualquer dupla que vença, e contra um humano
@@ -1483,14 +1520,20 @@ ok(
 
 /* ── 2. a faxina joga o turno da máquina, e não pula ──────────────────────── */
 
-await db.query(
-  `update matches
-      set public_state = jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
-            '{phase}', '"reforco"'),
-          turn_deadline = now() - interval '1 second'
-    where id = $1`,
-  [iniT.body.id, botSeat],
-);
+/* A FOTO VEM ANTES DE ESTOURAR O RELÓGIO, e a ordem é o teste inteiro.
+
+   O `pg_cron` roda `dominio_sweep()` sozinho a cada minuto. Se o teste
+   estourasse o relógio primeiro e tirasse a foto depois, o cron poderia passar
+   no meio: jogaria o turno da máquina, resetaria o relógio para +120s, e a
+   faxina do teste não encontraria nada expirado. O registro não cresceria, e o
+   teste reprovaria por uma coisa que ACONTECEU.
+
+   Foi exatamente isso que fez esta suíte falhar dentro do lote e passar sozinha:
+   o lote demora mais, e quanto mais tempo, mais chance de o cron cair no meio.
+
+   Com a foto antes, qualquer trabalho que o cron faça conta a favor da
+   asserção — e é o que se quer, porque a pergunta é "o turno da máquina foi
+   jogado?" e não "foi jogado por esta chamada específica". */
 const antesFaxina = Number(
   (
     await db.query(
@@ -1499,7 +1542,19 @@ const antesFaxina = Number(
     )
   ).rows[0].n,
 );
-const varrida = await db.query("select public.dominio_sweep() n");
+
+/* E a faxina só age em mesa com gente por perto (0071), então o teste diz que há
+   gente — que é a verdade que ele está simulando. */
+await rpc(P[0].token, "touch_presence", { p_room: salaT.id });
+await db.query(
+  `update matches
+      set public_state = jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
+            '{phase}', '"reforco"'),
+          turn_deadline = now() - interval '1 second'
+    where id = $1`,
+  [iniT.body.id, botSeat],
+);
+const varrida = { rows: [{ n: await varre("dominio_sweep") }] };
 const depoisFaxina = (
   await db.query(
     `select coalesce(public_state -> 'log', '[]'::jsonb) l,
@@ -1543,7 +1598,8 @@ await db.query(
    where id = $1`,
   [iniT.body.id, meuT],
 );
-await db.query("select public.dominio_sweep()");
+await rpc(P[0].token, "touch_presence", { p_room: salaT.id });
+await varre("dominio_sweep");
 const soloRelogio = (
   await db.query(
     `select turn_deadline, (public_state ->> 'turnSeat')::int t from matches where id = $1`,
@@ -1583,7 +1639,8 @@ if (iniD.status === 200) {
      where id = $1`,
     [iniD.body.id, humanoD],
   );
-  await db.query("select public.dominio_sweep()");
+  await rpc(P[0].token, "touch_presence", { p_room: salaDupla.id });
+  await varre("dominio_sweep");
   const duplaRelogio = (
     await db.query(
       `select turn_deadline, (public_state ->> 'turnSeat')::int t from matches where id = $1`,
@@ -1599,6 +1656,56 @@ if (iniD.status === 200) {
     "e o relógio do próximo continua de pé",
   );
 }
+
+/* ── 2c. mesa abandonada não se joga sozinha ─────────────────────
+
+   A máquina existe para o jogo andar PARA ALGUÉM. Sem ninguém por perto, o que a
+   faxina faz é jogar turno atrás de turno para uma plateia vazia, a cada passada
+   do cron, até a sala expirar em vinte e quatro horas.
+
+   E o pior nem é o custo: é que quem abandonou uma partida e volta no dia
+   seguinte encontraria um jogo TERMINADO, decidido por máquinas jogando entre si
+   a noite inteira. */
+
+await db.query(
+  `update matches set
+     public_state = jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
+       '{phase}', '"reforco"'),
+     turn_deadline = now() - interval '1 second'
+   where id = $1`,
+  [iniT.body.id, botSeat],
+);
+// ninguém aparece há uma hora
+await db.query(
+  "update room_members set last_seen_at = now() - interval '1 hour' where room_id = $1",
+  [salaT.id],
+);
+ok(
+  (await db.query("select public.mesa_abandonada($1::uuid) a", [iniT.body.id])).rows[0].a === true,
+  "sem gente há uma hora, a mesa é considerada abandonada",
+);
+const antesAbandono = (
+  await db.query("select public_state ps from matches where id = $1", [iniT.body.id])
+).rows[0].ps;
+await varre("dominio_sweep");
+const depoisAbandono = (
+  await db.query("select public_state ps from matches where id = $1", [iniT.body.id])
+).rows[0].ps;
+ok(
+  JSON.stringify(antesAbandono) === JSON.stringify(depoisAbandono),
+  "e a faxina não toca em nada — quem voltar encontra o próprio jogo, não um jogo terminado sem ela",
+);
+
+// e volta a agir assim que alguém aparece
+await rpc(P[0].token, "touch_presence", { p_room: salaT.id });
+await varre("dominio_sweep");
+const depoisVoltar = (
+  await db.query("select public_state ps from matches where id = $1", [iniT.body.id])
+).rows[0].ps;
+ok(
+  JSON.stringify(depoisVoltar) !== JSON.stringify(antesAbandono),
+  "e volta a agir assim que alguém aparece — `touch_presence` religa a faxina na hora",
+);
 
 /* ── 3. UMA PARTIDA SOLO INTEIRA ─────────────────────────────────────────── */
 
@@ -1617,7 +1724,10 @@ if (!solo.erro) {
       ? `e a partida ACABOU sozinha em ${solo.turnos} turnos — o Domínio é jogável sozinho`
       : `a partida não acabou em ${solo.turnos} turnos: ${JSON.stringify(solo.contagem)}`,
   );
-  ok(solo.turnosBot >= 2, `as máquinas jogaram ${solo.turnosBot} turnos`);
+  ok(
+    solo.turnosBot >= 2,
+    `as máquinas jogaram ${solo.turnosBot} turnos, o mais longo em ${solo.maxPassosTurno} passos`,
+  );
   const somaEx = Object.values(solo.st.exercitos ?? {}).reduce((a, b) => a + b, 0);
   ok(somaEx >= 42, `${somaEx} exércitos em 42 territórios — nunca menos de um por território`);
   console.log(
@@ -1776,6 +1886,319 @@ ok(
     JSON.stringify(duas[0].donos) === JSON.stringify(duas[1].donos),
   "mesmo estado, mesmo turno: o cérebro é determinístico — sem isso, bug de máquina não se conserta",
 );
+
+/* ══════════════════════════════════════════════════════════════════════════
+   A TRÉGUA, E O PREÇO DE ROMPÊ-LA
+
+   §6.6 do PRD, e a frase que decide o desenho inteiro:
+
+     "O ponto não é impedir a traição — é DAR PESO a ela. Traição sem custo é
+      ruído; traição com custo é história."
+
+   Por isso o teste central deste bloco não é "a trégua impede o ataque". É o
+   contrário: O ATAQUE PASSA, e a conta chega. Um teste que exigisse o bloqueio
+   estaria provando que o jogo é outro.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\n  ── a trégua ──");
+
+const salaTr = (await rpc(P[0].token, "create_room", { p_game: "dominio" })).body;
+await rpc(P[1].token, "join_room", { p_code: salaTr.code });
+await rpc(P[2].token, "join_room", { p_code: salaTr.code });
+const iniTr = await rpc(P[0].token, "dominio_start", { p_room: salaTr.id });
+ok(iniTr.status === 200, "partida de três para a trégua");
+
+if (iniTr.status === 200) {
+  const idTr = iniTr.body.id;
+  const assentos = Object.fromEntries(
+    (
+      await db.query(
+        "select mp.user_id, mp.seat from match_players mp where mp.match_id = $1",
+        [idTr],
+      )
+    ).rows.map((r) => [r.user_id, Number(r.seat)]),
+  );
+  const seatDe = (jog) => assentos[jog.id];
+
+  // a vez é de P[0], para ele poder propor
+  await db.query(
+    "update matches set public_state = jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)) where id = $1",
+    [idTr, seatDe(P[0])],
+  );
+
+  const semAlvo = await rpc(P[0].token, "dominio_propor_tregua", {
+    p_match: idTr,
+    p_com: seatDe(P[0]),
+  });
+  ok(
+    /SELF_TRUCE/.test(JSON.stringify(semAlvo.body)),
+    "ninguém faz trégua consigo mesmo",
+  );
+
+  const proposta = await rpc(P[0].token, "dominio_propor_tregua", {
+    p_match: idTr,
+    p_com: seatDe(P[1]),
+  });
+  ok(
+    proposta.status === 200,
+    `a trégua é PROPOSTA${proposta.status !== 200 ? " " + JSON.stringify(proposta.body).slice(0, 120) : ""}`,
+  );
+
+  const soProposta = (
+    await db.query(
+      `select public.dominio_tregua_vale(public_state, $2::smallint, $3::smallint) v
+         from matches where id = $1`,
+      [idTr, seatDe(P[0]), seatDe(P[1])],
+    )
+  ).rows[0].v;
+  ok(
+    soProposta === false,
+    "e proposta ainda NÃO é trégua — acordo que vale sem o outro aceitar é regra imposta com cara de acordo",
+  );
+
+  const euMesmo = await rpc(P[0].token, "dominio_responder_tregua", {
+    p_match: idTr,
+    p_de: seatDe(P[0]),
+    p_aceita: true,
+  });
+  ok(
+    /NO_PROPOSAL/.test(JSON.stringify(euMesmo.body)),
+    "e ninguém aceita a própria proposta",
+  );
+
+  const aceita = await rpc(P[1].token, "dominio_responder_tregua", {
+    p_match: idTr,
+    p_de: seatDe(P[0]),
+    p_aceita: true,
+  });
+  ok(
+    aceita.status === 200,
+    `o outro ACEITA, e aceita fora da vez dele${aceita.status !== 200 ? " " + JSON.stringify(aceita.body).slice(0, 120) : ""}`,
+  );
+  ok(
+    (
+      await db.query(
+        `select public.dominio_tregua_vale(public_state, $2::smallint, $3::smallint) v
+           from matches where id = $1`,
+        [idTr, seatDe(P[0]), seatDe(P[1])],
+      )
+    ).rows[0].v === true,
+    "agora a trégua vale",
+  );
+  ok(
+    (
+      await db.query(
+        `select public.dominio_tregua_vale(public_state, $2::smallint, $3::smallint) v
+           from matches where id = $1`,
+        [idTr, seatDe(P[0]), seatDe(P[2])],
+      )
+    ).rows[0].v === false,
+    "e vale só entre os dois — o terceiro segue de fora",
+  );
+
+  /* ── A MÁQUINA RESPONDE, E RESPONDE FORA DA VEZ DELA ──────────────────
+
+     Uma proposta de trégua chega no turno de QUEM PROPÔS — quase sempre a
+     pessoa. Se a máquina só respondesse na vez dela, a proposta ficaria
+     pendurada uma volta inteira do tabuleiro, e proposta pendurada é proposta
+     que ninguém lembra de responder.
+
+     0081 escreveu essa resposta DEPOIS da linha "se não é vez de máquina, volta"
+     — onde ela nunca rodava. Este teste é o que teria pegado. */
+  const salaMq = (await rpc(P[0].token, "create_room", { p_game: "dominio" })).body;
+  await rpc(P[0].token, "adicionar_bot", { p_room: salaMq.id, p_nivel: "dificil" });
+  await rpc(P[0].token, "adicionar_bot", { p_room: salaMq.id, p_nivel: "medio" });
+  const iniMq = await rpc(P[0].token, "dominio_start", { p_room: salaMq.id });
+  if (iniMq.status === 200) {
+    const meuMq = Number(
+      (
+        await db.query(
+          `select mp.seat from match_players mp join profiles p on p.id = mp.user_id
+            where mp.match_id = $1 and not p.is_bot`,
+          [iniMq.body.id],
+        )
+      ).rows[0].seat,
+    );
+    const botMq = Number(
+      (
+        await db.query(
+          `select mp.seat from match_players mp join profiles p on p.id = mp.user_id
+            where mp.match_id = $1 and p.is_bot order by mp.seat limit 1`,
+          [iniMq.body.id],
+        )
+      ).rows[0].seat,
+    );
+    // a vez é de GENTE, que é quando a proposta existe
+    await db.query(
+      "update matches set public_state = jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)) where id = $1",
+      [iniMq.body.id, meuMq],
+    );
+    await rpc(P[0].token, "dominio_propor_tregua", { p_match: iniMq.body.id, p_com: botMq });
+    const passoMq = (
+      await db.query("select public.dominio_bot_passo($1::uuid) p", [iniMq.body.id])
+    ).rows[0].p;
+    ok(
+      /^tregua:(aceita|recusa)/.test(passoMq ?? ""),
+      `a máquina responde a trégua FORA da vez dela: ${passoMq ?? "não respondeu"}`,
+    );
+    const stMq = (
+      await db.query("select public_state ps from matches where id = $1", [iniMq.body.id])
+    ).rows[0].ps;
+    ok(
+      Object.keys(stMq.tregProp ?? {}).length === 0,
+      "e a proposta sai da mesa respondida — pendurada é pior que recusada",
+    );
+
+    /* E ELA NUNCA ROMPE. Não porque seja proibido: porque máquina que trai não é
+       mais difícil, é só imprevisível — e imprevisível sem intenção é ruído. */
+    if (/aceita/.test(passoMq ?? "")) {
+      /* `reforcoLeft` vai a zero junto com a fase. Forçar "ataque" deixando
+         reforço pendente faz `dominio_encerrar_turno_como` estourar
+         PLACE_REINFORCEMENTS — e com razão: exército parado não passa a vez. O
+         estado montado à mão tem de ser um estado que o jogo produziria. */
+      await db.query(
+        `update matches set public_state = jsonb_set(jsonb_set(jsonb_set(public_state,
+           '{turnSeat}', to_jsonb($2::int)), '{phase}', '"ataque"'),
+           '{reforcoLeft}', to_jsonb(0)) where id = $1`,
+        [iniMq.body.id, botMq],
+      );
+      const antesDonos = (
+        await db.query("select public_state -> 'donos' d from matches where id = $1", [
+          iniMq.body.id,
+        ])
+      ).rows[0].d;
+      for (let i = 0; i < 12; i++) {
+        const p = (
+          await db.query("select public.dominio_bot_passo($1::uuid) p", [iniMq.body.id])
+        ).rows[0].p;
+        if (!p || p.startsWith("passa")) break;
+      }
+      const depoisDonos = (
+        await db.query("select public_state -> 'donos' d from matches where id = $1", [
+          iniMq.body.id,
+        ])
+      ).rows[0].d;
+      const tomouDeMim = Object.keys(antesDonos).filter(
+        (t) => Number(antesDonos[t]) === meuMq && Number(depoisDonos[t]) === botMq,
+      );
+      ok(
+        tomouDeMim.length === 0,
+        tomouDeMim.length === 0
+          ? "e com trégua em vigor ela NÃO atacou — a traição é uma jogada de gente"
+          : `ela rompeu a trégua e tomou ${tomouDeMim.join(", ")}`,
+      );
+      ok(
+        !((
+          await db.query("select public_state -> 'traidores' t from matches where id = $1", [
+            iniMq.body.id,
+          ])
+        ).rows[0].t ?? []).includes(botMq),
+        "e não carrega a marca de traidor",
+      );
+    }
+  }
+
+  /* ── E AGORA A PARTE QUE IMPORTA: romper. ──────────────────────────────
+     Um território de P[0] com exército de sobra, colado num de P[1]. */
+  const mapaTr = (
+    await db.query(
+      `select gt.data d from game_themes gt join matches m on gt.id = (m.public_state ->> 'map')
+        where m.id = $1`,
+      [idTr],
+    )
+  ).rows[0].d;
+  const parTr = (
+    await db.query(
+      `select d.key de, v viz
+         from matches m
+         cross join jsonb_each_text(m.public_state -> 'donos') d
+         cross join lateral unnest(public.dominio_vizinhos($2::jsonb, d.key)) v
+        where m.id = $1 limit 1`,
+      [idTr, JSON.stringify(mapaTr)],
+    )
+  ).rows[0];
+
+  await db.query(
+    `update matches set public_state =
+       jsonb_set(jsonb_set(jsonb_set(jsonb_set(jsonb_set(public_state,
+         array['donos', $2::text], to_jsonb($4::int)),
+         array['donos', $3::text], to_jsonb($5::int)),
+         array['exercitos', $2::text], to_jsonb(9)),
+         array['exercitos', $3::text], to_jsonb(1)),
+         '{phase}', '"ataque"')
+     where id = $1`,
+    [idTr, parTr.de, parTr.viz, seatDe(P[0]), seatDe(P[1])],
+  );
+
+  const rompeu = await rpc(P[0].token, "dominio_atacar", {
+    p_match: idTr,
+    p_de: parTr.de,
+    p_para: parTr.viz,
+    p_vezes: 1,
+  });
+  ok(
+    rompeu.status === 200,
+    `O SERVIDOR DEIXA ROMPER: o ataque passou${rompeu.status !== 200 ? " " + JSON.stringify(rompeu.body).slice(0, 130) : ""}` +
+      " — trégua que o servidor impusesse não seria diplomacia, seria regra de movimento",
+  );
+
+  if (rompeu.status === 200) {
+    const depoisTr = (
+      await db.query("select public_state ps from matches where id = $1", [idTr])
+    ).rows[0].ps;
+    ok(
+      (depoisTr.traidores ?? []).includes(seatDe(P[0])),
+      `e a marca de TRAIDOR fica (${JSON.stringify(depoisTr.traidores)}) — visível a todos, pelo resto da partida`,
+    );
+    ok(
+      Number(depoisTr.multaReforco?.[String(seatDe(P[0]))] ?? 0) === 2,
+      `a multa de 2 exércitos está marcada para o próximo reforço dele (${JSON.stringify(depoisTr.multaReforco)})`,
+    );
+    ok(
+      !(depoisTr.treguas ?? {})[
+        `${Math.min(seatDe(P[0]), seatDe(P[1]))}:${Math.max(seatDe(P[0]), seatDe(P[1]))}`
+      ],
+      "e a trégua morreu no ato",
+    );
+    const linha = (depoisTr.log ?? []).find((l) => l.k === "tregua-rompe");
+    ok(
+      !!linha && linha.ter === parTr.viz,
+      `o registro conta o que aconteceu, com nome e território (${linha?.ter})`,
+    );
+
+    /* A MULTA É COBRADA quando o reforço dele é calculado — um turno depois. */
+    const semMulta = Number(
+      (
+        await db.query(
+          `select public.dominio_reforco(gt.data, m.public_state, $2::smallint) n
+             from matches m join game_themes gt on gt.id = (m.public_state ->> 'map')
+            where m.id = $1`,
+          [idTr, seatDe(P[0])],
+        )
+      ).rows[0].n,
+    );
+    const comMulta = (
+      await db.query(
+        `select public.dominio_aplica_reforco(m.public_state, gt.data, $2::smallint) e
+           from matches m join game_themes gt on gt.id = (m.public_state ->> 'map')
+          where m.id = $1`,
+        [idTr, seatDe(P[0])],
+      )
+    ).rows[0].e;
+    ok(
+      Number(comMulta.reforcoLeft) === Math.max(semMulta - 2, 0),
+      `e o reforço dele cai de ${semMulta} para ${comMulta.reforcoLeft} — dois exércitos é o preço`,
+    );
+    ok(
+      comMulta.multaReforco?.[String(seatDe(P[0]))] === undefined,
+      "a multa é consumida ao ser paga: cobra-se uma vez, não a partida inteira",
+    );
+    ok(
+      (comMulta.traidores ?? []).includes(seatDe(P[0])),
+      "mas a marca de traidor FICA — o preço se paga, a reputação não",
+    );
+  }
+}
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();

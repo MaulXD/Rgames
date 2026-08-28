@@ -107,6 +107,57 @@ ok(jr.status === 200 && jr.body?.id === room.id, "join_room entra pelo codigo");
 const jr2 = await rpc(B.token, "join_room", { p_code: room.code.toLowerCase() });
 ok(jr2.status === 200, "join_room aceita codigo em minusculas");
 
+/* E COM ESPAÇO. É critério de aceite da plataforma, e a razão é concreta: o
+   código circula por WhatsApp, e o teclado do celular corrige, capitaliza e
+   deixa espaço sobrando no fim. Quem digita "hq qg j8" com o polegar não está
+   errando — está usando um celular. */
+const comEspaco = await rpc(B.token, "join_room", {
+  p_code: ` ${room.code.slice(0, 3)} ${room.code.slice(3)} `,
+});
+ok(
+  comEspaco.status === 200 && comEspaco.body?.id === room.id,
+  comEspaco.status === 200
+    ? "e com espaço no meio e nas pontas — o código circula por mensagem, e teclado de celular põe espaço"
+    : `espaço no código derruba a entrada: ${JSON.stringify(comEspaco.body)}`,
+);
+
+/* SERVIDOR E CLIENTE PRECISAM CONCORDAR sobre o que é um código.
+
+   `sanitizeCode` em lib/games.ts é generosa: tira o que não é do alfabeto e
+   dobra os glifos que se confundem à mão (I, L → 1; O → 0, e aí os dois somem,
+   porque o alfabeto não os contém). O formulário e a rota `/j/[code]` passam por
+   ela; o servidor não passava, e aí a mesma entrada entrava por um caminho e
+   não pelo outro.
+
+   Duas normalizações que discordam é defeito silencioso: funciona por onde a
+   maioria entra e falha exatamente para quem chega diferente. Este teste
+   confere as duas com as mesmas entradas embaralhadas, e é o que impede uma de
+   mudar sem a outra. */
+const embaralhadas = [
+  room.code.toLowerCase(),
+  ` ${room.code} `,
+  room.code.split("").join(" "),
+  room.code.split("").join("-"),
+  room.code.slice(0, 3) + " " + room.code.slice(3),
+];
+/* Pela porta da frente, e não pelo `normaliza_codigo` direto: o que importa é
+   que a PESSOA entra, e o caminho dela é `join_room`. Testar o ajudante provaria
+   que o ajudante funciona, e não que quem digitou torto chega na sala. */
+const discordam = [];
+for (const bruto of embaralhadas) {
+  const r = await rpc(B.token, "join_room", { p_code: bruto });
+  if (r.status !== 200 || r.body?.id !== room.id) {
+    discordam.push(`${JSON.stringify(bruto)} → ${r.status}`);
+  }
+}
+ok(
+  discordam.length === 0,
+  discordam.length === 0
+    ? `o servidor entende as ${embaralhadas.length} formas embaralhadas do código` +
+      " — minúsculo, espaçado, com hífen e com espaço não-quebrável de copiar-e-colar"
+    : `o servidor não entende: ${discordam.join(" · ")}`,
+);
+
 const jrBad = await rpc(B.token, "join_room", { p_code: "ZZZZZZ" });
 ok(jrBad.status >= 400 && /ROOM_NOT_FOUND/.test(JSON.stringify(jrBad.body)), "codigo inexistente da ROOM_NOT_FOUND");
 
@@ -445,6 +496,52 @@ for (const arq of suitesComSql) {
     if (!nosTestes.has(m[1])) nosTestes.set(m[1], arq);
   }
 }
+
+/* ── e o cliente não ESCREVE em tabela nenhuma ───────────────────────
+
+   A arquitetura inteira deste projeto é "o servidor é a fonte da verdade": todo
+   movimento passa por uma RPC `security definer`, e o cliente só LÊ. Até agora
+   isso era garantido por disciplina — cada migração que criou tabela revogou o
+   que lembrou de revogar.
+
+   Auditando pela primeira vez, INSERT, UPDATE e DELETE estavam fechados em toda
+   parte. E TRUNCATE estava ABERTO em quatro tabelas de jogo, para `anon`.
+
+   RLS NÃO SE APLICA A TRUNCATE. Em `matches`, `anon` tinha TRUNCATE e não tinha
+   SELECT: não dava para ler a tabela e dava para apagá-la.
+
+   A causa é a de 0022, de novo: o default do projeto Supabase é
+   `GRANT ALL ON TABLES` para `anon` e `authenticated`, e ALL inclui TRUNCATE,
+   TRIGGER e REFERENCES. Ou seja, TODA TABELA NOVA nasce assim — e é por isso
+   que a resposta certa não é revogar nas quatro (0099 fez isso) e sim ESTA
+   varredura, que percorre todas e reprova a próxima.
+
+   SELECT fica de fora: é o único privilégio de tabela que o cliente tem, e ele
+   é guardado por RLS — e, em `matches`, por grant de COLUNA, com `seed`,
+   `solution` e `board_id` fora da lista. */
+
+const ESCRITA = ["INSERT", "UPDATE", "DELETE", "TRUNCATE", "TRIGGER", "REFERENCES"];
+const abertas = (
+  await db.query(
+    `select c.relname tabela, r.rolname papel, p.priv
+       from pg_class c
+       join pg_namespace n on n.oid = c.relnamespace
+       cross join (values ('anon'), ('authenticated')) r(rolname)
+       cross join unnest($1::text[]) p(priv)
+      where n.nspname = 'public' and c.relkind = 'r'
+        and has_table_privilege(r.rolname, 'public.' || quote_ident(c.relname), p.priv)
+      order by 1, 2, 3`,
+    [ESCRITA],
+  )
+).rows;
+
+ok(
+  abertas.length === 0,
+  abertas.length === 0
+    ? `nenhum papel de cliente escreve em tabela nenhuma (${ESCRITA.length} privilégios × 2 papéis, em todas as tabelas de public)`
+    : `O CLIENTE PODE ESCREVER: ` +
+      abertas.map((a) => `${a.papel} tem ${a.priv} em ${a.tabela}`).join(", "),
+);
 
 ok(
   nosTestes.size === 0,

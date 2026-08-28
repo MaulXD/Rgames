@@ -496,13 +496,19 @@ Instrumentação: Vercel Analytics para web vitals, eventos de produto no própr
 ## 12. Critérios de aceite da plataforma
 
 - [ ] Abrir o link de convite em uma janela anônima e estar no lobby com apelido em < 15s
-- [ ] Código de sala funciona digitado em minúsculas e com espaços
+- [x] Código de sala funciona digitado em minúsculas e com espaços — e com hífen, e com o
+      espaço não-quebrável que vem de copiar de uma página. A metade do espaço estava quebrada:
+      `btrim` tira das pontas, e o espaço que a pessoa põe está no MEIO
 - [ ] QR Code lido por câmera nativa de iOS e Android leva direto ao apelido
 - [ ] Fechar a aba no meio da partida e reabrir restaura o estado exato, incluindo mão de cartas
 - [ ] Host fecha o navegador → outro jogador vira host em < 5s, sem interação
 - [ ] Um jogador ausente não impede a partida de terminar
 - [ ] Convidado cria conta ao fim da partida e o histórico daquela partida está lá
-- [ ] Teste de RLS: cliente autenticado como jogador A não consegue ler `match_private_state` de B
-- [ ] Nenhum caminho do cliente escreve direto em `matches`, `match_events` ou `match_private_state`
+- [x] Teste de RLS: cliente autenticado como jogador A não consegue ler `match_private_state` de B
+      — conferido nas suítes do Dossiê ("o terceiro jogador não vê a carta mostrada") e do Letreiro
+- [x] Nenhum caminho do cliente escreve direto em `matches` ou `match_private_state` — auditado
+      por privilégio, em TODAS as tabelas de `public` e para os dois papéis de cliente. Achou
+      **TRUNCATE aberto para `anon`** em quatro tabelas de jogo: RLS não se aplica a TRUNCATE, e
+      em `matches` o `anon` tinha TRUNCATE e não tinha SELECT (0099)
 - [ ] `axe-core` sem violações críticas no lobby e em cada jogo
 - [ ] Lighthouse mobile ≥ 90 em Performance e 100 em Acessibilidade no lobby

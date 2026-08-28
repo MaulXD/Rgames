@@ -169,6 +169,7 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | Estatísticas do Letreiro (§6.9) | ✅ três das quatro. A "palavra mais rara" guardou `sodomia` na primeira rodada de teste — o seletor procura o incomum, e é ali que mora o palavrão |
 | As suítes deixam de morrer com a conexão | ✅ `pg.Pool` no lugar de `pg.Client`: suíte vermelha por causa da rede é o pior vermelho que existe |
 | Modo Relâmpago do Domínio | ✅ o último modo que faltava nos quatro jogos. 24 territórios recortados de Vantara por programa, e o mesmo validador para os dois mapas |
+| O cliente tinha TRUNCATE em quatro tabelas | ✅ **RLS não se aplica a TRUNCATE**. Em `matches`, `anon` podia apagar a tabela e não podia lê-la. Mesma causa de 0022: o default do Supabase é `GRANT ALL`, e ALL inclui TRUNCATE |
 
 ---
 

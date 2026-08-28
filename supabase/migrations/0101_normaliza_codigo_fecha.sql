@@ -1,0 +1,27 @@
+-- ════════════════════════════════════════════════════════════════════════════
+-- Mesa — 0101 · `normaliza_codigo` também fecha
+--
+-- 0100 deixou a função aberta de propósito, e escreveu o motivo:
+--
+--     "Sem `revoke`: esta é pura, não toca em nada e não sabe de nada. Fechá-la
+--      seria cerimônia — e cerimônia onde não há risco ensina a ignorar o
+--      `revoke` onde há."
+--
+-- A auditoria de exposição reprovou na mesma rodada:
+--
+--     FALHA  FUNÇÃO INTERNA EXPOSTA: normaliza_codigo
+--
+-- E ela está certa, pelo motivo que é o ponto inteiro de existir: a regra dela é
+-- "toda função que não está na lista do cliente é revogada", sem exceção. Uma
+-- regra sem exceção é conferível por programa. Uma regra com "salvo quando quem
+-- escreveu achou que não tinha risco" é conferível por leitura atenta — que é
+-- exatamente o que este projeto vem descobrindo que não funciona.
+--
+-- O julgamento estava provavelmente certo no mérito: a função é pura e não
+-- devolve nada que o cliente já não saiba. E o julgamento é a parte errada. Se
+-- um dia ela deixar de ser pura, quem lembra de voltar aqui é ninguém.
+--
+-- Custou uma linha. O argumento contra custou um parágrafo.
+-- ════════════════════════════════════════════════════════════════════════════
+
+revoke all on function public.normaliza_codigo(text) from public, anon, authenticated;

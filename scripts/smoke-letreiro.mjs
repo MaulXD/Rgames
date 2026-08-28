@@ -1165,6 +1165,113 @@ ok(
   "e quem fechou a aba aparece no placar do dia — placar com gente faltando é placar errado",
 );
 
+
+/* ── O CLIENTE E O SERVIDOR CONCORDAM SOBRE O CAMINHO? ─────────────────────
+
+   `findPath`/`areNeighbors` (lib/letreiro.ts) e `letreiro_path_ok` (PL/pgSQL)
+   respondem a MESMA pergunta — "este caminho soletra esta palavra nesta grade?"
+   — e não compartilham uma linha de código.
+
+   O cliente usa a dele para DEIXAR o dedo traçar e para acender a trilha; o
+   servidor usa a dele para PONTUAR. Discordando, a pessoa arrasta o dedo por um
+   caminho que a tela aceitou, solta, e recebe BAD_PATH numa palavra que ela viu
+   com os próprios olhos. É o pior tipo de recusa: a que parece injustiça.
+
+   O teste não inventa caminhos: pega o GABARITO da grade — todas as palavras que
+   o solver achou — e, para cada uma, faz o cliente traçar e o servidor julgar.
+   Se o cliente acha um caminho, o servidor tem de aceitá-lo. E as três recusas
+   clássicas (célula repetida, salto, palavra que não bate) precisam ser recusa
+   nos dois.
+
+   O `QU` é o motivo de isto não ser trivial: uma célula vale DUAS letras, então
+   o casamento é por string consumida e não por índice, e é exatamente aí que
+   duas implementações se desencontram. */
+
+console.log("\nLETREIRO: o cliente e o servidor concordam sobre o caminho\n");
+
+const { findPath, pathToString, areNeighbors, sizeOf } = await import("@/lib/letreiro");
+
+const grades = (
+  await db.query(
+    "select grid, solution, size from public.letreiro_boards where usavel order by id limit 6",
+  )
+).rows;
+
+let conferidas = 0;
+const clienteAchouServidorNegou = [];
+const clienteNaoAchou = [];
+
+for (const g of grades) {
+  const palavras = Object.keys(g.solution);
+  /* Uma amostra por grade, e não todas: seis grades × ~200 palavras seriam
+     1.200 idas ao banco. Trinta por grade cobre as formas que importam —
+     curtas, longas, com QU — sem transformar a suíte numa espera. */
+  const amostra = [
+    ...palavras.filter((w) => w.includes("QU")).slice(0, 6),
+    ...palavras.sort((a, b) => b.length - a.length).slice(0, 12),
+    ...palavras.slice(0, 12),
+  ];
+
+  for (const palavra of [...new Set(amostra)]) {
+    const caminho = findPath(g.grid, palavra);
+    if (!caminho) {
+      clienteNaoAchou.push(`${palavra} em [${g.grid.join("")}]`);
+      continue;
+    }
+    const aceito = (
+      await db.query("select public.letreiro_path_ok($1::text[], $2, $3, $4::int) ok", [
+        g.grid,
+        pathToString(caminho),
+        palavra,
+        g.size,
+      ])
+    ).rows[0].ok;
+    conferidas++;
+    if (!aceito) clienteAchouServidorNegou.push(`${palavra} em [${g.grid.join("")}]`);
+  }
+}
+
+ok(
+  clienteNaoAchou.length === 0,
+  clienteNaoAchou.length === 0
+    ? `o cliente traça todas as ${conferidas} palavras do gabarito que foram testadas`
+    : `o cliente NÃO acha caminho para palavra do gabarito: ${clienteNaoAchou.slice(0, 3).join(" · ")}`,
+);
+ok(
+  clienteAchouServidorNegou.length === 0,
+  clienteAchouServidorNegou.length === 0
+    ? `e o servidor aceita todos eles — a tela não deixa traçar o que o servidor recusa`
+    : `A TELA DEIXA TRAÇAR O QUE O SERVIDOR RECUSA: ${clienteAchouServidorNegou.slice(0, 3).join(" · ")}`,
+);
+
+/* E AS TRÊS RECUSAS CLÁSSICAS, nos dois lados. */
+const g0 = grades[0];
+const lado = sizeOf(g0.grid);
+const primeira = Object.keys(g0.solution).find((w) => w.length >= 4 && !w.includes("QU"));
+const bom = findPath(g0.grid, primeira);
+
+const celulaRepetida = [...bom.slice(0, bom.length - 1), bom[0]];
+const salto = [...bom];
+salto[salto.length - 1] = [...Array(g0.grid.length).keys()].find(
+  (i) => !areNeighbors(salto[salto.length - 2], i, lado) && !bom.includes(i),
+);
+
+for (const [nome, caminho] of [
+  ["célula repetida", celulaRepetida],
+  ["salto entre c\u00e9lulas n\u00e3o vizinhas", salto],
+]) {
+  if (caminho.some((i) => i === undefined)) continue;
+  const aceito = (
+    await db.query("select public.letreiro_path_ok($1::text[], $2, $3, $4::int) ok", [
+      g0.grid,
+      pathToString(caminho),
+      primeira,
+      g0.size,
+    ])
+  ).rows[0].ok;
+  ok(!aceito, `o servidor recusa ${nome} (${primeira})`);
+}
+
 /* ── A QUALIDADE DO POOL DE GRADES ────────────────────────────────
 
    Três critérios de aceite do PRD 02 §12, e nenhum deles se mede numa partida:

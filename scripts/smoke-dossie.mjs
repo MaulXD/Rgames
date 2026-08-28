@@ -1296,6 +1296,32 @@ ok(
 
 console.log("DOSSIÊ: o motor não sabe o que é uma biblioteca");
 
+/* A FORMA DO PACOTE, no que está PUBLICADO.
+
+   O validador de `npm run dossie` confere na hora de publicar. Este confere o
+   que está no ar — e a diferença importa, porque um tema publicado antes de uma
+   regra nova existir continua lá, e ninguém republica sem motivo.
+
+   A narração como OBJETO em vez de lista foi o defeito que a primeira pessoa a
+   abrir o Dossiê encontrou: a abertura faz `.map` nos tempos, objeto não tem
+   `.map`, e a tela de erro do Next apareceu no lugar do caso. Três dos quatro
+   casos estavam assim. */
+const formaRuim = (
+  await db.query(
+    `select id, jsonb_typeof(data -> 'narracao') tipo
+       from public.game_themes
+      where game_key = 'dossie' and jsonb_typeof(data -> 'narracao') <> 'array'`,
+  )
+).rows;
+ok(
+  formaRuim.length === 0,
+  formaRuim.length === 0
+    ? "a narração dos quatro casos publicados é lista — a abertura percorre ela com `.map`"
+    : `PACOTE PUBLICADO COM NARRAÇÃO QUE NÃO É LISTA: ${formaRuim
+        .map((r) => `${r.id} (${r.tipo})`)
+        .join(", ")}`,
+);
+
 const idsDosCasos = new Set(
   (
     await db.query(

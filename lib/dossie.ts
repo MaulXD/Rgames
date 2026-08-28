@@ -73,7 +73,29 @@ export async function carregaCaso(id: string): Promise<Caso | null> {
     data: Omit<Caso, "id" | "name" | "era" | "tagline">;
   };
 
-  return { id: row.id, name: row.name, era: row.era, tagline: row.tagline, ...row.data };
+  const caso = { id: row.id, name: row.name, era: row.era, tagline: row.tagline, ...row.data };
+
+  /* A NARRAÇÃO TEM DE SER UMA LISTA, e aqui ela vira uma se não for.
+
+     A abertura percorre os tempos com `.map`, e objeto não tem `.map`. Três dos
+     quatro casos foram publicados com `{ 0: "…", 1: "…" }`, que é objeto em JSON
+     — e a primeira pessoa que abriu o Dossiê recebeu a tela de erro do Next em
+     vez do caso.
+
+     O dado está consertado e o validador agora confere a forma na publicação
+     (`npm run dossie`). Esta linha continua aqui mesmo assim, e é de propósito:
+     CONTEÚDO NÃO PODE DERRUBAR O MOTOR. É a mesma regra que faz `iniciaTrilha`
+     cair no mistério quando o clima é desconhecido, e que faz `mapaDe` cair em
+     Vantara quando o id não existe. Um pacote de tema é dado, e dado errado
+     merece uma tela feia, nunca uma tela quebrada. */
+  const n = caso.narracao as unknown;
+  if (n && typeof n === "object" && !Array.isArray(n)) {
+    caso.narracao = Object.keys(n as Record<string, string>)
+      .sort((a, b) => Number(a) - Number(b))
+      .map((k) => (n as Record<string, string>)[k]);
+  }
+
+  return caso;
 }
 
 /** Todas as 21 cartas do caso, na ordem em que aparecem no bloco de dedução. */

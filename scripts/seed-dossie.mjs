@@ -134,14 +134,14 @@ const AURORA = {
     name: "Apagão",
     rule: "Numa rodada entre a quarta e a oitava, as refutações ficam anônimas.",
   },
-  narracao: {
-    0: "Três da manhã de sábado. A Aurora tinha acabado o último set e ninguém tinha ido embora.",
-    1: "Nelson Braga era dono da casa há onze anos. Tinha começado com uma vitrola emprestada e terminado com uma fila na calçada.",
-    2: "Encontraram ele na cabine do DJ. O disco ainda estava girando, e a agulha já tinha passado do fim.",
-    3: "A luz da pista continuou piscando por vinte minutos, porque ninguém sabia onde ficava o disjuntor.",
-    4: "Seis pessoas ficaram. Nenhuma delas tinha por que estar na casa depois do último set.",
-    5: "Uma das seis desligou a mesa. As outras cinco estavam devendo alguma coisa a ele.",
-  },
+  narracao: [
+    "Três da manhã de sábado. A Aurora tinha acabado o último set e ninguém tinha ido embora.",
+    "Nelson Braga era dono da casa há onze anos. Tinha começado com uma vitrola emprestada e terminado com uma fila na calçada.",
+    "Encontraram ele na cabine do DJ. O disco ainda estava girando, e a agulha já tinha passado do fim.",
+    "A luz da pista continuou piscando por vinte minutos, porque ninguém sabia onde ficava o disjuntor.",
+    "Seis pessoas ficaram. Nenhuma delas tinha por que estar na casa depois do último set.",
+    "Uma das seis desligou a mesa. As outras cinco estavam devendo alguma coisa a ele.",
+  ],
   encerramento:
     "Quando a polícia chegou, o gelo do bar já tinha derretido e alguém tinha guardado o disco na capa errada.",
 };
@@ -232,14 +232,14 @@ const RAS_ZAMIR = {
     name: "Tempestade de Areia",
     rule: "A cada três rodadas, dois lugares fecham. O aviso vem uma rodada antes.",
   },
-  narracao: {
-    0: "Quatorze de março, quatro da manhã. O vento tinha parado, o que no Ras Zamir é sempre um aviso.",
-    1: "Sir Alistair Crewe pagou três temporadas de escavação sem descer ao poço uma única vez.",
-    2: "Na noite anterior tinham quebrado o selo da câmara. Ele desceu para ver, e foi a primeira vez.",
-    3: "Encontraram ele na tenda do arquivo, ao lado do selo partido, com areia nos punhos da camisa.",
-    4: "Seis pessoas dormiam no acampamento. Nenhuma delas tinha dormido.",
-    5: "Uma das seis desceu ao poço depois dele. Todas as outras sabiam o caminho.",
-  },
+  narracao: [
+    "Quatorze de março, quatro da manhã. O vento tinha parado, o que no Ras Zamir é sempre um aviso.",
+    "Sir Alistair Crewe pagou três temporadas de escavação sem descer ao poço uma única vez.",
+    "Na noite anterior tinham quebrado o selo da câmara. Ele desceu para ver, e foi a primeira vez.",
+    "Encontraram ele na tenda do arquivo, ao lado do selo partido, com areia nos punhos da camisa.",
+    "Seis pessoas dormiam no acampamento. Nenhuma delas tinha dormido.",
+    "Uma das seis desceu ao poço depois dele. Todas as outras sabiam o caminho.",
+  ],
   encerramento:
     "A tempestade chegou ao meio-dia e cobriu as pegadas todas. O relatório saiu antes dela, com um nome.",
 };
@@ -322,14 +322,14 @@ const MERIDIANO = {
     name: "Registro da Estação",
     rule: "A cada quatro rodadas, NÚBIA publica uma carta que não está no envelope.",
   },
-  narracao: {
-    0: "Ciclo 8.412. A estação estava em turno de sono e o zumbido do suporte de vida era o único som.",
-    1: "A comandante Ilse Navarro estava no Meridiano-9 há quatro anos, e tinha assinado sozinha os quatro relatórios anuais.",
-    2: "O auditor chegou há nove dias, com autorização para abrir qualquer registro da estação.",
-    3: "Encontraram Navarro na câmara de vácuo. O registro biométrico dela tinha sido apagado do sistema.",
-    4: "Só uma coisa a bordo tem acesso para apagar um registro. E ela é uma das seis.",
-    5: "Seis pessoas acordadas em turno de sono. Nenhuma delas devia estar acordada.",
-  },
+  narracao: [
+    "Ciclo 8.412. A estação estava em turno de sono e o zumbido do suporte de vida era o único som.",
+    "A comandante Ilse Navarro estava no Meridiano-9 há quatro anos, e tinha assinado sozinha os quatro relatórios anuais.",
+    "O auditor chegou há nove dias, com autorização para abrir qualquer registro da estação.",
+    "Encontraram Navarro na câmara de vácuo. O registro biométrico dela tinha sido apagado do sistema.",
+    "Só uma coisa a bordo tem acesso para apagar um registro. E ela é uma das seis.",
+    "Seis pessoas acordadas em turno de sono. Nenhuma delas devia estar acordada.",
+  ],
   encerramento:
     "O cargueiro desatracou no ciclo seguinte, com um passageiro a menos do que tinha chegado.",
 };
@@ -484,6 +484,23 @@ function valida(t) {
   // escrita
   ok(CLIMAS.includes(t.clima), `o clima "${t.clima}" existe no vocabulário sonoro`);
   ok(!!t.victim?.name && !!t.victim?.role, "a vítima tem nome e papel");
+  /* A FORMA ANTES DO CONTEÚDO, e esta linha nasceu de um defeito de verdade.
+
+     A abertura do caso faz `beats.map(...)` para desenhar os pontinhos de
+     progresso. Escrever a narração como `{ 0: "…", 1: "…" }` — que é o que eu
+     fiz nos três casos novos — produz um OBJETO em JSON, e objeto não tem
+     `.map`. A primeira pessoa que abriu o Dossiê recebeu a tela de erro do Next
+     em vez do caso.
+
+     E ESTE VALIDADOR DEIXOU PASSAR, porque `Object.keys()` funciona nos dois:
+     seis chaves num array e seis chaves num objeto contam igual. Ele conferia o
+     CONTEÚDO e não a FORMA — e forma é contrato. */
+  ok(
+    Array.isArray(t.narracao),
+    Array.isArray(t.narracao)
+      ? "a narração é uma LISTA (a abertura percorre ela; objeto não tem `.map`)"
+      : "a narração é um objeto e precisa ser lista — a abertura quebra com objeto",
+  );
   const beats = Object.keys(t.narracao ?? {});
   ok(beats.length === 6, `a narração tem seis tempos (${beats.length})`);
   ok(

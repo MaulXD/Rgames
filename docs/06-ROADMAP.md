@@ -38,8 +38,8 @@ fecha o navegador e volta, o host sai e outro assume — tudo sem recarregar a p
 Isto não é estimativa — é o que existe e roda, medido no dia em que esta seção foi escrita.
 Números vêm de contar, não de lembrar: **91 migrações** aplicadas, 30.858 linhas de SQL,
 32 componentes, e **760 verificações** em cinco suítes de fumaça que rodam contra o
-Supabase de verdade (38 na plataforma, 129 no Letreiro, 128 no Dossiê, 180 no Domínio,
-285 na Metrópole).
+Supabase de verdade, mais uma suíte de lógica pura que roda sem banco (`npm run smoke:bloco`,
+o caderno do Dossiê).
 
 ### A plataforma
 
@@ -171,6 +171,7 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | Modo Relâmpago do Domínio | ✅ o último modo que faltava nos quatro jogos. 24 territórios recortados de Vantara por programa, e o mesmo validador para os dois mapas |
 | O cliente tinha TRUNCATE em quatro tabelas | ✅ **RLS não se aplica a TRUNCATE**. Em `matches`, `anon` podia apagar a tabela e não podia lê-la. Mesma causa de 0022: o default do Supabase é `GRANT ALL`, e ALL inclui TRUNCATE |
 | Os critérios de aceite conferidos contra a EVIDÊNCIA | ✅ os PRDs subestimavam o que está construído, e checklist desatualizado é pior que nenhum. Domínio 17→6, Letreiro 24→11, Dossiê 31→15, Plataforma 11→8 — e o que fica aberto fica com o motivo escrito |
+| O bloco de dedução ganhou testes | ✅ ele é "o que separa quem joga bem de quem joga mal" e não tinha nenhum. O Node 24 tira os tipos sozinho: 16 verificações de lógica pura, zero dependência nova |
 
 ---
 

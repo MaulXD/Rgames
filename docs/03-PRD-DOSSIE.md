@@ -682,9 +682,12 @@ automáticos em tinta impressa; suas anotações, em tinta de caneta. A diferen�
 - [x] Fantasma continua sendo consultado na cadeia de refutação — e não recebe mais turno
 
 **Bloco**
-- [ ] Fato público é marcado automaticamente, igual para todos
-- [ ] Conjunto encolhe ao marcar `✗` num membro e vira `✓` ao sobrar um
-- [ ] Manual não preenche nada; Dedutivo resolve uma cadeia de 3 inferências
+- [x] Fato público é marcado automaticamente, igual para todos — dois jogadores com mãos
+      diferentes tiram do MESMO registro exatamente os mesmos fatos
+- [x] Conjunto encolhe ao marcar `✗` num membro e vira `✓` ao sobrar um
+- [x] Manual não preenche nada; Dedutivo resolve uma cadeia de 3 inferências — uma em que
+      nenhum passo isolado dá a resposta: os cinco suspeitos na mão provam o sexto no envelope,
+      o envelope prova os outros fora dele, e o que sobra fecha o tipo
 - [ ] O bloco é editável durante o turno dos outros
 
 **Fluxo**

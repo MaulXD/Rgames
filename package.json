@@ -14,6 +14,7 @@
     "dict": "node scripts/build-dict.mjs",
     "boards": "node scripts/build-boards.mjs",
     "smoke:letreiro": "node scripts/smoke-letreiro.mjs",
+    "smoke:bloco": "node --import ./scripts/alias.mjs scripts/smoke-bloco.mjs",
     "smoke:dossie": "node scripts/smoke-dossie.mjs",
     "mapa": "node scripts/seed-dominio.mjs",
     "smoke:dominio": "node scripts/smoke-dominio.mjs",

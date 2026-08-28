@@ -446,6 +446,14 @@ export function MetropoleGame({
   const tocando = useRef(false);
   const falhas = useRef(0);
   const [passoBot, setPassoBot] = useState<string | null>(null);
+  /* O GATILHO É UM CONTADOR, e não o rótulo do passo.
+
+     Se dois passos seguidos devolvessem o mesmo texto — "rola(1)" depois de
+     "rola(1)" num turno de dado duplo, por exemplo — o React sairia fora da
+     re-renderização por estado idêntico, o efeito não rodaria de novo e a
+     corrente pararia no meio do turno da máquina. Um número que só cresce não
+     tem esse problema. */
+  const [tique, setTique] = useState(0);
   const [maquinaEmpacou, setMaquinaEmpacou] = useState(false);
 
   const tocarMaquina = useCallback(async () => {
@@ -460,11 +468,15 @@ export function MetropoleGame({
         if (/MATCH_NOT_RUNNING/.test(msg)) return null;
         falhas.current += 1;
         if (falhas.current >= 3) setMaquinaEmpacou(true);
+        else setTique((t) => t + 1);   // tenta de novo depois do respiro
         return null;
       }
       falhas.current = 0;
       const passo = (data as { passo?: string } | null)?.passo ?? null;
       setPassoBot(passo);
+      // só continua a corrente quando houve passo: `null` é o servidor dizendo
+      // que não há mais nada de máquina a fazer agora
+      if (passo) setTique((t) => t + 1);
       return passo;
     } finally {
       tocando.current = false;
@@ -496,6 +508,7 @@ export function MetropoleGame({
     st.turnSeat,
     st.round,
     ultimaLinha,
+    tique,
   ]);
 
   /* ── fim ────────────────────────────────────────────────────────────── */

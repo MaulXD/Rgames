@@ -237,6 +237,15 @@ export function DominioGame({
   const tocando = useRef(false);
   const falhasSeguidas = useRef(0);
   const [maquinaEmpacou, setMaquinaEmpacou] = useState(false);
+  /* UM CONTADOR QUE SÓ CRESCE, e é o gatilho de tentar de novo.
+
+     Sem ele, uma falha de `dominio_tocar` não mudava nenhuma dependência deste
+     efeito: `turnSeat` continua o mesmo (a máquina não jogou), `falhasSeguidas`
+     é um ref e não re-renderiza, e `maquinaEmpacou` só vira true na TERCEIRA
+     falha. Ou seja: a primeira falha parava a corrente para sempre, e a tela
+     nunca chegava a oferecer o botão de tentar de novo — ela ficava dizendo
+     "está jogando" sobre uma máquina que não ia jogar mais. */
+  const [tique, setTique] = useState(0);
 
   const tocarMaquina = useCallback(async () => {
     if (tocando.current) return;
@@ -252,6 +261,7 @@ export function DominioGame({
         }
         falhasSeguidas.current += 1;
         if (falhasSeguidas.current >= 3) setMaquinaEmpacou(true);
+        else setTique((t) => t + 1);   // tenta de novo depois do respiro
         return;
       }
       falhasSeguidas.current = 0;
@@ -266,7 +276,7 @@ export function DominioGame({
     // renderização encadeada, e o lint deste projeto recusa — com razão
     const id = setTimeout(() => void tocarMaquina(), PENSA_MS);
     return () => clearTimeout(id);
-  }, [maquinaNaVez, acabou, maquinaEmpacou, st.turnSeat, st.round, tocarMaquina]);
+  }, [maquinaNaVez, acabou, maquinaEmpacou, st.turnSeat, st.round, tique, tocarMaquina]);
 
   /* ── som e brilho conforme o log anda ───────────────────────────────── */
   useEffect(() => {

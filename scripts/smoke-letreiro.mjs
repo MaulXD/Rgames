@@ -465,23 +465,42 @@ ok(
 const nivelRuim = await rpc(A.token, "adicionar_bot", { p_room: salaM.id, p_nivel: "impossivel" });
 ok(/BAD_LEVEL/.test(JSON.stringify(nivelRuim.body)), "nível fora do vocabulário é recusado");
 
-/* MÁQUINA SÓ ENTRA ONDE SABE JOGAR.
-   Uma máquina sem cérebro numa mesa de Domínio é pior que cadeira vazia: ocupa
-   assento, recebe territórios e objetivo, e perde a vez no relógio para sempre.
-   Os outros três jogariam contra um cadáver que segura um continente. */
-// o Domínio saiu desta lista em 0048, quando ganhou cérebro. A lista É o
-// registro honesto de onde o trabalho chegou — e o teste do Domínio prova que
-// lá a máquina agora ENTRA e joga a partida inteira.
-// a Metrópole saiu desta lista em 0055, e o Domínio em 0048. Sobrou o Dossiê,
-// e a lista É o registro honesto de onde o trabalho chegou.
-for (const jogo of ["dossie"]) {
-  const salaOutra = (await rpc(A.token, "create_room", { p_game: jogo })).body;
-  const recusa = await rpc(A.token, "adicionar_bot", { p_room: salaOutra.id, p_nivel: "medio" });
-  ok(
-    /BOT_NOT_READY/.test(JSON.stringify(recusa.body)),
-    `máquina é recusada no ${jogo}: assento ocupado por quem não joga é pior que assento vazio`,
-  );
-}
+/* MÁQUINA SÓ ENTRA ONDE SABE JOGAR — e agora ela sabe jogar os quatro.
+
+   Esta trava nasceu em 0045 com uma lista de um jogo só, e o teste dela era uma
+   lista de três RECUSAS. A lista de recusas encolheu até sumir: Domínio em 0048,
+   Metrópole em 0055, Dossiê em 0057.
+
+   O teste virou o contrário, e continua sendo o mesmo teste: a trava existe, e
+   o que ela permite É o registro honesto de onde o trabalho chegou. Se alguém
+   acrescentar um quinto jogo e esquecer o cérebro, \`bot_sabe_jogar\` recusa e
+   este teste conta quantos são. */
+const sabeJogar = (
+  await db.query(
+    `select g, public.bot_sabe_jogar(g) sabe
+       from unnest(array['letreiro', 'dominio', 'metropole', 'dossie']) g`,
+  )
+).rows;
+ok(
+  sabeJogar.every((r) => r.sabe),
+  `a máquina sabe jogar os quatro: ${sabeJogar.map((r) => r.g).join(", ")}`,
+);
+const inventado = await rpc(A.token, "adicionar_bot", {
+  p_room: (await rpc(A.token, "create_room", { p_game: "letreiro" })).body.id,
+  p_nivel: "medio",
+});
+ok(
+  inventado.status === 200,
+  "e entra numa sala de Letreiro sem reclamar",
+);
+const semCerebro = (
+  await db.query("select public.bot_sabe_jogar('xadrez') s")
+).rows[0].s;
+ok(
+  semCerebro === false,
+  "e a trava continua de pé para um jogo que ainda não existe — assento ocupado por quem não joga é pior que assento vazio",
+);
+
 
 const bot1 = await rpc(A.token, "adicionar_bot", { p_room: salaM.id, p_nivel: "facil" });
 ok(bot1.status === 200, `máquina convidada no fácil (assento ${bot1.body?.seat})`);

@@ -40,7 +40,8 @@ export default function Home() {
             <p className="mt-5 text-lg leading-snug sm:text-xl" style={{ color: "var(--fg-mid)" }}>
               Abre o link, digita um apelido e pronto. Quatro clássicos refeitos para funcionar
               online — e <strong style={{ color: "var(--fg)" }}>consertados</strong> nos lugares onde
-              todo mundo sabe que eles travam.
+              todo mundo sabe que eles travam. Sem ninguém por perto, os quatro se jogam sozinho:
+              a máquina senta na mesa e joga pelas mesmas regras que você.
             </p>
           </div>
 
@@ -61,8 +62,8 @@ export default function Home() {
           <div className="mt-8 mb-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
             <h2 className="text-[clamp(1.9rem,5vw,2.8rem)]">Os quatro jogos</h2>
             <p className="max-w-[42ch] text-sm dim">
-              Nomes, elenco, mapas e arte 100% autorais. O selo diz em que fase do roadmap cada um
-              fica jogável. O Letreiro já dá para jogar agora.
+              Nomes, elenco, mapas e arte 100% autorais. Os quatro já dão para jogar — com amigos
+              pelo link, ou sozinho contra a máquina, num toque.
             </p>
           </div>
 

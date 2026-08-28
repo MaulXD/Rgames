@@ -45,7 +45,9 @@ const NIVEIS: { chave: NivelBot; nome: string; promessa: string }[] = [
    RECUSA (é ele a autoridade) e a interface NÃO OFERECE (botão que dá erro é
    uma promessa quebrada). Quando o cérebro do Domínio existir, são duas linhas
    — esta e a do banco. */
-const BOT_SABE_JOGAR = new Set(["letreiro", "dominio", "metropole"]);
+/* Os QUATRO. A lista começou com um jogo só e cresceu uma linha por cérebro —
+   e chegar a esta linha foi o trabalho inteiro. */
+const BOT_SABE_JOGAR = new Set(["letreiro", "dominio", "metropole", "dossie"]);
 
 const NOME_NIVEL: Record<NivelBot, string> = {
   facil: "tranquila",
@@ -518,7 +520,7 @@ export function Lobby({ code }: { code: string }) {
           <p className="eyebrow">Jogar contra a máquina</p>
           <p className="mt-2 text-sm dim">
             {maquinas.length === 0
-              ? "Sem gente para completar a mesa? Chame uma máquina. Ela senta, pega uma cor e joga como qualquer um."
+              ? "Sem gente para completar a mesa? Chame uma máquina. Ela senta, pega uma cor e joga pelas mesmas regras que você — nos quatro jogos."
               : maquinas.length === 1
                 ? "Uma máquina na mesa. Ela não vê a sua mão — joga com o que o servidor deu a ela."
                 : `${maquinas.length} máquinas na mesa, cada uma com seu jeito. Nenhuma vê a sua mão.`}
@@ -573,13 +575,13 @@ export function Lobby({ code }: { code: string }) {
               ) : room.game_key === "dominio" ? (
                 <>
                   Quarenta e dois territórios, seis continentes, um objetivo secreto para cada um.
-                  Precisa de três jogadores ou mais. Turno de dois minutos — quem sumir perde a vez,
-                  não a partida de todos.
+                  Precisa de três na mesa — e máquina conta. Turno de dois minutos: quem sumir perde
+                  a vez, não a partida de todos.
                 </>
               ) : room.game_key === "dossie" ? (
                 <>
-                  Seis suspeitos, seis objetos, nove lugares. Precisa de três jogadores ou mais — e
-                  começa com a história do caso.
+                  Seis suspeitos, seis objetos, nove lugares. Precisa de três na mesa — e máquina
+                  conta, inclusive sozinho contra duas. Começa com a história do caso.
                 </>
               ) : (
                 <>

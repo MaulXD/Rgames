@@ -186,6 +186,7 @@ const PERMITIDAS = [
   // Dossiê
   "dossie_accuse", "dossie_end_turn", "dossie_move", "dossie_pad",
   "dossie_pass_refute", "dossie_refute", "dossie_start", "dossie_suggest",
+  "dossie_tocar",
   // Domínio
   "dominio_atacar", "dominio_avancar", "dominio_encerrar_turno",
   "dominio_reforcar", "dominio_remanejar", "dominio_start", "dominio_trocar",
@@ -278,6 +279,86 @@ ok(faxinas.length === 0, `nenhuma rotina de faxina é chamável pelo cliente${fa
 
 const premios = expostas.filter((f) => f.endsWith("_premia") || f === "dar_xp" || f === "melhor_palavra");
 ok(premios.length === 0, `nenhuma função de crédito de XP é chamável pelo cliente${premios.length ? `: ${premios.join(", ")}` : ""}`);
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   JOGAR SOZINHO NUM TOQUE
+
+   Antes disto, começar uma partida solo eram cinco toques: criar sala, abrir o
+   painel das máquinas, chamar a primeira, chamar a segunda, começar. Cinco
+   toques é a diferença entre um recurso que existe e um recurso que se usa — e
+   num celular, às onze da noite, quatro deles são motivo de desistir.
+
+   O botão "Jogar sozinho" faz a sequência inteira: cria a sala, chama as
+   máquinas que aquele jogo precisa, e começa. Este teste percorre exatamente o
+   que ele faz, nos QUATRO jogos — porque um caminho novo que ninguém testa é um
+   caminho que quebra na primeira mudança de regra de um deles.
+
+   E prova o que importa no fim: a pessoa cai numa partida RODANDO, com a mesa
+   cheia, sem ter dito mais nada.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\n  ── jogar sozinho ──");
+
+/* Um jogador PRÓPRIO para este bloco. O `A` do começo do arquivo já passou pelo
+   teste da faxina de convidados e não tem mais perfil — e sem perfil,
+   `create_room` estoura na chave estrangeira de `host_id`. Reaproveitar um
+   usuário depois de testá-lo é herdar o estado que o teste deixou. */
+const S = await makeUser(`teste-solo-${stamp}@mesa.invalid`);
+await rpc(S.token, "set_profile", {
+  p_name: "Solo",
+  p_avatar: { shape: "selo", color: "jade", pattern: "raios", metal: "latao", mark: "bussola" },
+});
+
+const SOLO = [
+  { jogo: "letreiro", maquinas: 1, rpc: "letreiro_start" },
+  { jogo: "dossie", maquinas: 2, rpc: "dossie_start" },
+  { jogo: "dominio", maquinas: 2, rpc: "dominio_start" },
+  { jogo: "metropole", maquinas: 1, rpc: "met_start" },
+];
+
+for (const caso of SOLO) {
+  const criada = await rpc(S.token, "create_room", { p_game: caso.jogo });
+  const sala = criada.body;
+  if (!sala?.id) {
+    ok(false, `${caso.jogo}: create_room deu ${criada.status}`);
+    continue;
+  }
+
+  let falhou = null;
+  for (let i = 0; i < caso.maquinas; i++) {
+    const r = await rpc(S.token, "adicionar_bot", { p_room: sala.id, p_nivel: "medio" });
+    if (r.status !== 200) falhou = `adicionar_bot: ${JSON.stringify(r.body).slice(0, 110)}`;
+  }
+
+  const ini = falhou ? null : await rpc(S.token, caso.rpc, { p_room: sala.id });
+  if (ini && ini.status !== 200) {
+    falhou = `${caso.rpc}: ${JSON.stringify(ini.body).slice(0, 110)}`;
+  }
+
+  const partida = falhou
+    ? null
+    : (
+        await db.query(
+          `select m.status, count(mp.*)::int gente,
+                  count(*) filter (where p.is_bot)::int maquinas
+             from matches m
+             join match_players mp on mp.match_id = m.id
+             join profiles p on p.id = mp.user_id
+            where m.room_id = $1
+            group by m.status`,
+          [sala.id],
+        )
+      ).rows[0];
+
+  ok(
+    !falhou && partida?.status === "running" && partida.maquinas === caso.maquinas,
+    falhou
+      ? `${caso.jogo}: ${falhou}`
+      : `${caso.jogo}: um toque leva a uma partida rodando com ${partida?.gente} na mesa (${partida?.maquinas} máquina(s))`,
+  );
+}
+
 
 await db.end();
 

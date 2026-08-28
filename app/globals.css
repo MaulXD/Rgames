@@ -263,9 +263,14 @@ a {
   line-height: 1.25;
 }
 
-/* Botão de canto, para a ação secundária que mora dentro de um cartão. */
+/* Botão de canto, para a ação secundária que mora dentro de um cartão.
+
+   40px e não 34: este site é para jogar no celular antes de tudo, e 34px é
+   menor que a polpa de um polegar. As duas diretrizes que existem pedem 44 (iOS)
+   e 48 (Android); 40 com o respiro do padding em volta chega perto e não
+   desequilibra o cartão onde ele mora. */
 .btn-mini {
-  min-height: 34px;
+  min-height: 40px;
   padding: 0 0.8rem;
   border-width: 2px;
   font-size: 0.66rem;
@@ -1065,4 +1070,51 @@ body::after {
     animation: none;
     opacity: 0.75;
   }
+}
+
+/* ── jogar sozinho, na carta do jogo ─────────────────────────────
+
+   Os três níveis lado a lado, dentro da própria carta. Sem modal: um modal para
+   uma escolha de três opções é uma tela inteira para uma pergunta de uma linha, e
+   no celular custa uma animação de abrir e outra de fechar. */
+.card-solo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  align-items: center;
+}
+
+.card-solo-titulo {
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--c-dim, var(--fg-faint));
+}
+
+.card-solo-niveis {
+  display: flex;
+  gap: 0.4rem;
+  width: 100%;
+}
+.card-solo-niveis .btn {
+  flex: 1;
+  min-width: 0;
+  padding: 0 0.5rem;
+  font-size: 0.62rem;
+}
+
+.card-solo-voltar {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0.35rem 0.6rem;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.66rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-dim, var(--fg-faint));
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }

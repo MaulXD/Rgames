@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { COLORS, type ColorKey } from "@/lib/avatar";
 import { CONTINENTES, GRADE, POR_ID, TERRITORIOS } from "@/lib/dominio/vantara";
 
@@ -80,8 +80,46 @@ export function MapaVantara({
   const alvoSet = useMemo(() => new Set(alvos), [alvos]);
   const mexeuSet = useMemo(() => new Set(mexeu), [mexeu]);
 
+  /* ── O MAPA SEGUE O QUE ACONTECEU ─────────────────────────────
+
+     Num celular de 360px, o mapa tem 680px — quase metade fica fora da tela. E
+     desde que existe máquina, boa parte do que acontece na partida acontece
+     enquanto a pessoa só assiste. Se a máquina toma um território que está fora
+     do pedaço visível, a pessoa vê a barra de exército mudar em algum lugar que
+     ela não está olhando — ou seja, não vê nada.
+
+     Então quando um território pisca (`mexeu`), a rolagem vai até ele. Só na
+     horizontal, só quando ele está mesmo fora, e com `behavior: smooth` para o
+     olho acompanhar o movimento em vez de se perder num salto.
+
+     Numa tela larga isto não faz nada, porque não há o que rolar. */
+  const rolo = useRef<HTMLDivElement | null>(null);
+  const primeiroMexeu = mexeu[0] ?? null;
+
+  useEffect(() => {
+    const caixa = rolo.current;
+    if (!caixa || !primeiroMexeu) return;
+    const t = POR_ID[primeiroMexeu];
+    if (!t) return;
+    if (caixa.scrollWidth <= caixa.clientWidth) return;   // nada a rolar
+
+    const svg = caixa.querySelector("svg");
+    if (!svg) return;
+    // do sistema do viewBox para o pixel da tela
+    const escala = svg.clientWidth / (GRADE.cols * CELULA);
+    const x = (t.col * CELULA + CELULA / 2) * escala;
+    const alvoX = Math.max(0, x - caixa.clientWidth / 2);
+
+    // já está à vista? então não mexe: rolagem que se move sem motivo cansa
+    const margem = CELULA * escala;
+    if (x > caixa.scrollLeft + margem && x < caixa.scrollLeft + caixa.clientWidth - margem) {
+      return;
+    }
+    caixa.scrollTo({ left: alvoX, behavior: "smooth" });
+  }, [primeiroMexeu]);
+
   return (
-    <div className="mapa-rolo">
+    <div className="mapa-rolo" ref={rolo}>
       <svg
         className="mapa"
         viewBox={`0 0 ${largura} ${altura}`}

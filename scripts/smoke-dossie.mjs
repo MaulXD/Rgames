@@ -484,6 +484,496 @@ for (const tema of temas) {
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   O CÉREBRO DA MÁQUINA NO DOSSIÊ
+
+   O mais difícil dos quatro, por um motivo só: A MÁQUINA NÃO PODE VER O
+   ENVELOPE. No Letreiro ela sorteia de uma lista; no Domínio e na Metrópole ela
+   vê o mesmo tabuleiro que todo mundo. Aqui a informação É o jogo, e uma máquina
+   que espiasse `matches.solution` ganharia na segunda rodada sem que ninguém
+   entendesse por quê — indistinguível de um bug, e pior, indistinguível de um
+   adversário bom.
+
+   ENTÃO O TESTE CENTRAL DESTE BLOCO É DE HONESTIDADE, e ele é forte:
+
+     nenhuma carta que a máquina RISCOU pode estar no envelope.
+
+   `dedu.fora` é a lista do que ela concluiu não estar no envelope. Se uma carta
+   do envelope aparecer ali, ou ela espiou, ou a dedução dela está errada — e as
+   duas coisas precisam quebrar o teste. É a mesma checagem que pega trapaça e
+   pega bug de inferência, o que é exatamente o que se quer de uma invariante.
+
+   E a segunda ponta: QUANDO ELA ACUSA, ELA ACERTA. Ela só acusa quando sobrou um
+   candidato em cada categoria; se a inferência tiver furo, ela acusa errado e
+   vira fantasma. Uma acusação errada da máquina é a prova de que a dedução
+   mentiu.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\n  ── o cérebro da máquina ──");
+
+/**
+ * Joga uma partida solo do Dossiê até o fim, ou até o teto de passos.
+ *
+ * O humano é PASSIVO: anda quando pode, palpita quando está numa sala, e nunca
+ * acusa. Passivo porque o que se mede é a máquina — e nunca acusar significa que
+ * quem fecha o caso, se alguém fechar, é ela.
+ *
+ * A cada passo, o `dedu` de cada máquina é conferido contra o envelope de
+ * verdade (que o teste conhece pela conexão direta, e a máquina não).
+ */
+async function dossieSolo({ token, niveis, tetoPassos }) {
+  const salaS = (await rpc(token, "create_room", { p_game: "dossie" })).body;
+  for (const n of niveis) {
+    const r = await rpc(token, "adicionar_bot", { p_room: salaS.id, p_nivel: n });
+    if (r.status !== 200) return { erro: `adicionar_bot(${n}): ${JSON.stringify(r.body)}` };
+  }
+  const ini = await rpc(token, "dossie_start", { p_room: salaS.id });
+  if (ini.status !== 200) return { erro: `dossie_start: ${JSON.stringify(ini.body)}` };
+
+  const idP = (
+    await db.query(
+      "select id, solution from matches where room_id = $1 order by started_at desc limit 1",
+      [salaS.id],
+    )
+  ).rows[0];
+  const envelope = [idP.solution.suspect, idP.solution.weapon, idP.solution.room];
+
+  const elenco = (
+    await db.query(
+      `select mp.seat, mp.user_id, p.is_bot, p.display_name
+         from match_players mp join profiles p on p.id = mp.user_id
+        where mp.match_id = $1 order by mp.seat`,
+      [idP.id],
+    )
+  ).rows;
+  const meu = Number(elenco.find((e) => !e.is_bot).seat);
+  const bots = elenco.filter((e) => e.is_bot);
+
+  const tema = (
+    await db.query(
+      `select gt.data d from game_themes gt join matches m on gt.id = (m.public_state ->> 'theme')
+        where m.id = $1`,
+      [idP.id],
+    )
+  ).rows[0].d;
+
+  const problemas = [];
+  const passos = [];
+  let n = 0;
+  let acabou = false;
+  let semNada = 0;
+
+  /** A checagem de honestidade, rodada a cada passo. */
+  async function conferirDeducao() {
+    for (const b of bots) {
+      const priv = (
+        await db.query(
+          "select data from match_private_state where match_id = $1 and user_id = $2",
+          [idP.id, b.user_id],
+        )
+      ).rows[0]?.data;
+      const fora = priv?.dedu?.fora ?? [];
+      const vazou = fora.filter((c) => envelope.includes(c));
+      if (vazou.length) {
+        problemas.push(
+          `${b.display_name} riscou ${vazou.join(", ")}, que está NO ENVELOPE` +
+            ` — ela espiou ou a dedução está errada`,
+        );
+        return false;
+      }
+      // e o estado privado dela não pode conter o envelope de nenhuma forma
+      if (priv && JSON.stringify(priv).includes(idP.solution.room) && !fora.length) {
+        // a sala pode aparecer legitimamente em `mostrei`/`hand`? não: se está no
+        // envelope, ninguém tem a carta. Mas pode aparecer em posições do mapa,
+        // que é outra coisa — por isso a checagem forte é a de `fora` acima.
+      }
+      if (priv?.solution !== undefined) {
+        problemas.push(`${b.display_name} tem 'solution' no estado privado`);
+        return false;
+      }
+    }
+    return true;
+  }
+
+  while (n < tetoPassos) {
+    const linha = (
+      await db.query("select status, public_state from matches where id = $1", [idP.id])
+    ).rows[0];
+    const st = linha.public_state;
+    if (linha.status !== "running") {
+      acabou = true;
+      break;
+    }
+    /* A CONFERÊNCIA DE HONESTIDADE roda a cada oito passos, e não a cada um.
+       Ela custa duas consultas por máquina, o que TRIPLICAVA o tráfego da
+       partida inteira e fazia a suíte passar de quinze minutos — e suíte que
+       demora quinze minutos é suíte que se deixa de rodar antes de commitar.
+
+       Oito passos é menos de um turno completo: se a máquina riscar carta do
+       envelope, a janela pega. E o estado final é conferido sempre. */
+    if (n % 8 === 0 && !(await conferirDeducao())) break;
+
+    const t = await rpc(token, "dossie_tocar", { p_match: idP.id });
+    if (t.status !== 200) {
+      problemas.push(`dossie_tocar: ${JSON.stringify(t.body).slice(0, 400)}`);
+      break;
+    }
+    if (t.body?.passo) {
+      passos.push(t.body.passo);
+      semNada = 0;
+      n++;
+      continue;
+    }
+
+    semNada++;
+    if (semNada > 3) {
+      problemas.push(
+        `ninguém tem o que fazer na fase ${st.phase} (vez do assento ${st.turnSeat})`,
+      );
+      break;
+    }
+
+    // é a vez do humano passivo, ou ele tem de refutar
+    if (st.phase === "refute" && st.pending) {
+      const naVez = st.pending.queue[st.pending.at];
+      if (Number(naVez) !== meu) {
+        problemas.push(`fase de refutação parada no assento ${naVez}, que não é meu`);
+        break;
+      }
+      const priv = (
+        await db.query(
+          "select data from match_private_state where match_id = $1 and user_id = $2",
+          [idP.id, elenco.find((e) => !e.is_bot).user_id],
+        )
+      ).rows[0].data;
+      const tem = (priv.hand ?? []).find((c) => st.pending.guess.includes(c));
+      if (tem) await rpc(token, "dossie_refute", { p_match: idP.id, p_card: tem });
+      else await rpc(token, "dossie_pass_refute", { p_match: idP.id });
+      semNada = 0;
+      n++;
+      continue;
+    }
+
+    if (Number(st.turnSeat) !== meu) {
+      problemas.push(
+        `a vez é do assento ${st.turnSeat}, que é máquina, e dossie_tocar não fez nada` +
+          ` · fase ${st.phase} · pending ${JSON.stringify(st.pending)}`,
+      );
+      break;
+    }
+
+    // o humano passivo: palpita onde está, ou anda
+    const aqui = st.positions[String(meu)];
+    if (st.actionsLeft >= 1 && aqui) {
+      const sus = tema.suspects[n % tema.suspects.length].id;
+      const arm = tema.weapons[n % tema.weapons.length].id;
+      const r = await rpc(token, "dossie_suggest", {
+        p_match: idP.id,
+        p_suspect: sus,
+        p_weapon: arm,
+      });
+      if (r.status !== 200) {
+        const viz = (tema.adjacency[aqui] ?? [])[0];
+        if (viz) await rpc(token, "dossie_move", { p_match: idP.id, p_room: viz });
+        else await rpc(token, "dossie_end_turn", { p_match: idP.id });
+      }
+      semNada = 0;
+      n++;
+      continue;
+    }
+    const fim = await rpc(token, "dossie_end_turn", { p_match: idP.id });
+    if (fim.status !== 200) {
+      problemas.push(`humano não passou a vez: ${JSON.stringify(fim.body).slice(0, 130)}`);
+      break;
+    }
+    semNada = 0;
+    n++;
+  }
+
+  // e no fim, sempre
+  await conferirDeducao();
+
+  const fim = (
+    await db.query("select status, public_state from matches where id = $1", [idP.id])
+  ).rows[0];
+  const dedus = {};
+  for (const b of bots) {
+    const priv = (
+      await db.query(
+        "select data from match_private_state where match_id = $1 and user_id = $2",
+        [idP.id, b.user_id],
+      )
+    ).rows[0]?.data;
+    dedus[b.display_name] = (priv?.dedu?.fora ?? []).length;
+  }
+  return {
+    id: idP.id,
+    envelope,
+    meu,
+    bots,
+    tema,
+    passos,
+    n,
+    acabou,
+    problemas,
+    st: fim.public_state,
+    status: fim.status,
+    dedus,
+  };
+}
+
+/* ── 1. a recusa ─────────────────────────────────────────────────────────── */
+
+const salaR = (await rpc(P[0].token, "create_room", { p_game: "dossie" })).body;
+await rpc(P[0].token, "adicionar_bot", { p_room: salaR.id, p_nivel: "dificil" });
+await rpc(P[0].token, "adicionar_bot", { p_room: salaR.id, p_nivel: "facil" });
+const iniR = await rpc(P[0].token, "dossie_start", { p_room: salaR.id });
+ok(
+  iniR.status === 200,
+  `partida solo de Dossiê começa com duas máquinas${iniR.status !== 200 ? " " + JSON.stringify(iniR.body).slice(0, 130) : ""}`,
+);
+const idR = (
+  await db.query(
+    "select id from matches where room_id = $1 order by started_at desc limit 1",
+    [salaR.id],
+  )
+).rows[0]?.id;
+const foraR = await rpc(P[2].token, "dossie_tocar", { p_match: idR });
+ok(
+  /NOT_A_PLAYER/.test(JSON.stringify(foraR.body)),
+  "quem não está na mesa não toca a máquina de ninguém",
+);
+
+/* ── 2. UMA PARTIDA SOLO INTEIRA, com a honestidade conferida a cada passo ── */
+
+const solo = await dossieSolo({
+  token: P[0].token,
+  niveis: ["dificil", "medio"],
+  tetoPassos: 600,
+});
+ok(!solo.erro, `a partida solo montou${solo.erro ? ": " + solo.erro : ""}`);
+if (!solo.erro) {
+  ok(
+    solo.problemas.length === 0,
+    solo.problemas.length === 0
+      ? `${solo.n} passos, e nenhuma máquina riscou carta do envelope — ela deduz, não espia`
+      : `TRAPAÇA OU DEDUÇÃO ERRADA: ${solo.problemas[0]}`,
+  );
+  console.log(`         envelope: ${solo.envelope.join(", ")}`);
+  console.log(`         primeiros passos: ${solo.passos.slice(0, 8).join(" · ")}`);
+  console.log(
+    `         cartas riscadas no fim: ${Object.entries(solo.dedus)
+      .map(([k, v]) => `${k}=${v}`)
+      .join(", ")}`,
+  );
+
+  const tipos = new Set(solo.passos.map((p) => p.split(/[:(]/)[0]));
+  ok(
+    tipos.has("palpita"),
+    `a máquina palpitou (tipos de passo: ${[...tipos].join(", ")})`,
+  );
+  ok(tipos.has("refuta"), "e refutou quando tinha a carta");
+  ok(tipos.has("anda"), "e andou pelo mapa em vez de ficar parada");
+
+  /* QUANDO ELA ACUSA, ELA ACERTA. Se a inferência tiver furo, ela acusa errado
+     e vira fantasma — e uma acusação errada da máquina é a prova de que a
+     dedução mentiu. */
+  const acusacoes = solo.passos.filter((p) => p.startsWith("acusa"));
+  const erradas = (solo.st.log ?? []).filter(
+    (l) => l.type === "accuse" && l.right === false && solo.bots.some((b) => Number(b.seat) === Number(l.seat)),
+  );
+  ok(
+    erradas.length === 0,
+    erradas.length === 0
+      ? acusacoes.length
+        ? `e acusou ${acusacoes.length} vez(es), sempre certo: ${acusacoes[0]}`
+        : "e não acusou nenhuma vez — ela não chuta"
+      : `ACUSOU ERRADO ${erradas.length} vez(es): a dedução mentiu`,
+  );
+  ok(
+    solo.acabou || solo.n >= 300,
+    solo.acabou
+      ? `a partida acabou (vencedor ${solo.st.winner ?? "nenhum"})`
+      : `a partida rodou ${solo.n} passos sem travar`,
+  );
+}
+
+/* ── 2b. a faxina JOGA a máquina ──────────────────────────────
+
+   No Dossiê o prejuízo de pular a máquina é pior que nos outros: quem não refuta
+   quando tem a carta MENTE para a mesa inteira, e todo mundo deduz errado a
+   partir dali. */
+
+const salaG = (await rpc(P[0].token, "create_room", { p_game: "dossie" })).body;
+await rpc(P[0].token, "adicionar_bot", { p_room: salaG.id, p_nivel: "medio" });
+await rpc(P[0].token, "adicionar_bot", { p_room: salaG.id, p_nivel: "dificil" });
+await rpc(P[0].token, "dossie_start", { p_room: salaG.id });
+const idG = (
+  await db.query(
+    "select id from matches where room_id = $1 order by started_at desc limit 1",
+    [salaG.id],
+  )
+).rows[0].id;
+const botG = Number(
+  (
+    await db.query(
+      `select mp.seat from match_players mp join profiles p on p.id = mp.user_id
+        where mp.match_id = $1 and p.is_bot order by mp.seat limit 1`,
+      [idG],
+    )
+  ).rows[0].seat,
+);
+await db.query(
+  `update matches set
+     public_state = jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
+       '{phase}', '\"turn\"'),
+     turn_deadline = now() - interval '1 second'
+   where id = $1`,
+  [idG, botG],
+);
+const antesG = Number(
+  (
+    await db.query(
+      "select jsonb_array_length(coalesce(public_state -> 'log', '[]'::jsonb)) n from matches where id = $1",
+      [idG],
+    )
+  ).rows[0].n,
+);
+await db.query("select public.dossie_sweep()");
+const depoisG = (
+  await db.query(
+    `select jsonb_array_length(coalesce(public_state -> 'log', '[]'::jsonb)) n,
+            (public_state ->> 'turnSeat')::int t, status
+       from matches where id = $1`,
+    [idG],
+  )
+).rows[0];
+ok(
+  Number(depoisG.n) > antesG,
+  `a faxina JOGOU o turno da máquina (registro foi de ${antesG} para ${depoisG.n} linhas)`,
+);
+ok(
+  Number(depoisG.t) !== botG || depoisG.status !== "running",
+  `e a vez saiu dela (${botG} → ${depoisG.t})`,
+);
+
+/* ── 3. o nível é o quanto ela infere ────────────────────────────────────── */
+
+/* A tranquila usa só o que está na cara: a própria mão e o que mostraram a ela.
+   A impiedosa cruza os "passou", as restrições abertas e o "ninguém refutou".
+   Na MESMA partida, a impiedosa tem de saber MAIS. */
+
+const comparativo = await dossieSolo({
+  token: P[0].token,
+  niveis: ["dificil", "facil"],
+  tetoPassos: 260,
+});
+ok(
+  !comparativo.erro && comparativo.problemas.length === 0,
+  comparativo.problemas.length === 0 && !comparativo.erro
+    ? "a partida de comparação rodou sem trapaça"
+    : `TRAPAÇA OU ERRO: ${comparativo.erro ?? comparativo.problemas[0]}`,
+);
+if (!comparativo.erro && comparativo.problemas.length === 0) {
+  const porNivel = {};
+  for (const b of comparativo.bots) {
+    const nivel = (
+      await db.query(
+        `select rm.bot_nivel n from room_members rm
+          join matches m on m.room_id = rm.room_id
+         where m.id = $1 and rm.user_id = $2`,
+        [comparativo.id, b.user_id],
+      )
+    ).rows[0]?.n;
+    porNivel[nivel] = comparativo.dedus[b.display_name] ?? 0;
+  }
+  ok(
+    (porNivel.dificil ?? 0) >= (porNivel.facil ?? 0),
+    `o nível é o quanto ela INFERE, não o que ela vê: a impiedosa riscou ${porNivel.dificil} cartas e a tranquila ${porNivel.facil} na mesma mesa`,
+  );
+}
+
+/* ── 4. ela não dá informação de graça ─────────────────────────────
+
+   Regra de mesa do Dossiê: quando você tem duas cartas do palpite, mostre de
+   novo a que já mostrou àquela pessoa. Cada carta nova revelada é informação de
+   graça para quem perguntou.
+
+   A PRIMEIRA VERSÃO DESTE TESTE PERGUNTOU ERRADO: contou quantas cartas
+   diferentes cada máquina mostrou para a mesma pessoa e reclamou quando passavam
+   de duas. Não é a regra — quem tem seis cartas e recebe seis palpites
+   diferentes mostra seis cartas diferentes, e está certa, porque só se pode
+   mostrar carta que está no palpite.
+
+   A pergunta certa é: HAVIA ESCOLHA, e uma das opções já tinha sido mostrada a
+   essa pessoa? Então tinha de ser aquela. É para responder isso que 0060 fez o
+   caderno da máquina anotar o palpite e o que ela tinha na mão na hora. */
+
+const cadernos = (
+  await db.query(
+    `select p.display_name, mps.data -> 'mostrei' m
+       from match_private_state mps join profiles p on p.id = mps.user_id
+      where mps.match_id = $1 and p.is_bot and mps.data ? 'mostrei'`,
+    [solo.id],
+  )
+).rows;
+
+const comOpcao = [];
+const deuDeGraca = [];
+for (const c of cadernos) {
+  const jaMostrei = {};   // pessoa -> Set de cartas
+  for (const x of c.m ?? []) {
+    const tinha = x.tinha ?? [];
+    const vistas = jaMostrei[x.para] ?? new Set();
+    if (tinha.length >= 2) {
+      comOpcao.push(`${c.display_name} tinha ${tinha.length} opções`);
+      const repetivel = tinha.filter((t) => vistas.has(t));
+      if (repetivel.length > 0 && !repetivel.includes(x.card)) {
+        deuDeGraca.push(
+          `${c.display_name} mostrou ${x.card} a ${x.para} podendo repetir ${repetivel.join("/")}`,
+        );
+      }
+    }
+    vistas.add(x.card);
+    jaMostrei[x.para] = vistas;
+  }
+}
+
+if (comOpcao.length === 0) {
+  console.log(
+    "         (nenhuma refutação com duas opções na mão: o caso de repetir não foi exercitado)",
+  );
+} else {
+  ok(
+    deuDeGraca.length === 0,
+    deuDeGraca.length === 0
+      ? `em ${comOpcao.length} refutação(ões) com escolha, ela repetiu o que já tinha mostrado — informação de graça é o que faz perder`
+      : `deu informação de graça: ${deuDeGraca[0]}`,
+  );
+}
+
+/* ── 5. ela nunca viu o envelope ───────────────────────────────
+
+   A checagem por dentro: nenhuma função do cérebro pode ler `matches.solution`.
+   É uma linha de teste, e ela vale mais que qualquer comentário prometendo que
+   não lê — porque ela continua valendo quando alguém mexer no cérebro depois. */
+
+const espiando = (
+  await db.query(`
+    select p.proname nome
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and (p.proname like 'dossie\\_bot%' or p.proname in ('dossie_deduz', 'dossie_candidatos'))
+       and pg_get_functiondef(p.oid) ~ '\\msolution'
+     order by 1`)
+).rows.map((r) => r.nome);
+ok(
+  espiando.length === 0,
+  espiando.length === 0
+    ? "nenhuma função do cérebro toca em `solution` — ela deduz porque não tem outro jeito"
+    : `O CÉREBRO LÊ O ENVELOPE: ${espiando.join(", ")}`,
+);
+
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();
 

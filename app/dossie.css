@@ -377,7 +377,23 @@
 .conjunto-cartas span { padding: 0.1rem 0.45rem; border: 2px solid var(--ink); border-radius: 999px; background: #f6efdb; color: var(--ink); font-size: 0.7rem; font-weight: 700; }
 
 /* a grade rola na horizontal e a coluna da carta fica grudada */
-.grade-wrap { margin-top: 1rem; overflow-x: auto; border: 3px solid var(--ink); border-radius: var(--r-md); background: var(--felt-950); }
+/* a mesma sombra de rolagem do Domínio — ver o comentário lá. Aqui vale ainda
+   mais: o bloco de anotações tem uma coluna por carta, e no celular ele passa da
+   tela sempre. */
+.grade-wrap {
+  margin-top: 1rem;
+  overflow-x: auto;
+  border: 3px solid var(--ink);
+  border-radius: var(--r-md);
+  background:
+    /* tapa-sombras: andam com o conteúdo */
+    linear-gradient(to right, var(--felt-950), var(--felt-950) 6px, transparent) left / 26px 100% no-repeat local,
+    linear-gradient(to left, var(--felt-950), var(--felt-950) 6px, transparent) right / 26px 100% no-repeat local,
+    /* sombras: presas à moldura */
+    linear-gradient(to right, rgb(0 0 0 / 0.45), transparent) left / 26px 100% no-repeat scroll,
+    linear-gradient(to left, rgb(0 0 0 / 0.45), transparent) right / 26px 100% no-repeat scroll,
+    var(--felt-950);
+}
 .grade { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 0.78rem; }
 .grade th, .grade td { padding: 0; }
 .grade thead th { position: sticky; top: 0; z-index: 2; padding: 0.4rem 0.35rem; background: var(--felt-900); color: var(--fg-dim); font-family: var(--font-archivo), sans-serif; font-size: 0.6rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 2px solid var(--line-strong); }
@@ -396,3 +412,10 @@
 
 .bloco-niveis { margin-top: 1.2rem; display: flex; flex-direction: column; gap: 0.5rem; }
 .bloco-nota { margin-top: 0.5rem; font-size: 0.76rem; }
+
+/* ── a máquina pensando, no Dossiê ───────────────────────────── */
+.dossie-pensando {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

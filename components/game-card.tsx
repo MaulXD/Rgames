@@ -18,6 +18,35 @@ import type { Game } from "@/lib/games";
  * contorno grosso e a lateral pintada por baixo (a sombra sólida). O reflexo
  * segue o ponteiro; onde não há ponteiro, ele fica parado e o toque abre a sala.
  */
+/**
+ * Quantas máquinas uma mesa solo precisa, por jogo.
+ *
+ * Não é o mínimo do jogo: é o número que faz a partida ser BOA sozinho. O
+ * Letreiro roda com uma pessoa só, mas uma grade sem ninguém para anular palavra
+ * é metade do Letreiro. A Metrópole com uma máquina já é uma partida inteira; com
+ * duas vira longa demais para o celular.
+ */
+const MAQUINAS_SOLO: Record<string, number> = {
+  letreiro: 1,
+  dossie: 2,
+  dominio: 2,
+  metropole: 1,
+};
+
+/** O RPC que começa cada jogo. */
+const COMECA: Record<string, string> = {
+  letreiro: "letreiro_start",
+  dossie: "dossie_start",
+  dominio: "dominio_start",
+  metropole: "met_start",
+};
+
+const NIVEIS_SOLO = [
+  { chave: "facil", nome: "Tranquila" },
+  { chave: "medio", nome: "Firme" },
+  { chave: "dificil", nome: "Impiedosa" },
+];
+
 export function GameCard({ game }: { game: Game }) {
   const router = useRouter();
   const { status } = useSession();
@@ -25,6 +54,7 @@ export function GameCard({ game }: { game: Game }) {
   const frame = useRef(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [escolhendo, setEscolhendo] = useState(false);
 
   function onMove(e: PointerEvent<HTMLElement>) {
     if (e.pointerType !== "mouse") return;
@@ -60,6 +90,49 @@ export function GameCard({ game }: { game: Game }) {
       const { data, error } = await sb.rpc("create_room", { p_game: game.key });
       if (error) throw error;
       const room = data as unknown as Room;
+      router.push(`/j/${room.code}`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Jogar sozinho, do zero à mesa, num toque depois da escolha.
+   *
+   * Antes disso, começar uma partida solo eram cinco toques: criar sala, abrir o
+   * painel, chamar uma máquina, chamar a segunda, começar. Cinco toques é a
+   * diferença entre um recurso que existe e um recurso que se usa — e num
+   * celular, às onze da noite, quatro deles são motivo de desistir.
+   *
+   * A ÚNICA COISA PERGUNTADA É O NÍVEL, porque é a única decisão que muda o jogo
+   * de verdade. Cor, regras da casa e tamanho da bandeja continuam no lobby, para
+   * quem quiser — e quem não quiser já está jogando.
+   */
+  async function jogarSozinho(nivel: string) {
+    setBusy(true);
+    setErr(null);
+    setEscolhendo(false);
+    try {
+      const sb = supabaseBrowser();
+      const { data, error } = await sb.rpc("create_room", { p_game: game.key });
+      if (error) throw error;
+      const room = data as unknown as Room;
+
+      for (let i = 0; i < (MAQUINAS_SOLO[game.key] ?? 1); i++) {
+        const { error: e2 } = await sb.rpc("adicionar_bot", {
+          p_room: room.id,
+          p_nivel: nivel,
+        });
+        if (e2) throw e2;
+      }
+
+      /* A PARTIDA COMEÇA AQUI e não no lobby: quem escolheu o nível já disse tudo
+         que precisava dizer. Se começar falhar, a pessoa cai no lobby com a mesa
+         montada e o botão de começar na frente — nunca numa tela sem saída. */
+      const rpc = COMECA[game.key];
+      if (rpc) await sb.rpc(rpc, { p_room: room.id });
+
       router.push(`/j/${room.code}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -128,14 +201,55 @@ export function GameCard({ game }: { game: Game }) {
         </div>
 
         <div className="card-action">
-          <button
-            type="button"
-            className={isMvp ? "btn btn-brass w-full" : "btn btn-ghost w-full"}
-            onClick={criarSala}
-            disabled={busy || status !== "ready"}
-          >
-            {busy ? "Abrindo…" : "Criar sala"}
-          </button>
+          {!escolhendo && (
+            <>
+              <button
+                type="button"
+                className={isMvp ? "btn btn-brass w-full" : "btn btn-ghost w-full"}
+                onClick={criarSala}
+                disabled={busy || status !== "ready"}
+              >
+                {busy ? "Abrindo…" : "Criar sala"}
+              </button>
+              {isMvp && (
+                <button
+                  type="button"
+                  className="btn btn-ghost w-full mt-2"
+                  onClick={() => setEscolhendo(true)}
+                  disabled={busy || status !== "ready"}
+                >
+                  Jogar sozinho
+                </button>
+              )}
+            </>
+          )}
+
+          {escolhendo && (
+            <div className="card-solo">
+              <p className="card-solo-titulo">Contra que máquina?</p>
+              <div className="card-solo-niveis">
+                {NIVEIS_SOLO.map((n) => (
+                  <button
+                    key={n.chave}
+                    type="button"
+                    className="btn btn-brass btn-mini"
+                    disabled={busy}
+                    onClick={() => void jogarSozinho(n.chave)}
+                  >
+                    {n.nome}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="card-solo-voltar"
+                onClick={() => setEscolhendo(false)}
+                disabled={busy}
+              >
+                voltar
+              </button>
+            </div>
+          )}
           {err && (
             <p className="mt-2 text-xs" style={{ color: "#ffb3a7" }}>
               {err}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Abertura } from "@/components/dossie/abertura";
 import { Mapa, type Peao } from "@/components/dossie/mapa";
 import { Bloco } from "@/components/dossie/bloco";
@@ -56,7 +56,7 @@ export function DossieGame({
   onSair,
 }: {
   match: DossieMatch;
-  assentos: { user_id: string; display_name: string; avatar: unknown }[];
+  assentos: { user_id: string; display_name: string; avatar: unknown; is_bot?: boolean }[];
   onSair: () => void;
 }) {
   const { user } = useSession();
@@ -83,6 +83,83 @@ export function DossieGame({
     st.phase === "refute" &&
     !!st.pending &&
     st.pending.queue[st.pending.at] === meuAssento;
+
+  /* ── a máquina joga, um passo por vez ─────────────────────────
+
+     No Dossiê o respiro tem um papel a mais que nos outros dois jogos: aqui o
+     que acontece na mesa É a informação. Quem palpitou, quem refutou, quem
+     passou — cada uma dessas linhas é uma dedução possível para quem está
+     assistindo. Uma máquina que palpita, ouve três respostas e passa a vez em
+     duzentos milissegundos rouba do humano exatamente aquilo que o jogo é.
+
+     Por isso 1300ms, mais que os 900 da Metrópole: aqui a pausa não é para ver
+     bonito, é para ANOTAR. */
+  const idsBot = useMemo(
+    () => new Set(assentos.filter((a) => a.is_bot).map((a) => a.user_id)),
+    [assentos],
+  );
+  const temMaquina = st.players.some((p) => idsBot.has(p.userId));
+  const maquinaNaVez = st.players.some(
+    (p) => p.seat === st.turnSeat && idsBot.has(p.userId),
+  );
+  const maquinaRefutando =
+    st.phase === "refute" &&
+    !!st.pending &&
+    st.players.some(
+      (p) => p.seat === st.pending!.queue[st.pending!.at] && idsBot.has(p.userId),
+    );
+
+  const tocando = useRef(false);
+  const falhasBot = useRef(0);
+  const [maquinaEmpacou, setMaquinaEmpacou] = useState(false);
+  // o mesmo contador do Domínio, pelo mesmo motivo: sem ele a primeira falha
+  // parava a corrente e a tela nunca oferecia o botão
+  const [tique, setTique] = useState(0);
+
+  const tocarMaquina = useCallback(async () => {
+    if (tocando.current) return;
+    tocando.current = true;
+    try {
+      const { data, error } = await supabaseBrowser().rpc("dossie_tocar", {
+        p_match: match.id,
+      });
+      if (error) {
+        const msg = (error as { message?: string }).message ?? "";
+        if (/MATCH_NOT_RUNNING/.test(msg)) return;
+        falhasBot.current += 1;
+        if (falhasBot.current >= 3) setMaquinaEmpacou(true);
+        else setTique((t) => t + 1);
+        return;
+      }
+      falhasBot.current = 0;
+      /* O RÓTULO DO PASSO NÃO VAI PARA A TELA AQUI, e a Metrópole leva.
+         Lá ele conta o que ninguém mais contaria ("comprou o Ver-o-Peso"); no
+         Dossiê o registro da mesa JÁ conta tudo que é público, linha por linha, e
+         é dele que a pessoa deduz. Repetir seria ruído no lugar onde a atenção
+         mais importa. */
+      void data;
+    } finally {
+      tocando.current = false;
+    }
+  }, [match.id]);
+
+  useEffect(() => {
+    if (!temMaquina || st.phase === "over" || maquinaEmpacou) return;
+    if (!maquinaNaVez && !maquinaRefutando) return;
+    // o setState mora dentro do temporizador
+    const id = setTimeout(() => void tocarMaquina(), 1300);
+    return () => clearTimeout(id);
+  }, [
+    temMaquina,
+    maquinaNaVez,
+    maquinaRefutando,
+    maquinaEmpacou,
+    tocarMaquina,
+    st.phase,
+    st.turnSeat,
+    st.seq,
+    tique,
+  ]);
 
   useEffect(() => {
     let vivo = true;
@@ -188,6 +265,29 @@ export function DossieGame({
             <p className="dossie-acoes">
               {st.actionsLeft} {st.actionsLeft === 1 ? "ação" : "ações"} nesta rodada
             </p>
+          )}
+          {(maquinaNaVez || maquinaRefutando) && !minhaVez && !devoRefutar &&
+            st.phase !== "over" && !maquinaEmpacou && (
+            <p className="dossie-acoes dossie-pensando">
+              <span className="pensa-pontos" aria-hidden>
+                <i />
+                <i />
+                <i />
+              </span>
+              {maquinaRefutando ? "conferindo a mão" : "pensando"}
+            </p>
+          )}
+          {maquinaEmpacou && st.phase !== "over" && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-mini"
+              onClick={() => {
+                falhasBot.current = 0;
+                setMaquinaEmpacou(false);
+              }}
+            >
+              a máquina empacou · tentar de novo
+            </button>
           )}
         </div>
         <button

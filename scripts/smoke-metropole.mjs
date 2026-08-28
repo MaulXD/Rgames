@@ -2451,6 +2451,57 @@ if (abriu.phase === "leilao") {
   }
 }
 
+/* ── 2c. ninguém fica esperando: a faxina JOGA a máquina ───────────────
+
+   No celular, sair do aplicativo JÁ é fechar a aba — e o modo solo é justamente
+   onde isso mais acontece. Se a faxina PULASSE o turno da máquina, ela viraria um
+   jogador morto segurando escritura, e a pessoa voltaria para um jogo pior sem
+   explicação. */
+
+const salaF = (await rpc(P[0].token, "create_room", { p_game: "metropole" })).body;
+await rpc(P[0].token, "adicionar_bot", { p_room: salaF.id, p_nivel: "medio" });
+const iniF = await rpc(P[0].token, "met_start", { p_room: salaF.id });
+const botF = Number(
+  (
+    await db.query(
+      `select mp.seat from match_players mp join profiles p on p.id = mp.user_id
+        where mp.match_id = $1 and p.is_bot limit 1`,
+      [iniF.body.id],
+    )
+  ).rows[0].seat,
+);
+await db.query(
+  `update matches set
+     public_state = jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
+       '{phase}', '\"rolar\"'),
+     turn_deadline = now() - interval '1 second'
+   where id = $1`,
+  [iniF.body.id, botF],
+);
+const antesF = (
+  await db.query(
+    "select jsonb_array_length(coalesce(public_state -> 'log', '[]'::jsonb)) n from matches where id = $1",
+    [iniF.body.id],
+  )
+).rows[0].n;
+await db.query("select public.met_sweep()");
+const depoisF = (
+  await db.query(
+    `select jsonb_array_length(coalesce(public_state -> 'log', '[]'::jsonb)) n,
+            (public_state ->> 'turnSeat')::int t, status
+       from matches where id = $1`,
+    [iniF.body.id],
+  )
+).rows[0];
+ok(
+  Number(depoisF.n) > Number(antesF),
+  `a faxina JOGOU o turno da máquina em vez de pulá-lo (registro foi de ${antesF} para ${depoisF.n} linhas)`,
+);
+ok(
+  Number(depoisF.t) !== botF || depoisF.status !== "running",
+  `e a vez saiu dela (${botF} → ${depoisF.t}): máquina pulada é jogador morto segurando escritura`,
+);
+
 /* ── 3. a máquina responde proposta ───────────────────────────────────────── */
 
 /* Proposta sem resposta é pior que proposta recusada: quem propôs fica

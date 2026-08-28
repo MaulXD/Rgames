@@ -136,6 +136,26 @@ A regra precisa passar em três testes:
 
 As quatro do Dossiê estão em [PRD 03 §4](03-PRD-DOSSIE.md).
 
+> **CONSTRUÍDO** — migrações 0086–0091. As três reviravoltas do Dossiê rodam no servidor.
+>
+> **UMA QUARTA REGRA APARECEU NA CONSTRUÇÃO, e ela é do sistema de temas e não do Dossiê:**
+>
+> 4. **O motor tem de saber executá-la.** O validador carrega a lista das reviravoltas que o
+>    servidor implementa, e um pacote que declare uma quarta é REPROVADO na publicação.
+>
+> Sem essa regra, `twist` seria configuração decorativa: um campo bonito no pacote que o servidor
+> ignora, a tela prometendo o que a partida não entrega, e nada quebrando para acusar. É o mesmo
+> defeito que o `modo` do Domínio teve e que custou uma migração para consertar.
+>
+> Ela tem um custo real e vale a pena pagar: um tema da comunidade NÃO pode inventar uma regra
+> nova. Reviravolta é regra, e regra é motor — é a única parte de um pacote de tema que não é
+> conteúdo. Quando uma quarta reviravolta fizer sentido, ela entra como código, e aí todo pacote
+> pode usá-la.
+>
+> **E a reviravolta é congelada no início da partida**, não lida a cada rodada: senão o anfitrião
+> desliga a regra no meio, quando ela começa a incomodar — e regra que se desliga quando incomoda
+> é sugestão.
+
 ---
 
 ## 5. Validador — roda no CI, reprova o build
@@ -295,7 +315,8 @@ Um por lançamento, começando pelo padrão.
 - [ ] O lobby lista os temas carregando ≤ 60 KB no total
 - [ ] Modo Surpresa: o tema não aparece em nenhuma resposta de rede antes do início da partida
 - [ ] Rodízio não repete tema até esgotar
-- [ ] Reviravolta desligada nas Regras da casa → o tema roda como jogo limpo
+- [x] Reviravolta desligada nas Regras da casa → o tema roda como jogo limpo
+- [x] O validador reprova um pacote que declare uma reviravolta que o motor não executa
 - [ ] Trocar de tema entre revanches não exige recarregar a página
 - [ ] Cada tema passa no teste de [Direção de Arte §1](01-DIRECAO-DE-ARTE.md): *poderia ser a
       fotografia de um jogo real?*

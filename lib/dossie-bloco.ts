@@ -27,11 +27,43 @@ export type Nivel = "manual" | "assistido" | "dedutivo";
 
 export type Pad = { marks: Marcas; assist: Nivel };
 
+/**
+ * Uma linha do registro público da partida.
+ *
+ * O tipo mora AQUI e não no componente, e é de propósito: o bloco de dedução lê
+ * o log para apurar fatos, e a tela lê o mesmo log para narrar. Dois tipos com
+ * o mesmo nome em dois arquivos foi o que aconteceu quando as reviravoltas
+ * chegaram — a tela ganhou cinco tipos novos, o bloco não, e o TypeScript
+ * reprovou. Isso foi sorte: se os dois tivessem `string`, o bloco simplesmente
+ * ignoraria o Registro da Estação em silêncio.
+ */
 export type LinhaLog = {
   seq: number;
-  type: "move" | "suggest" | "refute" | "pass" | "no_refute" | "accuse";
+  type:
+    | "move"
+    | "suggest"
+    | "refute"
+    | "pass"
+    | "no_refute"
+    | "accuse"
+    /* as reviravoltas falam no log como qualquer outra coisa que acontece na
+       mesa — quem chegou atrasado lê o que perdeu na mesma lista */
+    | "apagao"
+    | "luz"
+    | "vento"
+    | "tempestade"
+    | "registro";
   seat?: number | null;
+  room?: string;
+  /** os dois lugares que a tempestade fecha, ou vai fechar */
+  rooms?: string[];
+  /** a carta que o Registro da Estação publicou */
+  card?: string;
+  /** a refutação aconteceu no escuro */
+  anon?: boolean;
   guess?: string[];
+  right?: boolean;
+  auto?: boolean;
 };
 
 export type Vista = { card: string; from: number | null; seq: number };
@@ -91,6 +123,15 @@ export function apura(
   let palpite: string[] | null = null;
 
   for (const l of ordenado) {
+    /* O REGISTRO DA ESTAÇÃO é anúncio, não dedução: NÚBIA disse que aquela carta
+       não está no envelope, e pronto. Não diz de quem é — dizer isso entregaria a
+       mão de alguém, e a reviravolta promete um fato sobre o ENVELOPE.
+
+       Por isso vale até no nível assistido, que não encadeia nada. */
+    if (l.type === "registro") {
+      if (l.card) poe(fatos, l.card, ENVELOPE, "x");
+      continue;
+    }
     if (l.type === "suggest") {
       palpite = l.guess ?? null;
       continue;

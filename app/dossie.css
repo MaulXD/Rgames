@@ -114,6 +114,41 @@
   color: #e2d6bf;
 }
 
+/* A REGRA DO CASO, no cartaz.
+
+   Uma reviravolta que a pessoa descobre quando ela acontece é armadilha, não
+   regra: "a luz vai cair uma vez entre a quarta e a oitava rodada" muda como se
+   joga desde a PRIMEIRA. Por isso ela é dita aqui, e não quando cai.
+
+   A moldura a separa da ficha da vítima: uma é história, a outra é mecânica, e
+   ler as duas como um parágrafo só é ler mal as duas. */
+.abertura-twist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  max-width: 30ch;
+  margin: 1.1rem auto 0;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid rgb(226 214 191 / 0.28);
+  border-radius: var(--r-md);
+  background: rgb(0 0 0 / 0.35);
+  text-align: center;
+}
+.abertura-twist strong {
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--vivo-amarelo);
+}
+.abertura-twist span {
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: #cbbfa8;
+}
+
 .abertura-beat {
   position: relative;
   max-width: 34ch;
@@ -445,4 +480,82 @@
   margin-top: 0.7rem;
   font-size: 0.74rem;
   line-height: 1.4;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AS REVIRAVOLTAS
+
+   Cada caso carrega uma regra própria (PRD 03 §6.7), e as três precisam de
+   duas coisas na tela: uma faixa que avisa no instante em que muda o que você
+   pode fazer, e — no caso da tempestade — a marca no próprio lugar.
+
+   A faixa NÃO é um painel permanente. Ela só existe enquanto está acontecendo
+   alguma coisa; uma faixa fixa dizendo "este caso tem Apagão" viraria móvel da
+   tela em duas rodadas, e ninguém a leria quando a luz caísse de verdade.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.dossie-reviravolta {
+  margin: 0 0 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--r-md);
+  border-left: 4px solid currentColor;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.35;
+  background: rgb(255 255 255 / 0.04);
+}
+
+/* o apagão: a cor é a ausência dela */
+.dossie-reviravolta[data-tipo="apagao"] {
+  color: #b7a8d6;
+  background: rgb(20 16 24 / 0.55);
+}
+
+/* a tempestade já fechou */
+.dossie-reviravolta[data-tipo="tempestade"] {
+  color: #e0b26a;
+  background: rgb(60 42 18 / 0.4);
+}
+
+/* e o aviso de que vai fechar — mais claro, porque ainda dá para agir */
+.dossie-reviravolta[data-tipo="vento"] {
+  color: #d8c9a4;
+  background: rgb(52 46 30 / 0.35);
+}
+
+/* O lugar fechado. Ele continua legível — a pessoa precisa ver quem ficou
+   preso lá dentro — mas para de parecer clicável, que é o ponto. */
+.lugar[data-trancado="true"] {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      #2a2114 0 6px,
+      #1b1710 6px 12px
+    );
+  color: #8d7d5e;
+  border-color: #4a3d24;
+}
+.lugar[data-vai-fechar="true"] {
+  border-color: #7a6534;
+  border-style: dashed;
+}
+
+.lugar-vento {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.44rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #e0b26a;
+}
+
+/* Nada disso pisca para quem pediu menos movimento. */
+@media (prefers-reduced-motion: reduce) {
+  .lugar[data-pode="true"] {
+    animation: none;
+  }
 }

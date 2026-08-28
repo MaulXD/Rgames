@@ -209,7 +209,24 @@ export function HouseRules({
    comportamento parece generosidade e é confusão.
    ══════════════════════════════════════════════════════════════════════════ */
 
-type CasoDisponivel = { id: string; name: string; era: string; tagline: string };
+/**
+ * O que o lobby precisa saber de um caso publicado.
+ *
+ * A reviravolta vem como DUAS colunas derivadas do pacote, e não como o pacote
+ * inteiro: o `data` de um tema carrega nove lugares, seis suspeitos, seis
+ * objetos, a narração e o grafo. Puxar tudo isso para escrever duas linhas na
+ * tela do lobby seria trocar dezenas de kilobytes por um nome e uma frase.
+ */
+type CasoDisponivel = {
+  id: string;
+  name: string;
+  era: string;
+  tagline: string;
+  /** o nome da reviravolta deste caso, ou nulo se ele joga limpo */
+  twist: string | null;
+  /** e a regra dela numa frase */
+  rule: string | null;
+};
 
 function RegrasDossie({
   room,
@@ -226,13 +243,17 @@ function RegrasDossie({
   const [casos, setCasos] = useState<CasoDisponivel[]>([]);
 
   const tema = (room.settings?.tema as string) ?? "surpresa";
+  /* Ligada por padrão, e o `??` é o que faz isso valer para as salas criadas
+     antes desta regra existir. O servidor faz o mesmo `coalesce`; se um lado
+     mudar, a tela passa a prometer o que a partida não entrega. */
+  const reviravolta = (room.settings?.reviravolta as boolean | undefined) ?? true;
 
   useEffect(() => {
     let vivo = true;
     async function puxa() {
       const { data } = await supabaseBrowser()
         .from("game_themes")
-        .select("id, name, era, tagline")
+        .select("id, name, era, tagline, twist:data->twist->>name, rule:data->twist->>rule")
         .eq("game_key", "dossie")
         .order("era");
       if (vivo && data) setCasos(data as unknown as CasoDisponivel[]);
@@ -243,12 +264,12 @@ function RegrasDossie({
     };
   }, []);
 
-  async function salvar(id: string) {
+  async function salvar(mudanca: Record<string, unknown>) {
     setBusy(true);
     setErro(null);
     const { data, error } = await supabaseBrowser().rpc("set_room_settings", {
       p_room: room.id,
-      p_settings: { tema: id },
+      p_settings: mudanca,
     });
     setBusy(false);
     if (error) {
@@ -303,7 +324,7 @@ function RegrasDossie({
                 nome="Caso surpresa"
                 nota="O servidor sorteia na hora de começar. Ninguém na mesa sabe qual mundo vai abrir — nem o anfitrião."
                 previa={<span className="regra-tempo">sorteio</span>}
-                onClick={() => void salvar("surpresa")}
+                onClick={() => void salvar({ tema: "surpresa" })}
               />
               {casos.map((c) => (
                 <Opcao
@@ -311,11 +332,44 @@ function RegrasDossie({
                   ativo={tema === c.id}
                   nome={`${c.name} · ${c.era}`}
                   nota={c.tagline}
-                  onClick={() => void salvar(c.id)}
+                  previa={
+                    c.twist ? <span className="regra-tempo">{c.twist}</span> : undefined
+                  }
+                  onClick={() => void salvar({ tema: c.id })}
                 />
               ))}
             </div>
           </fieldset>
+
+          {/* A REVIRAVOLTA.
+
+              Ligada por padrão porque é a mecânica que o sistema de temas
+              entrega: um caso sem a regra dele é o Solar das Acácias com outra
+              roupa. Mas o PRD 03 §3.5 promete que quem quer o jogo limpo joga o
+              jogo limpo, em qualquer caso — e é este par de botões.
+
+              A nota diz o que a regra DESTE caso faz, não "liga a reviravolta".
+              O Solar das Acácias não tem nenhuma, e aí o bloco some: oferecer
+              desligar o que não existe é ruído. */}
+          {escolhido?.twist && (
+            <fieldset disabled={!isHost || busy} style={{ border: 0, padding: 0, margin: 0 }}>
+              <legend className="eyebrow mb-3">{escolhido.twist}</legend>
+              <div className="flex flex-col gap-2">
+                <Opcao
+                  ativo={reviravolta}
+                  nome="Com a reviravolta"
+                  nota={escolhido.rule ?? "A regra própria deste caso."}
+                  onClick={() => void salvar({ reviravolta: true })}
+                />
+                <Opcao
+                  ativo={!reviravolta}
+                  nome="Jogo limpo"
+                  nota="O mesmo mundo, sem a regra própria. É o Detetive puro, no cenário deste caso."
+                  onClick={() => void salvar({ reviravolta: false })}
+                />
+              </div>
+            </fieldset>
+          )}
 
           {casos.length === 0 && (
             <p className="text-sm dim">Carregando os casos publicados…</p>

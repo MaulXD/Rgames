@@ -8,12 +8,14 @@
  * Não depende de "Anonymous sign-ins" estar ligado — por isso dá para validar
  * o servidor antes de o cliente conseguir entrar.
  */
+import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
 
-config({ path: join(dirname(fileURLToPath(import.meta.url)), "..", ".env.local"), quiet: true });
+const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
+config({ path: join(raiz, ".env.local"), quiet: true });
 
 const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -352,6 +354,55 @@ ok(
     : `\`jsonb_set\` de dois níveis sobre chave que pode não existir: ` +
       [...suspeitas].map(([k, f]) => `${k} em ${f}`).join(", ") +
       " — use `jsonb_poe`, ou garanta a chave no estado inicial e entre na lista",
+);
+
+/* E O MESMO NAS SUÍTES, que é onde a armadilha se escondeu da QUINTA vez.
+
+   O teste do Registro da Estação riscava uma carta no caderno de todo mundo com
+   `jsonb_set(data, '{dedu,fora}', …)`. O `dedu` ainda não existia — a partida
+   tinha acabado de começar —, o update não riscou nada, e o teste REPROVOU uma
+   função que estava certa.
+
+   Repare na direção: das cinco vezes, quatro a armadilha aprovou código errado e
+   uma reprovou código certo. As duas direções fazem a mesma coisa com quem lê a
+   saída — ensinam a não acreditar nela.
+
+   Uma armadilha que a auditoria pega no servidor e não pega no teste é uma
+   auditoria pela metade, porque o teste é justamente o lugar onde ninguém vai
+   procurar. */
+
+const suitesComSql = [
+  "smoke.mjs", "smoke-letreiro.mjs", "smoke-dossie.mjs",
+  "smoke-dominio.mjs", "smoke-metropole.mjs",
+];
+const nosTestes = new Map();
+for (const arq of suitesComSql) {
+  /* Os comentários saem antes. A primeira versão desta varredura acusou a
+     PRÓPRIA DOCUMENtaÇÃO dela: o exemplo `jsonb_set('{"a":1}', array['novo',…])`
+     escrito logo acima, e a explicação do defeito do `dedu`. Auditoria que
+     reporta o texto que a explica é auditoria que se aprende a ignorar — a mesma
+     lição do `npm run css`, que teve de tirar os comentários do CSS pelo mesmo
+     motivo. */
+  const texto = readFileSync(join(raiz, "scripts", arq), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/^\s*\/\/.*$/gm, " ");
+  for (const m of texto.matchAll(/jsonb_set\s*\(\s*[^,]+,\s*'\{\s*([a-zA-Z_]+)\s*,/g)) {
+    if (GARANTIDAS.has(m[1])) continue;
+    if (!nosTestes.has(m[1])) nosTestes.set(m[1], arq);
+  }
+  for (const m of texto.matchAll(/jsonb_set\s*\(\s*[^,]+,\s*array\[\s*'([a-zA-Z_]+)'\s*,/g)) {
+    if (GARANTIDAS.has(m[1])) continue;
+    if (!nosTestes.has(m[1])) nosTestes.set(m[1], arq);
+  }
+}
+
+ok(
+  nosTestes.size === 0,
+  nosTestes.size === 0
+    ? "e nenhuma suíte escreve dois níveis sobre chave que pode não existir"
+    : `SQL de teste com a mesma armadilha: ` +
+      [...nosTestes].map(([k, f]) => `${k} em ${f}`).join(", ") +
+      " — um teste que não escreve o que diz escrever mede outra coisa",
 );
 
 const expostas = (

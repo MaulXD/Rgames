@@ -14,7 +14,16 @@ import type { Caso } from "@/lib/dossie";
  * Pulável a qualquer momento — na segunda partida ninguém quer ver de novo,
  * e obrigar a ver é o jeito mais rápido de fazer alguém odiar a abertura.
  */
-export function Abertura({ caso, onFim }: { caso: Caso; onFim: () => void }) {
+export function Abertura({
+  caso,
+  reviravolta,
+  onFim,
+}: {
+  caso: Caso;
+  /** true quando a regra própria do caso está valendo nesta partida */
+  reviravolta?: boolean;
+  onFim: () => void;
+}) {
   const beats = caso.narracao ?? [caso.tagline];
   const [ato, setAto] = useState(-1); // -1 = cartaz do título
   const fechado = useRef(false);
@@ -59,6 +68,22 @@ export function Abertura({ caso, onFim }: { caso: Caso; onFim: () => void }) {
             <strong>{caso.victim.name}</strong>
             <span> · {caso.victim.role}</span>
           </p>
+
+          {/* A REGRA DO CASO, DITA ANTES DA PRIMEIRA JOGADA.
+
+              Uma reviravolta que a pessoa descobre quando ela acontece é uma
+              armadilha, não uma regra. "A luz vai cair uma vez entre a quarta e a
+              oitava rodada" muda como se joga desde a primeira — quem sabe
+              guarda uma pergunta para o escuro.
+
+              Só aparece quando a regra está VALENDO: a mesa que desligou nas
+              Regras da Casa não precisa ler sobre o que não vai acontecer. */}
+          {reviravolta && caso.twist && (
+            <p className="abertura-twist">
+              <strong>{caso.twist.name}</strong>
+              <span>{caso.twist.rule}</span>
+            </p>
+          )}
         </div>
       ) : (
         <p className="abertura-beat" key={ato}>

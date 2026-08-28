@@ -11,13 +11,23 @@
  * A prova disso é este arquivo: os três temas abaixo entram sem uma linha de
  * SQL nova e sem uma linha de React nova.
  *
- * O QUE ESTE SCRIPT NÃO FAZ, e é de propósito: nenhum dos três traz a
- * REVIRAVOLTA que o PRD 03 especifica para ele (Apagão, Tempestade de Areia,
- * Registro da Estação). Reviravolta é regra, e regra é motor. Declarar um campo
- * `twist` no pacote que o servidor ignora seria configuração decorativa — o
- * mesmo defeito que o `modo` do Domínio tinha, e que já custou uma migração
- * para consertar. Os três temas jogam com as regras base, que é um jogo
- * completo, e as reviravoltas entram quando o motor souber executá-las.
+ * A REVIRAVOLTA É A ÚNICA PARTE DE UM PACOTE QUE NÃO É CONTEÚDO.
+ *
+ * Por três temas seguidos este script publicou os casos SEM ela, e o comentário
+ * que ficava aqui explicava por quê: reviravolta é regra, e regra é motor.
+ * Declarar um campo `twist` que o servidor ignora seria configuração decorativa
+ * — a tela prometendo o que a partida não entrega, sem nada quebrar para
+ * acusar. É o mesmo defeito que o `modo` do Domínio teve e que custou uma
+ * migração para consertar.
+ *
+ * Agora o motor sabe executar as três (migrações 0086–0092), então elas entram.
+ * E entra com elas a regra que faltava: `REVIRAVOLTAS_DO_MOTOR` é o espelho do
+ * `case` de `dossie_vira_rodada`, e um pacote que declare uma quarta é REPROVADO
+ * na publicação.
+ *
+ * Isso tem um custo real e vale a pena pagar: um tema da comunidade NÃO pode
+ * inventar uma regra nova. Quando uma quarta reviravolta fizer sentido, ela
+ * entra como código primeiro — e aí todo pacote pode usá-la.
  *
  * Uso: npm run dossie
  */
@@ -110,6 +120,20 @@ const AURORA = {
     ["camarim", "estacionamento"],
     ["cabine", "deposito"],
   ],
+  /* A REVIRAVOLTA — Apagão (PRD 03 §3, §6.7).
+
+     Uma vez por partida, numa rodada sorteada entre a 4 e a 8, a luz cai. As
+     refutações daquela rodada são anônimas: você vê a carta que te mostraram,
+     não vê quem mostrou, e o log diz só que alguém desmentiu.
+
+     Por que é uma boa regra: você NÃO perde a informação que decide o jogo —
+     aquela carta não está no envelope. Perde só a atribuição, que é a metade
+     lenta da dedução. Choque sem prejuízo, e uma rodada em que a mesa grita. */
+  twist: {
+    id: "apagao",
+    name: "Apagão",
+    rule: "Numa rodada entre a quarta e a oitava, as refutações ficam anônimas.",
+  },
   narracao: {
     0: "Três da manhã de sábado. A Aurora tinha acabado o último set e ninguém tinha ido embora.",
     1: "Nelson Braga era dono da casa há onze anos. Tinha começado com uma vitrola emprestada e terminado com uma fila na calçada.",
@@ -190,6 +214,24 @@ const RAS_ZAMIR = {
     ["camara", "mirante"],
     ["estabulo", "cisterna"],
   ],
+  /* A REVIRAVOLTA — Tempestade de Areia (PRD 03 §3, §6.7).
+
+     A cada três rodadas o vento vira. Uma rodada ANTES, o jogo avisa quais dois
+     lugares vão fechar — e é o aviso que faz a regra ser jogável em vez de
+     cruel: dá para sair a tempo, ou entrar de propósito.
+
+     Quem fica preso continua podendo palpitar. É o que transforma um lugar
+     fechado em posição, não em punição: ninguém entra para te desmentir de
+     perto, e você segue perguntando.
+
+     O servidor só sorteia pares que mantêm o mapa conexo. Fechar o Poço e a
+     Conservação ao mesmo tempo isolaria a Câmara Selada de todo mundo — e um
+     lugar inalcançável numa rodada é uma partida que não termina. */
+  twist: {
+    id: "tempestade",
+    name: "Tempestade de Areia",
+    rule: "A cada três rodadas, dois lugares fecham. O aviso vem uma rodada antes.",
+  },
   narracao: {
     0: "Quatorze de março, quatro da manhã. O vento tinha parado, o que no Ras Zamir é sempre um aviso.",
     1: "Sir Alistair Crewe pagou três temporadas de escavação sem descer ao poço uma única vez.",
@@ -263,6 +305,23 @@ const MERIDIANO = {
     ["arquivo", "vacuo"],
     ["hidroponia", "enfermaria"],
   ],
+  /* A REVIRAVOLTA — Registro da Estação (PRD 03 §3, §6.7).
+
+     A cada quatro rodadas, NÚBIA divulga publicamente um fato VERDADEIRO: uma
+     carta que comprovadamente não está no envelope.
+
+     A escolha não é sorteio. Entre as cartas fora do envelope, o servidor
+     publica aquela que o MAIOR NÚMERO de jogadores ainda não riscou — então o
+     fato sempre vale alguma coisa para a maioria da mesa, e nunca é a carta que
+     todo mundo já sabia.
+
+     Todo mundo recebe ao mesmo tempo, o que vira uma corrida: quem já tinha
+     mais dados converte o fato em conclusão primeiro. */
+  twist: {
+    id: "registro",
+    name: "Registro da Estação",
+    rule: "A cada quatro rodadas, NÚBIA publica uma carta que não está no envelope.",
+  },
   narracao: {
     0: "Ciclo 8.412. A estação estava em turno de sono e o zumbido do suporte de vida era o único som.",
     1: "A comandante Ilse Navarro estava no Meridiano-9 há quatro anos, e tinha assinado sozinha os quatro relatórios anuais.",
@@ -303,6 +362,9 @@ function ok(cond, msg) {
 const CORES = ["carmim", "terracota", "ocre", "oliva", "jade", "grafite", "prussia", "vinho"];
 const PISOS = ["madeira", "tapete", "ladrilho"];
 const CLIMAS = ["misterio", "brincadeira", "neon", "areia", "orbita"];
+
+/** As reviravoltas que o servidor sabe executar — espelho de `dossie_vira_rodada`. */
+const REVIRAVOLTAS_DO_MOTOR = ["apagao", "tempestade", "registro"];
 
 /** Distância entre todos os pares, por BFS. Devolve o diâmetro e os becos. */
 function topologia(adj, passagens) {
@@ -440,6 +502,27 @@ function valida(t) {
     typeof t.tagline === "string" && t.tagline.length > 30,
     "e a linha de chamada existe — é o que aparece no lobby",
   );
+
+  /* A REVIRAVOLTA TEM DE SER UMA QUE O MOTOR SABE EXECUTAR.
+
+     Esta é a verificação que impede o defeito que este script passou três temas
+     evitando: declarar um campo `twist` que o servidor ignora. Configuração que
+     não muda nada é pior que configuração nenhuma — ela promete na tela o que a
+     partida não entrega, e ninguém descobre porque nada quebra.
+
+     A lista aqui é o espelho do `case` de `dossie_vira_rodada` (migração 0087).
+     Se alguém inventar uma reviravolta num pacote da comunidade, ela reprova
+     AQUI, na publicação, e não em silêncio na mesa. */
+  if (t.twist) {
+    ok(
+      REVIRAVOLTAS_DO_MOTOR.includes(t.twist.id),
+      `a reviravolta "${t.twist.id}" é uma que o motor executa`,
+    );
+    ok(
+      !!t.twist.name && typeof t.twist.rule === "string" && t.twist.rule.length > 20,
+      "e ela tem nome e uma regra escrita numa frase — é o que a mesa lê antes de começar",
+    );
+  }
 }
 
 console.log("\nDossiê — pacotes de tema\n");

@@ -45,6 +45,15 @@ export type Caso = {
   encerramento?: string;
   clima?: Clima;
   copy?: Record<string, string>;
+  /**
+   * A regra própria deste caso, ou ausente quando ele joga limpo.
+   *
+   * Vem do pacote e não do estado da partida: aqui é o que o caso É, e não o que
+   * a reviravolta está fazendo agora — uma mesa pode ter desligado a regra, e o
+   * caso continua sendo o caso do Apagão. Quem quer saber se ela está valendo
+   * nesta partida olha `public_state.twist`.
+   */
+  twist?: { id: string; name: string; rule: string };
 };
 
 export async function carregaCaso(id: string): Promise<Caso | null> {

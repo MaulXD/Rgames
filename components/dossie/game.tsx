@@ -8,6 +8,7 @@ import type { Pad } from "@/lib/dossie-bloco";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSession } from "@/components/session";
 import { carregaCaso, nomeDaCarta, type Caso } from "@/lib/dossie";
+import type { LinhaLog } from "@/lib/dossie-bloco";
 import * as sfx from "@/lib/sfx";
 
 export type DossieState = {
@@ -22,20 +23,25 @@ export type DossieState = {
   accused: number[];
   pending: { bySeat: number; guess: [string, string, string]; queue: number[]; at: number } | null;
   seq: number;
+  round?: number;
   log: LinhaLog[];
   winner?: number | null;
   solution?: { suspect: string; weapon: string; room: string };
+  /**
+   * A reviravolta do caso, ou nulo quando ele joga limpo — o Solar das Acácias
+   * e toda mesa que desligou a regra. Congelada no início da partida.
+   */
+  twist?: {
+    id: "apagao" | "tempestade" | "registro";
+    round?: number;
+    fired?: boolean;
+    active?: boolean;
+    fechados?: string[];
+    aviso?: string[];
+    publicados?: string[];
+  } | null;
 };
 
-type LinhaLog = {
-  seq: number;
-  type: "move" | "suggest" | "refute" | "pass" | "no_refute" | "accuse";
-  seat?: number | null;
-  room?: string;
-  guess?: string[];
-  right?: boolean;
-  auto?: boolean;
-};
 
 export type DossieMatch = {
   id: string;
@@ -271,7 +277,9 @@ export function DossieGame({
   if (!caso) return <p className="eyebrow py-16">Abrindo o dossiê…</p>;
 
   if (!abriu && st.phase !== "over") {
-    return <Abertura caso={caso} onFim={() => setAbriu(true)} />;
+    return (
+      <Abertura caso={caso} reviravolta={!!st.twist} onFim={() => setAbriu(true)} />
+    );
   }
 
   const peoes: Peao[] = st.players.map((p) => {
@@ -289,6 +297,46 @@ export function DossieGame({
   const euEstouEm = meuAssento !== null ? st.positions[String(meuAssento)] : undefined;
   const daVez = peoes.find((p) => p.seat === st.turnSeat);
   const focoDoPalpite = st.pending ? st.pending.guess[2] : null;
+
+  /* ── O QUE A REVIRAVOLTA ESTÁ FAZENDO AGORA ─────────────────────────
+
+     Nulo quando não há nada acontecendo, que é a maior parte do tempo — uma
+     faixa permanente dizendo "este caso tem Apagão" viraria móvel da tela em
+     duas rodadas, e ninguém leria quando a luz caísse de verdade.
+
+     O Registro não entra aqui: ele é um fato que acontece UMA vez e vale para
+     sempre, e o lugar de um fato desses é o registro da mesa e o bloco de
+     dedução, onde ele já vira uma carta riscada. Faixa é para o que muda o que
+     você pode FAZER neste turno. */
+  const aviso = ((): { tipo: string; texto: string } | null => {
+    const t = st.twist;
+    if (!t || !caso) return null;
+    if (t.id === "apagao" && t.active) {
+      return {
+        tipo: "apagao",
+        texto:
+          "A luz caiu. Nesta rodada você vê a carta que te mostrarem, mas não de quem é.",
+      };
+    }
+    const nomes = (ids?: string[]) =>
+      (ids ?? []).map((r) => nomeDaCarta(caso, r)).join(" e ");
+    if (t.fechados?.length) {
+      const preso = !!euEstouEm && t.fechados.includes(euEstouEm);
+      return {
+        tipo: "tempestade",
+        texto: preso
+          ? `A areia fechou ${nomes(t.fechados)}. Você está preso — mas continua podendo palpitar.`
+          : `A areia fechou ${nomes(t.fechados)}. Ninguém entra, ninguém sai.`,
+      };
+    }
+    if (t.aviso?.length) {
+      return {
+        tipo: "vento",
+        texto: `O vento está virando: ${nomes(t.aviso)} fecham na próxima rodada.`,
+      };
+    }
+    return null;
+  })();
 
   return (
     <div className="dossie">
@@ -387,6 +435,21 @@ export function DossieGame({
         </div>
       )}
 
+      {/* ── A REVIRAVOLTA DO CASO, quando ela está acontecendo ────────────
+
+           Uma faixa só, acima do mapa, e só quando há o que dizer. A regra não
+           precisa de painel: precisa de aviso no instante em que muda o que
+           você pode fazer.
+
+           O registro da mesa conta a história completa logo abaixo; esta faixa
+           existe porque quem está no meio de um turno não lê o log, olha o
+           tabuleiro. */}
+      {aviso && (
+        <p className="dossie-reviravolta" data-tipo={aviso.tipo}>
+          {aviso.texto}
+        </p>
+      )}
+
       <Mapa
         caso={caso}
         posicoes={st.positions}
@@ -395,6 +458,8 @@ export function DossieGame({
         euEstouEm={euEstouEm}
         destaque={focoDoPalpite}
         alcancaveis={minhaVez && st.actionsLeft > 0 && !souFantasma}
+        fechados={st.twist?.fechados}
+        aviso={st.twist?.aviso}
         onEscolher={(lugar) =>
           void chama("dossie_move", { p_match: match.id, p_room: lugar })
         }
@@ -621,7 +686,23 @@ function narra(l: LinhaLog, caso: Caso, peoes: Peao[]): string {
     case "suggest":
       return `${quem(l.seat)} ${caso.copy?.suggest ?? "acusou"} ${nomeDaCarta(caso, l.guess?.[0] ?? "")}, com ${nomeDaCarta(caso, l.guess?.[1] ?? "")}, ${nomeDaCarta(caso, l.guess?.[2] ?? "")}.`;
     case "refute":
-      return `${quem(l.seat)} mostrou uma carta.${l.auto ? " (tempo esgotado)" : ""}`;
+      /* No apagão o servidor manda `seat: null`, e `quem()` já responde
+         "Alguém" — a frase sai certa sem um ramo próprio. O `anon` existe para
+         a frase poder DIZER que foi no escuro, que é diferente de uma máquina
+         anônima por acaso. */
+      return l.anon
+        ? "Alguém desmentiu, no escuro."
+        : `${quem(l.seat)} mostrou uma carta.${l.auto ? " (tempo esgotado)" : ""}`;
+    case "apagao":
+      return "A luz caiu. Nesta rodada, ninguém vai saber quem desmentiu.";
+    case "luz":
+      return "A luz voltou.";
+    case "vento":
+      return `O vento está virando. ${(l.rooms ?? []).map((r) => nomeDaCarta(caso, r)).join(" e ")} fecham na próxima rodada.`;
+    case "tempestade":
+      return `A areia fechou ${(l.rooms ?? []).map((r) => nomeDaCarta(caso, r)).join(" e ")}. Ninguém entra, ninguém sai.`;
+    case "registro":
+      return `Registro da estação: ${nomeDaCarta(caso, l.card ?? "")} não está no envelope.`;
     case "pass":
       return `${quem(l.seat)} não pôde refutar.`;
     case "no_refute":

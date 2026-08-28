@@ -36,9 +36,10 @@ fecha o navegador e volta, o host sai e outro assume — tudo sem recarregar a p
 ## Onde o projeto está de verdade
 
 Isto não é estimativa — é o que existe e roda, medido no dia em que esta seção foi escrita.
-Números vêm de contar, não de lembrar: **72 migrações** aplicadas, 25.800 linhas de SQL,
-32 componentes, e **666 verificações** em cinco suítes de fumaça que rodam contra o
-Supabase de verdade.
+Números vêm de contar, não de lembrar: **91 migrações** aplicadas, 30.858 linhas de SQL,
+32 componentes, e **760 verificações** em cinco suítes de fumaça que rodam contra o
+Supabase de verdade (38 na plataforma, 129 no Letreiro, 128 no Dossiê, 180 no Domínio,
+285 na Metrópole).
 
 ### A plataforma
 
@@ -65,17 +66,19 @@ gente e terminar uma partida.
 
 | | Motor | Interface | Verificações | O que falta |
 |---|---|---|---|---|
-| **Letreiro** | ✅ | ✅ | 59 | desafio diário, estatísticas, as 4 bandejas temáticas |
-| **Dossiê** | ✅ | ✅ | 49 | os outros 3 temas (Neon 87, Escavação, Órbita) |
-| **Domínio** | ✅ | ✅ | 129 | trégua com preço, modo Relâmpago (falta o mapa de 24) |
-| **Metrópole** | ✅ | ✅ | 247 | peão andando casa a casa, animação de construção |
+| **Letreiro** | ✅ | ✅ | 129 | estatísticas, as 4 bandejas temáticas |
+| **Dossiê** | ✅ | ✅ | 128 | cartas de pista (§6.8) |
+| **Domínio** | ✅ | ✅ | 180 | modo Relâmpago (falta o mapa de 24) |
+| **Metrópole** | ✅ | ✅ | 285 | animação de construção |
 
 **Letreiro** — dicionário de 248.632 palavras com frequência de fala, bandeja de 4×4 ou 5×5,
 1.801 grades aprovadas por solver, pontuação por letra, revelação em três atos que mostra só
 palavra que gente usa.
 
 **Dossiê** — caso narrado com chuva animada, planta baixa, refutação, caderno de dedução com
-três níveis de ajuda, e o desfecho.
+três níveis de ajuda, e o desfecho. Quatro casos publicados, e três deles com a **reviravolta**
+que o PRD 03 §6.7 pede: o Apagão da Boate Aurora, a Tempestade de Areia do Ras Zamir e o
+Registro da Estação do Meridiano-9. Desligáveis nas Regras da Casa, para quem quer o jogo limpo.
 
 **Domínio** — Vantara com 42 territórios, combate com a matemática provada por enumeração de
 força bruta, ciclo de turno completo, e o modo **Campanha** (12 rodadas, placar, ninguém é
@@ -123,8 +126,12 @@ Ela continua sendo a maior lacuna — mas encolheu um pouco: `npm run css` agora
 toda classe usada num componente tem estilo, que era o jeito mais fácil de um pedaço sair
 torto sem nada acusar. Achou dois de primeira, e um deles no botão de ENTRAR NUMA SALA.
 
-Depois disso, em ordem de valor: os temas que faltam (o sistema existe e está provado —
-cada tema novo é conteúdo, não engenharia) e a trégua com preço do Domínio.
+E `npm run css` ganhou a segunda metade: todo `<input>` tem nome acessível. Achou cinco campos
+de cláusula da Metrópole cercados de `<span>` que explicam tudo para quem enxerga e nada para
+quem não enxerga.
+
+Depois disso, em ordem de valor: as **cartas de pista** do Dossiê (§6.8), as estatísticas e as
+quatro bandejas temáticas do Letreiro, e a animação de construção da Metrópole.
 
 ### E o que entrou depois desta seção ser escrita
 
@@ -137,7 +144,9 @@ cada tema novo é conteúdo, não engenharia) e a trégua com preço do Domínio
 | O relógio não corre contra quem está sozinho | ✅ |
 | Mesa abandonada deixa de ser varrida | ✅ 27 partidas rodavam para uma plateia vazia até a sala expirar |
 | Trégua com preço do Domínio (§6.6 do PRD) | ✅ o servidor DEIXA romper, e cobra: dois exércitos e a marca de Traidor |
-| Auditoria do `jsonb_set` com pai ausente | ✅ o mesmo defeito apareceu **quatro vezes**, cada uma ao lado de um comentário meu explicando a armadilha |
+| Auditoria do `jsonb_set` com pai ausente | ✅ o mesmo defeito apareceu **cinco vezes**, cada uma ao lado de um comentário meu explicando a armadilha — a quinta foi dentro de um TESTE, e a auditoria agora varre as suítes também |
+| As três reviravoltas do Dossiê (§6.7 do PRD) | ✅ Apagão, Tempestade de Areia e Registro da Estação, com 23 verificações — a da tempestade confere a conexidade por enumeração COMPLETA dos 144 pares |
+| Todo campo de digitação tem nome acessível | ✅ `npm run css` prova, e achou cinco |
 
 ---
 

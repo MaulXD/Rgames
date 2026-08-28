@@ -32,6 +32,8 @@ export function Mapa({
   euEstouEm,
   destaque,
   alcancaveis,
+  fechados,
+  aviso,
   onEscolher,
 }: {
   caso: Caso;
@@ -45,6 +47,10 @@ export function Mapa({
   destaque?: string | null;
   /** true quando é a minha vez e eu tenho ação para gastar */
   alcancaveis?: boolean;
+  /** lugares que a tempestade fechou AGORA: ninguém entra, ninguém sai */
+  fechados?: string[];
+  /** e os que fecham na PRÓXIMA rodada — o aviso é o que torna a regra jogável */
+  aviso?: string[];
   onEscolher?: (lugar: string) => void;
 }) {
   const cols = Math.max(...caso.rooms.map((r) => r.col)) + 1;
@@ -64,8 +70,17 @@ export function Mapa({
           const armas = Object.entries(objetos)
             .filter(([, onde]) => onde === lugar.id)
             .map(([id]) => id);
+          /* A TEMPESTADE FECHA OS DOIS LADOS, e o mapa mostra os dois: quem
+             está preso vê que não sai, e quem está fora vê que não entra. Um
+             botão que parece clicável e recusa no servidor é a pior das duas
+             opções — gasta o toque e não explica. */
+          const trancado = (fechados ?? []).includes(lugar.id);
+          const vaiFechar = (aviso ?? []).includes(lugar.id);
+          const presoAqui = (fechados ?? []).includes(euEstouEm ?? "");
+
           const podeIr =
             !!alcancaveis && !!euEstouEm && euEstouEm !== lugar.id &&
+            !trancado && !presoAqui &&
             alcancavel(caso, euEstouEm, lugar.id);
           const porPassagem = !!euEstouEm && ehPassagem(caso, euEstouEm, lugar.id);
 
@@ -79,14 +94,22 @@ export function Mapa({
               data-foco={destaque === lugar.id}
               data-aqui={euEstouEm === lugar.id}
               data-pode={podeIr}
+              data-trancado={trancado}
+              data-vai-fechar={vaiFechar}
               disabled={!podeIr || !onEscolher}
               onClick={() => podeIr && onEscolher?.(lugar.id)}
               aria-label={
                 `${lugar.name}${aqui.length ? `, ${aqui.map((p) => p.nome).join(", ")}` : ", vazio"}` +
+                (trancado ? ", fechado pela tempestade" : "") +
+                (vaiFechar ? ", fecha na próxima rodada" : "") +
                 (podeIr ? ", alcançável" : "")
               }
             >
               <span className="lugar-nome">{lugar.name}</span>
+
+              {(trancado || vaiFechar) && (
+                <span className="lugar-vento">{trancado ? "fechado" : "fecha já"}</span>
+              )}
 
               {porPassagem && podeIr && (
                 <span className="lugar-passagem" title="Passagem secreta">

@@ -221,6 +221,39 @@ teste. É a mesma checagem que pega trapaça e pega bug de inferência, que é e
 de uma invariante. Somado a: quando ela acusa, ela **acerta**; e nenhuma função do cérebro contém a
 palavra `solution`.
 
+### E as reviravoltas
+
+As três regras próprias dos casos (PRD 03 §6.7) tocam a máquina em três lugares, e cada um deles
+foi um jeito diferente de ela ficar pior sem ninguém notar.
+
+**O Apagão fabricava conhecimento falso.** `dossie_deduz` marcava quem NÃO tem a carta com
+`mp.seat is distinct from (linha ->> 'from')`. No escuro `from` é nulo, e `x is distinct from null`
+é verdade para TODO assento — uma carta mostrada no apagão marcava a mesa inteira, inclusive quem
+mostrou. Isso se propaga pelo laço de inferência, e o fim da linha é uma máquina acusando **com
+certeza** uma carta que está na mão de alguém. O teste central pega: nenhuma carta riscada pode
+estar no envelope.
+
+**A Tempestade a fazia se debater.** Uma máquina que tenta andar para um lugar fechado levanta
+`ROOM_CLOSED` de dentro de `dossie_move_como`, e a exceção sobe pela varredura inteira — foi assim
+que o Dossiê passou uma temporada sem tirar o turno de ninguém no relógio (0033). Agora ela sabe o
+que está fechado e desvia, e a busca de caminho aceita a lista de lugares a evitar.
+
+**E a Tempestade a fazia passar a vez.** Este é o mais interessante dos três, porque a regra estava
+CERTA e virou errada quando o contexto mudou:
+
+| | palpitar num lugar já riscado | contra | vence |
+|---|---|---|---|
+| solta | gasta o turno confirmando o que ela já sabe | **andar** até um lugar que importa | andar |
+| presa | gasta o turno confirmando o que ela já sabe | **nada** | palpitar |
+
+Palpitar nunca é nada: mesmo com o lugar descartado, as respostas ensinam sobre o suspeito e sobre
+o objeto — duas das três colunas do caderno. Uma reviravolta que só as pessoas sabem aproveitar é
+uma reviravolta que torna a máquina mais fácil, e o modo solo é onde a maioria das partidas deste
+projeto vai acontecer.
+
+O Registro da Estação não precisou de nada: o fato público entra no bloco "o que está na cara" de
+`dossie_deduz`, que vale para os três níveis. A máquina tranquila também ouve o alto-falante.
+
 ---
 
 ## 6. Jogar sozinho num toque

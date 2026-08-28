@@ -404,6 +404,35 @@ mudar *como* se joga, não *quem* ganha.
 
 Desligável em Regras da casa.
 
+> **CONSTRUÍDO** — migrações 0086–0091. As três rodam no servidor, e o cliente as narra.
+>
+> O que a construção acrescentou ao que está escrito acima:
+>
+> **A rodada precisou existir primeiro.** As três reviravoltas são contadas em rodadas e o
+> estado do Dossiê não tinha nenhuma — tinha `turnSeat`, que é outra coisa. A rodada vira
+> quando o turno DÁ A VOLTA, e não a cada N turnos: o N muda quando alguém vira fantasma.
+>
+> **A reviravolta é congelada no início da partida.** A regra da casa é lida uma vez, em
+> `dossie_start`. Lida a cada rodada, o anfitrião desligaria o Apagão na rodada 5 depois de
+> ver que ele cairia na 6 — e regra que se desliga quando incomoda é sugestão. Pelo mesmo
+> motivo a rodada do Apagão é sorteada AGORA e guardada: sorteada na hora, "uma vez por
+> partida entre a 4 e a 8" viraria "toda rodada, com 20% de chance".
+>
+> **O palpite não é porta.** Palpitar convoca o peão do suspeito nomeado para a sala de quem
+> palpitou. Durante a tempestade, feito de dentro de um lugar fechado, isso seria uma porta dos
+> fundos: quem está preso arrastaria a mesa inteira para dentro, um palpite por vez. O objeto
+> continua vindo — "ninguém entra" é sobre gente.
+>
+> **O apagão fabricava conhecimento falso.** `dossie_deduz` marcava quem NÃO tem a carta com
+> `mp.seat is distinct from (linha ->> 'from')`. Com `from` nulo, isso é verdade para TODO
+> assento — uma carta mostrada no escuro marcava a mesa inteira, inclusive quem mostrou. Não
+> é perder informação, é inventar, e ela se propaga até a máquina acusar com certeza uma carta
+> que está na mão de alguém.
+>
+> **O validador de temas ganhou a lista das três.** Um pacote que declare uma reviravolta que o
+> motor não executa é reprovado na publicação. Sem isso, `twist` seria configuração
+> decorativa: a tela prometendo o que a partida não entrega, sem nada quebrar para acusar.
+
 ### 6.8 Cartas de Pista [v1.1]
 
 **Resolve o problema #6.** Baralho de 24 cartas. A ação **Investigar** (1 ação, só em lugares sem
@@ -622,14 +651,16 @@ automáticos em tinta impressa; suas anotações, em tinta de caneta. A diferen�
 - [ ] Rodízio não repete caso até esgotar
 - [ ] Cada pacote pesa ≤ 900 KB e só baixa quando a partida começa
 
-**Reviravoltas**
-- [ ] **Apagão:** o log registra `seat: null` e o `private_state` do destinatário grava `from: null`
-- [ ] **Apagão:** o bloco de dedução não cria conjunto atribuído durante o apagão
-- [ ] **Tempestade:** o aviso vem uma rodada antes; o par sorteado nunca desconecta o mapa
-- [ ] **Tempestade:** quem está num lugar fechado pode palpitar, mas não sair
-- [ ] **Registro:** a carta divulgada nunca está no envelope
-- [ ] **Registro:** a carta escolhida é a que mais jogadores ainda não descartaram
-- [ ] Reviravolta desligada nas Regras da casa → o caso roda como jogo limpo
+**Reviravoltas** — todos verificados em `npm run smoke:dossie`
+- [x] **Apagão:** o log registra `seat: null` e o `private_state` do destinatário grava `from: null`
+- [x] **Apagão:** o bloco de dedução não cria conjunto atribuído durante o apagão
+- [x] **Tempestade:** o aviso vem uma rodada antes; o par sorteado nunca desconecta o mapa —
+      conferido por enumeração COMPLETA dos 144 pares dos quatro mapas, e 5 deles são recusados
+      (fechar o Poço e o Mirante isola a Câmara Selada), o que prova que a checagem tem dentes
+- [x] **Tempestade:** quem está num lugar fechado pode palpitar, mas não sair — e nem entrar
+- [x] **Registro:** a carta divulgada nunca está no envelope
+- [x] **Registro:** a carta escolhida é a que mais jogadores ainda não descartaram
+- [x] Reviravolta desligada nas Regras da casa → o caso roda como jogo limpo
 
 **Regras**
 - [ ] Mover para lugar não adjacente **no grafo daquele caso** é rejeitado

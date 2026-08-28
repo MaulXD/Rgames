@@ -945,15 +945,37 @@ if (solo.acabou) {
   /* A LINHA QUE NÃO PODE SER CRUZADA: sai a CONTAGEM, nunca a lista. A regra
      "o estado privado de um jogador é dele" não pode ter exceção por
      conveniência — a primeira exceção é a que ensina a fazer a segunda. */
-  const texto = JSON.stringify(dedu);
   const cartasDoCaso = [
     ...solo.tema.suspects.map((x) => x.id),
     ...solo.tema.weapons.map((x) => x.id),
     ...solo.tema.rooms.map((x) => x.id),
   ];
+
+  /* A primeira versão desta checagem procurava id de carta no JSON INTEIRO, e
+     reprovava quando o caso sorteado era o Meridiano-9: a Casa de máquinas tem
+     id `maquinas`, e a resposta tem a chave `maquinas`. Um teste que reprova
+     por causa do próprio envelope ensina a ignorar a saída vermelha.
+
+     A versão certa é mais dura, e não menos: confere a FORMA (nenhuma chave
+     além das três previstas, em nenhum nível) e só depois procura carta nos
+     VALORES. Chave nova reprova, carta vazada reprova, e o nome de uma sala
+     coincidir com o de um campo não reprova nada. */
+  const formaOk =
+    Object.keys(dedu ?? {}).every((k) => k === "maquinas") &&
+    (dedu?.maquinas ?? []).every((m) =>
+      Object.keys(m).every((k) => ["seat", "nome", "riscadas"].includes(k)),
+    );
+  const valores = (dedu?.maquinas ?? [])
+    .flatMap((m) => Object.values(m).map(String))
+    .join(" ");
+  const vazadas = cartasDoCaso.filter((c) => valores.includes(c));
   ok(
-    !cartasDoCaso.some((c) => texto.includes(c)),
-    "e nenhuma CARTA aparece na resposta: sai o número, nunca a lista",
+    formaOk && vazadas.length === 0,
+    !formaOk
+      ? `a resposta ganhou campo que ninguém previu: ${JSON.stringify(Object.keys(dedu ?? {}))}`
+      : vazadas.length === 0
+        ? "e nenhuma CARTA aparece nos valores da resposta: sai o número, nunca a lista"
+        : `VAZOU CARTA: ${vazadas.join(", ")}`,
   );
 
   const soMaquinas = (dedu?.maquinas ?? []).map((m) => Number(m.seat));
@@ -1167,6 +1189,582 @@ ok(
     ? "nenhuma função do cérebro toca em `solution` — ela deduz porque não tem outro jeito"
     : `O CÉREBRO LÊ O ENVELOPE: ${espiando.join(", ")}`,
 );
+
+/* ── 6. AS REVIRAVOLTAS ────────────────────────────────────────
+
+   Cada caso carrega exatamente uma regra própria (PRD 03 §6.7). Elas são a
+   mecânica que o sistema de temas entrega, e a razão pela qual jogar a Boate
+   Aurora não é jogar o Solar das Acácias com outra roupa.
+
+   Cada uma é conferida ONDE ELA MORA — na função que decide —, e não na média
+   de uma partida. É a lição que este projeto pagou quatro vezes: teste que
+   reprova por sorte do dado ensina a ignorar a saída vermelha. */
+
+console.log("\nDOSSIÊ: as reviravoltas\n");
+
+/* 6a. O par da tempestade NUNCA desconecta o mapa.
+
+   Não é "sorteei dez vezes e deu certo": é a enumeração completa. Para cada um
+   dos quatro casos, TODO par que a função pode devolver mantém o mapa conexo, e
+   existe pelo menos um par que ela recusa — senão a checagem seria decorativa. */
+
+const casos4 = (
+  await db.query("select id, data from game_themes where game_key = 'dossie' order by id")
+).rows;
+
+let paresRuins = 0;
+let recusados = 0;
+for (const t of casos4) {
+  const lugares = t.data.rooms.map((r) => r.id);
+  for (let i = 0; i < lugares.length; i++) {
+    for (let j = i + 1; j < lugares.length; j++) {
+      const conexo = (
+        await db.query("select public.dossie_conexo_sem($1::jsonb, $2, $3) c", [
+          JSON.stringify(t.data),
+          lugares[i],
+          lugares[j],
+        ])
+      ).rows[0].c;
+      if (!conexo) recusados++;
+    }
+  }
+  /* E o que a função REALMENTE devolve, em vinte sementes diferentes. */
+  for (let s = 0; s < 20; s++) {
+    const par = (
+      await db.query("select public.dossie_par_da_tempestade($1::jsonb, $2::bigint) p", [
+        JSON.stringify(t.data),
+        s * 7919 + 13,
+      ])
+    ).rows[0].p;
+    if (!par || par.length !== 2) {
+      paresRuins++;
+      continue;
+    }
+    const conexo = (
+      await db.query("select public.dossie_conexo_sem($1::jsonb, $2, $3) c", [
+        JSON.stringify(t.data),
+        par[0],
+        par[1],
+      ])
+    ).rows[0].c;
+    if (!conexo) paresRuins++;
+  }
+}
+
+ok(
+  paresRuins === 0,
+  paresRuins === 0
+    ? `a tempestade sorteou 80 pares nos quatro mapas e nenhum desconectou o mapa`
+    : `${paresRuins} par(es) sorteado(s) deixariam um lugar inalcançável`,
+);
+ok(
+  recusados > 0,
+  recusados > 0
+    ? `e a checagem tem dentes: dos 144 pares possíveis, ${recusados} são recusados por desconectar` +
+      " — fechar o Poço e o Mirante isola a Câmara Selada"
+    : "NENHUM par foi recusado em nenhum mapa: a checagem de conexidade não está checando nada",
+);
+
+/* 6b. O APAGÃO APAGA QUEM, NUNCA O QUÊ.
+
+   As três consequências, medidas numa partida de verdade:
+     · o log diz que alguém desmentiu, sem dizer quem
+     · o estado privado de quem palpitou grava a carta com `from: null`
+     · e o caderno de dedução NÃO atribui a carta a ninguém
+
+   A terceira é a que importa. A comparação `mp.seat is distinct from null` é
+   VERDADE para todo assento — sem a guarda, uma carta mostrada no escuro
+   marcaria a mesa inteira como não tendo a carta, INCLUSIVE quem mostrou. Não é
+   perder informação: é inventar informação falsa, que se propaga, e termina em
+   máquina acusando com certeza uma carta que está na mão de alguém. */
+
+const salaA = (await rpc(P[0].token, "create_room", { p_game: "dossie" })).body;
+await rpc(P[0].token, "set_room_settings", {
+  p_room: salaA.id,
+  p_settings: { tema: "boate-aurora" },
+});
+await rpc(P[0].token, "adicionar_bot", { p_room: salaA.id, p_nivel: "dificil" });
+await rpc(P[0].token, "adicionar_bot", { p_room: salaA.id, p_nivel: "dificil" });
+const iniA = await rpc(P[0].token, "dossie_start", { p_room: salaA.id });
+ok(iniA.status === 200, `a Boate Aurora começou${iniA.status === 200 ? "" : ": " + JSON.stringify(iniA.body)}`);
+
+if (iniA.status === 200) {
+  const mA = (
+    await db.query(
+      "select id, public_state st from matches where room_id = $1 order by started_at desc limit 1",
+      [salaA.id],
+    )
+  ).rows[0];
+
+  ok(
+    mA.st.twist?.id === "apagao",
+    `o caso trouxe a reviravolta dele: ${mA.st.twist?.id ?? "nenhuma"}`,
+  );
+  ok(
+    mA.st.twist?.round >= 4 && mA.st.twist?.round <= 8,
+    `e a rodada do apagão foi sorteada entre a 4 e a 8 (saiu ${mA.st.twist?.round}) — sorteada`
+      + " AGORA e guardada, senão 'uma vez por partida' viraria 'toda rodada, com 20% de chance'",
+  );
+
+  /* Acende o apagão à força e faz uma refutação acontecer dentro dele. Forçar é
+     o certo aqui: esperar a rodada sorteada chegar mediria o sorteio, que já foi
+     medido na linha de cima — o que se quer medir agora é o EFEITO. */
+  await db.query(
+    `update matches set public_state =
+        public.jsonb_poe(public_state, 'twist', 'active', 'true'::jsonb)
+      where id = $1`,
+    [mA.id],
+  );
+
+  const elencoA = (
+    await db.query(
+      `select mp.seat, mp.user_id, p.is_bot from match_players mp
+         join profiles p on p.id = mp.user_id
+        where mp.match_id = $1 order by mp.seat`,
+      [mA.id],
+    )
+  ).rows;
+  const humanoA = elencoA.find((e) => !e.is_bot);
+
+  /* Palpita com uma carta que outro assento comprovadamente tem, para que a
+     refutação aconteça de verdade em vez de virar "ninguém refutou". */
+  const maos = {};
+  for (const e of elencoA) {
+    maos[e.seat] = (
+      await db.query(
+        "select data -> 'hand' h from match_private_state where match_id = $1 and user_id = $2",
+        [mA.id, e.user_id],
+      )
+    ).rows[0].h;
+  }
+  const temaA = (
+    await db.query("select data from game_themes where id = 'boate-aurora'")
+  ).rows[0].data;
+  const suspIds = temaA.suspects.map((s) => s.id);
+  const armaIds = temaA.weapons.map((w) => w.id);
+
+  const outro = elencoA.find((e) => e.is_bot);
+  const cartaDele = maos[outro.seat].find(
+    (c) => suspIds.includes(c) || armaIds.includes(c),
+  );
+
+  const antesLog = (mA.st.log ?? []).length;
+  await db.query(
+    `update matches set public_state = public_state
+       || jsonb_build_object('turnSeat', $2::int, 'phase', 'turn', 'actionsLeft', 2)
+      where id = $1`,
+    [mA.id, humanoA.seat],
+  );
+  const palp = await rpc(P[0].token, "dossie_suggest", {
+    p_match: mA.id,
+    p_suspect: suspIds.includes(cartaDele) ? cartaDele : suspIds[0],
+    p_weapon: armaIds.includes(cartaDele) ? cartaDele : armaIds[0],
+  });
+  ok(palp.status === 200, `palpite feito no escuro${palp.status === 200 ? "" : ": " + JSON.stringify(palp.body)}`);
+
+  /* A máquina refuta. `dossie_bot_passo` e não `dossie_tocar`: o segundo é a
+     porta do cliente e exige sessão — daqui, pela conexão de serviço,
+     `auth.uid()` é nulo e ele levanta NOT_AUTHENTICATED, com razão. O que se
+     quer medir é o passo da máquina, e ele mora no de dentro. */
+  for (let i = 0; i < 4; i++) {
+    const st = (await db.query("select public_state st from matches where id = $1", [mA.id]))
+      .rows[0].st;
+    if (st.phase !== "refute") break;
+    await db.query("select public.dossie_bot_passo($1::uuid)", [mA.id]);
+  }
+
+  const depois = (await db.query("select public_state st from matches where id = $1", [mA.id]))
+    .rows[0].st;
+  const refutacoes = (depois.log ?? []).slice(antesLog).filter((l) => l.type === "refute");
+
+  ok(
+    refutacoes.length > 0 && refutacoes.every((l) => l.seat === null && l.anon === true),
+    refutacoes.length === 0
+      ? "ninguém refutou — o teste não chegou a medir o apagão"
+      : refutacoes.every((l) => l.seat === null)
+        ? `no escuro o log diz que alguém desmentiu, e não diz quem (${refutacoes.length} refutação)`
+        : `O LOG ENTREGOU QUEM MOSTROU: ${JSON.stringify(refutacoes[0])}`,
+  );
+
+  const seenA = (
+    await db.query(
+      "select data -> 'seen' s from match_private_state where match_id = $1 and user_id = $2",
+      [mA.id, humanoA.user_id],
+    )
+  ).rows[0].s;
+  const ultima = seenA[seenA.length - 1];
+  ok(
+    seenA.length > 0 && ultima.from === null && !!ultima.card,
+    ultima
+      ? ultima.from === null
+        ? `e quem palpitou recebeu a CARTA (${ultima.card}) sem o dono — que é a metade que decide`
+        : `o dono vazou para o estado privado: from=${ultima.from}`
+      : "nada chegou ao estado privado de quem palpitou",
+  );
+
+  /* E o caderno: a carta sai do envelope, e NINGUÉM é marcado como não tendo. */
+  await db.query("update match_private_state set data = data - 'dedu' where match_id = $1", [
+    mA.id,
+  ]);
+  const deduA = (
+    await db.query("select public.dossie_deduz($1::uuid, $2::smallint) d", [
+      mA.id,
+      Number(humanoA.seat),
+    ])
+  ).rows[0].d;
+
+  const cartaEscura = ultima?.card;
+  const minhaMao = maos[humanoA.seat] ?? [];
+  const atribuida = Object.entries(deduA.naoTem ?? {}).filter(
+    ([, cs]) => cs.includes(cartaEscura),
+  );
+  ok(
+    (deduA.fora ?? []).includes(cartaEscura),
+    `a carta mostrada no escuro saiu do envelope (${cartaEscura}) — o apagão nunca tira isso de você`,
+  );
+  ok(
+    minhaMao.includes(cartaEscura) || atribuida.length === 0,
+    atribuida.length === 0
+      ? "e o caderno não atribuiu a carta a ninguém: sem dono, não há conjunto atribuído"
+      : `O CADERNO INVENTOU DONO no escuro: ${atribuida.length} assento(s) marcados como não tendo ${cartaEscura}`,
+  );
+}
+
+/* 6c. A TEMPESTADE FECHA OS DOIS LADOS DA PORTA.
+
+   "Ninguém entra e ninguém sai" são duas checagens, não uma: conferir só o
+   destino deixaria quem está preso escapar no primeiro turno.
+
+   E quem está preso continua PALPITANDO — é o que faz de um lugar fechado uma
+   posição, não uma punição (PRD 03 §3). */
+
+const salaT = (await rpc(P[0].token, "create_room", { p_game: "dossie" })).body;
+await rpc(P[0].token, "set_room_settings", { p_room: salaT.id, p_settings: { tema: "ras-zamir" } });
+await rpc(P[0].token, "adicionar_bot", { p_room: salaT.id, p_nivel: "medio" });
+await rpc(P[0].token, "adicionar_bot", { p_room: salaT.id, p_nivel: "medio" });
+const iniT = await rpc(P[0].token, "dossie_start", { p_room: salaT.id });
+
+if (iniT.status === 200) {
+  const mT = (
+    await db.query(
+      "select id, public_state st from matches where room_id = $1 order by started_at desc limit 1",
+      [salaT.id],
+    )
+  ).rows[0];
+  ok(mT.st.twist?.id === "tempestade", `Ras Zamir trouxe a Tempestade de Areia`);
+
+  const meuT = Number(
+    (
+      await db.query(
+        `select mp.seat from match_players mp join profiles p on p.id = mp.user_id
+          where mp.match_id = $1 and not p.is_bot`,
+        [mT.id],
+      )
+    ).rows[0].seat,
+  );
+
+  const temaT = (await db.query("select data from game_themes where id = 'ras-zamir'")).rows[0]
+    .data;
+
+  /* Põe o humano num lugar, fecha ESSE lugar e um vizinho alcançável. */
+  const aqui = "conservacao";
+  const vizinho = temaT.adjacency[aqui][0];
+  const outroVizinho = temaT.adjacency[aqui].find((v) => v !== vizinho);
+
+  await db.query(
+    `update matches set public_state =
+        jsonb_set(public_state, array['positions', $2], to_jsonb($3::text))
+          || jsonb_build_object('turnSeat', $4::int, 'phase', 'turn', 'actionsLeft', 2)
+      where id = $1`,
+    [mT.id, String(meuT), aqui, meuT],
+  );
+  await db.query(
+    `update matches set public_state =
+        public.jsonb_poe(public_state, 'twist', 'fechados', $2::jsonb) where id = $1`,
+    [mT.id, JSON.stringify([aqui, vizinho])],
+  );
+
+  const saida = await rpc(P[0].token, "dossie_move", { p_match: mT.id, p_room: outroVizinho });
+  ok(
+    saida.status >= 400 && /ROOM_CLOSED/.test(JSON.stringify(saida.body)),
+    saida.status >= 400
+      ? "quem está num lugar fechado NÃO SAI — a porta fecha dos dois lados"
+      : "o preso saiu andando: a checagem só olhava o destino",
+  );
+
+  /* E de fora ninguém entra: põe o humano fora e manda entrar. */
+  await db.query(
+    `update matches set public_state =
+        jsonb_set(public_state, array['positions', $2], to_jsonb($3::text))
+          || jsonb_build_object('turnSeat', $4::int, 'phase', 'turn', 'actionsLeft', 2)
+      where id = $1`,
+    [mT.id, String(meuT), outroVizinho, meuT],
+  );
+  const entrada = await rpc(P[0].token, "dossie_move", { p_match: mT.id, p_room: aqui });
+  ok(
+    entrada.status >= 400 && /ROOM_CLOSED/.test(JSON.stringify(entrada.body)),
+    entrada.status >= 400 ? "e de fora ninguém entra" : "entrou num lugar fechado",
+  );
+
+  /* Preso, mas palpitando. */
+  await db.query(
+    `update matches set public_state =
+        jsonb_set(public_state, array['positions', $2], to_jsonb($3::text))
+          || jsonb_build_object('turnSeat', $4::int, 'phase', 'turn', 'actionsLeft', 2)
+      where id = $1`,
+    [mT.id, String(meuT), aqui, meuT],
+  );
+  /* Quem JÁ estava no lugar fechado não conta: o sorteio inicial de posições
+     põe gente em qualquer lugar, e a primeira versão deste teste reprovou por
+     isso — acusou de "arrastado" um peão que estava lá desde o começo. O que se
+     mede é MOVIMENTO para dentro, então o antes tem de ser guardado. */
+  const antesDoPalpite = (
+    await db.query("select public_state -> 'positions' p from matches where id = $1", [mT.id])
+  ).rows[0].p;
+
+  const palpT = await rpc(P[0].token, "dossie_suggest", {
+    p_match: mT.id,
+    p_suspect: temaT.suspects[0].id,
+    p_weapon: temaT.weapons[0].id,
+  });
+  ok(
+    palpT.status === 200,
+    palpT.status === 200
+      ? "mas continua palpitando de dentro — lugar fechado é posição, não punição"
+      : `o preso não pôde palpitar: ${JSON.stringify(palpT.body)}`,
+  );
+
+  /* E o palpite NÃO arrastou ninguém para dentro. Sem isso, quem fica preso
+     puxa a mesa inteira, um palpite por vez, e a rodada vira armadilha
+     coletiva — o oposto do que a regra quer. */
+  if (palpT.status === 200) {
+    const stT = (await db.query("select public_state st from matches where id = $1", [mT.id]))
+      .rows[0].st;
+    const arrastados = Object.entries(stT.positions).filter(
+      ([s, r]) => Number(s) !== meuT && r === aqui && antesDoPalpite[s] !== aqui,
+    );
+    ok(
+      arrastados.length === 0,
+      arrastados.length === 0
+        ? "e o palpite não arrastou ninguém para dentro do lugar fechado"
+        : `O PALPITE VIROU PORTA DOS FUNDOS: ${arrastados.length} peão(ões) puxados para dentro`,
+    );
+  }
+}
+
+/* 6c-bis. E A MÁQUINA PRESA JOGA A POSIÇÃO, em vez de só sofrer.
+
+   A regra normal do cérebro é "não gaste turno palpitando num lugar que você já
+   riscou". Presa, ela se inverte, porque a alternativa mudou: solta, a escolha
+   é entre palpitar num lugar riscado e ANDAR até um que importa; presa, é entre
+   palpitar num lugar riscado e NÃO FAZER NADA.
+
+   O teste força exatamente esse caso: risca o lugar no caderno dela, tranca ela
+   dentro dele, e confere que o passo é um palpite. Sem 0092 ele era "passa". */
+
+if (iniT.status === 200) {
+  const mT2 = (
+    await db.query(
+      "select id from matches where room_id = $1 order by started_at desc limit 1",
+      [salaT.id],
+    )
+  ).rows[0];
+  const botT = (
+    await db.query(
+      `select mp.seat, mp.user_id from match_players mp join profiles p on p.id = mp.user_id
+        where mp.match_id = $1 and p.is_bot order by mp.seat limit 1`,
+      [mT2.id],
+    )
+  ).rows[0];
+
+  const cela = "cozinha";
+  await db.query(
+    `update matches set public_state =
+        jsonb_set(public_state, array['positions', $2], to_jsonb($3::text))
+          || jsonb_build_object('turnSeat', $4::int, 'phase', 'turn', 'actionsLeft', 2, 'pending', null)
+      where id = $1`,
+    [mT2.id, String(botT.seat), cela, Number(botT.seat)],
+  );
+  await db.query(
+    `update matches set public_state =
+        public.jsonb_poe(public_state, 'twist', 'fechados', $2::jsonb) where id = $1`,
+    [mT2.id, JSON.stringify([cela])],
+  );
+  // e o lugar já está riscado no caderno dela: sem isso, ela palpitaria de qualquer jeito
+  await db.query(
+    `update match_private_state
+        set data = public.jsonb_poe(coalesce(data, '{}'::jsonb), 'dedu', 'fora',
+              coalesce(data -> 'dedu' -> 'fora', '[]'::jsonb) || to_jsonb($3::text))
+      where match_id = $1 and user_id = $2`,
+    [mT2.id, botT.user_id, cela],
+  );
+
+  const passo = (
+    await db.query("select public.dossie_bot_passo($1::uuid) p", [mT2.id])
+  ).rows[0].p;
+  ok(
+    (passo ?? "").startsWith("palpita"),
+    (passo ?? "").startsWith("palpita")
+      ? `presa num lugar que ela já riscou, a máquina PALPITA (${passo}) — palpitar nunca é nada,`
+        + " e passar a vez era deixar a reviravolta ser só castigo"
+      : `a máquina presa não jogou a posição: ${passo}`,
+  );
+}
+
+/* 6d. O REGISTRO PUBLICA UM FATO VERDADEIRO, e o mais útil que houver.
+
+   Duas propriedades, e as duas são da POLÍTICA, não do sorteio:
+     · a carta publicada nunca está no envelope (senão a estação mente)
+     · entre as de fora, sai a que mais gente ainda não riscou */
+
+const salaReg = (await rpc(P[0].token, "create_room", { p_game: "dossie" })).body;
+await rpc(P[0].token, "set_room_settings", {
+  p_room: salaReg.id,
+  p_settings: { tema: "meridiano-9" },
+});
+await rpc(P[0].token, "adicionar_bot", { p_room: salaReg.id, p_nivel: "medio" });
+await rpc(P[0].token, "adicionar_bot", { p_room: salaReg.id, p_nivel: "medio" });
+const iniR2 = await rpc(P[0].token, "dossie_start", { p_room: salaReg.id });
+
+if (iniR2.status === 200) {
+  const mR = (
+    await db.query(
+      "select id, solution, public_state st from matches where room_id = $1 order by started_at desc limit 1",
+      [salaReg.id],
+    )
+  ).rows[0];
+  ok(mR.st.twist?.id === "registro", "Meridiano-9 trouxe o Registro da Estação");
+
+  const envR = [mR.solution.suspect, mR.solution.weapon, mR.solution.room];
+
+  /* Publica dez fatos seguidos, cada um sabendo dos anteriores. Nenhum pode
+     estar no envelope, e nenhum pode repetir. */
+  const publicados = [];
+  let mentiu = null;
+  let repetiu = null;
+  for (let i = 0; i < 10; i++) {
+    const f = (
+      await db.query("select public.dossie_fato_do_registro($1::uuid, $2::text[]) f", [
+        mR.id,
+        publicados,
+      ])
+    ).rows[0].f;
+    if (f === null) break;
+    if (envR.includes(f)) mentiu = f;
+    if (publicados.includes(f)) repetiu = f;
+    publicados.push(f);
+  }
+
+  ok(
+    mentiu === null && publicados.length > 0,
+    mentiu === null
+      ? `NÚBIA publicou ${publicados.length} fatos e nenhum estava no envelope — o registro não mente`
+      : `A ESTAÇÃO MENTIU: publicou ${mentiu}, que está no envelope`,
+  );
+  ok(repetiu === null, repetiu === null ? "e nunca repetiu um fato já publicado" : `repetiu ${repetiu}`);
+
+  /* A POLÍTICA: entre as de fora, sai a que mais gente ainda não riscou. Risca
+     uma carta no caderno de TODO mundo e ela deixa de ser a escolhida. */
+  const primeira = publicados[0];
+  if (primeira) {
+    /* `jsonb_poe` e não `jsonb_set` de dois níveis. Pela QUINTA vez nesta base:
+       `create_missing` cria só o ÚLTIMO elemento do caminho, e sobre um pai
+       ausente `jsonb_set(data, '{dedu,fora}', …)` devolve `data` INTACTO, em
+       silêncio.
+
+       Aqui o `dedu` de todo mundo está ausente — a partida acabou de começar e
+       ninguém deduziu nada ainda. O update não riscava carta nenhuma, e o teste
+       reprovava a função por republicar uma carta que ninguém tinha riscado.
+
+       Repare na direção do erro: a armadilha fez o teste REPROVAR código certo.
+       Foi sorte — quatro das cinco vezes ela aprovou código errado. */
+    await db.query(
+      `update match_private_state
+          set data = public.jsonb_poe(coalesce(data, '{}'::jsonb), 'dedu', 'fora',
+                coalesce(data -> 'dedu' -> 'fora', '[]'::jsonb) || to_jsonb($2::text))
+        where match_id = $1`,
+      [mR.id, primeira],
+    );
+    const depoisDeRiscar = (
+      await db.query("select public.dossie_fato_do_registro($1::uuid, '{}'::text[]) f", [mR.id])
+    ).rows[0].f;
+    ok(
+      depoisDeRiscar !== primeira,
+      depoisDeRiscar !== primeira
+        ? `e quando a mesa inteira já riscou uma carta, ela para de ser publicada` +
+          ` (era ${primeira}, virou ${depoisDeRiscar}) — o fato sempre vale alguma coisa`
+        : `publicou de novo ${primeira} depois de todo mundo já ter riscado: o fato não vale nada`,
+    );
+  }
+}
+
+/* 6e. DESLIGADA NAS REGRAS DA CASA, o caso roda como jogo limpo.
+
+   PRD 03 §3.5: "quem quer o jogo limpo joga o jogo limpo, em qualquer caso". */
+
+const salaL = (await rpc(P[0].token, "create_room", { p_game: "dossie" })).body;
+const cfg = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaL.id,
+  p_settings: { tema: "boate-aurora", reviravolta: false },
+});
+ok(
+  cfg.status === 200,
+  cfg.status === 200
+    ? "a chave 'reviravolta' é aceita nas Regras da Casa"
+    : `set_room_settings recusou a chave: ${JSON.stringify(cfg.body)}`,
+);
+await rpc(P[0].token, "adicionar_bot", { p_room: salaL.id, p_nivel: "medio" });
+await rpc(P[0].token, "adicionar_bot", { p_room: salaL.id, p_nivel: "medio" });
+const iniL = await rpc(P[0].token, "dossie_start", { p_room: salaL.id });
+
+if (iniL.status === 200) {
+  const stL = (
+    await db.query(
+      "select public_state st from matches where room_id = $1 order by started_at desc limit 1",
+      [salaL.id],
+    )
+  ).rows[0].st;
+  ok(
+    stL.twist === null || stL.twist === undefined,
+    stL.twist == null
+      ? "desligada, a Boate Aurora começa sem reviravolta nenhuma — o jogo limpo, no mesmo mundo"
+      : `a reviravolta entrou mesmo desligada: ${JSON.stringify(stL.twist)}`,
+  );
+}
+
+/* 6f. A RODADA CONTA A VOLTA, e não os turnos.
+
+   Com gente virando fantasma, "N turnos = uma rodada" está errado: o número de
+   turnos por rodada muda quando alguém é eliminado. A rodada vira quando o turno
+   DÁ A VOLTA, e é isso que se confere aqui. */
+
+if (iniL.status === 200) {
+  const mL = (
+    await db.query(
+      "select id, public_state st from matches where room_id = $1 order by started_at desc limit 1",
+      [salaL.id],
+    )
+  ).rows[0];
+  ok(mL.st.round === 1, `a partida começa na rodada ${mL.st.round}`);
+
+  const assentos = (
+    await db.query("select seat from match_players where match_id = $1 order by seat", [mL.id])
+  ).rows.map((r) => Number(r.seat));
+
+  // uma volta completa: passa a vez tantas vezes quantos assentos
+  for (let i = 0; i < assentos.length; i++) {
+    await db.query("select public.dossie_advance($1::uuid)", [mL.id]);
+  }
+  const rodadaDepois = (
+    await db.query("select (public_state ->> 'round')::int r from matches where id = $1", [mL.id])
+  ).rows[0].r;
+  ok(
+    rodadaDepois === 2,
+    rodadaDepois === 2
+      ? `depois de uma volta completa (${assentos.length} turnos), a rodada é a 2`
+      : `a rodada virou ${rodadaDepois} depois de uma volta: o contador não conta a volta`,
+  );
+}
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();

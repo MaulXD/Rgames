@@ -187,6 +187,7 @@ const PERMITIDAS = [
   "dossie_accuse", "dossie_end_turn", "dossie_move", "dossie_pad",
   "dossie_pass_refute", "dossie_refute", "dossie_start", "dossie_suggest",
   "dossie_tocar",
+  "dossie_deducoes",
   // Domínio
   "dominio_atacar", "dominio_avancar", "dominio_encerrar_turno",
   "dominio_reforcar", "dominio_remanejar", "dominio_start", "dominio_trocar",
@@ -245,6 +246,44 @@ ok(
   comAuth.length === 0
     ? `as ${quantasComo} funções \`_como\` recebem o ator, nenhuma descobre por auth.uid()`
     : `\`_como\` olhando quem chamou: ${comAuth.join(", ")} — age em nome da pessoa errada`,
+);
+
+/* ── a auditoria do `seat` ambíguo ────────────────────────────────
+
+       column reference "seat" is ambiguous
+       It could refer to either a PL/pgSQL variable or a table column.
+
+   Em PL/pgSQL nome de variável e nome de coluna vivem no MESMO espaço, e
+   `match_players.seat` existe. Então `where mp.seat = seat` não compila — o
+   Postgres recusa em vez de escolher.
+
+   Este projeto aprendeu isso três vezes: em `met_bankrupt` (0032, alias `c`
+   brigando com variável `c`), no cérebro do Domínio (0049 e 0050), e de novo em
+   `dominio_tocar` (0069) — essa última ao reescrever a função do zero, com a
+   regra já escrita em dois arquivos de migração.
+
+   A conclusão não é "prestar mais atenção". É que disciplina que depende de eu
+   lembrar não é disciplina, é sorte — e o jeito de transformar em disciplina é
+   pedir para a máquina conferir. Variável de assento se chama `assento`.
+
+   A busca é pelo padrão exato que quebra: `<qualquer>.seat = seat`. Um `seat`
+   solto num comentário ou numa string não interessa. */
+
+const ambiguas = (
+  await db.query(`
+    select p.proname nome
+      from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+     where n.nspname = 'public'
+       and p.prokind = 'f'
+       and pg_get_functiondef(p.oid) ~ '\\.seat\\s*=\\s*seat[^a-z_]'
+     order by 1`)
+).rows.map((r) => r.nome);
+
+ok(
+  ambiguas.length === 0,
+  ambiguas.length === 0
+    ? "nenhuma função compara `.seat = seat` — variável de assento se chama `assento`"
+    : `\`seat\` ambíguo em: ${ambiguas.join(", ")} — o Postgres recusa isso em tempo de execução`,
 );
 
 const expostas = (

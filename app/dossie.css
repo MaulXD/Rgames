@@ -419,3 +419,30 @@
   align-items: center;
   gap: 0.5rem;
 }
+
+/* ── "o que elas já sabiam", no desfecho ────────────────────────── */
+.desfecho-sabia {
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 2px dashed var(--line-strong);
+  text-align: left;
+}
+.desfecho-sabia ul {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.desfecho-sabia li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.9rem;
+}
+.desfecho-sabia-nota {
+  margin-top: 0.7rem;
+  font-size: 0.74rem;
+  line-height: 1.4;
+}

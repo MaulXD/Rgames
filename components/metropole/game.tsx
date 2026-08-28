@@ -454,6 +454,20 @@ export function MetropoleGame({
      corrente pararia no meio do turno da máquina. Um número que só cresce não
      tem esse problema. */
   const [tique, setTique] = useState(0);
+  /* UM TETO DE PASSOS SEGUIDOS DE MÁQUINA.
+
+     A causa do laço de 0070 está consertada no servidor. Este teto é seguro
+     contra o PRÓXIMO laço — e vai existir um, porque ele nasce de duas regras
+     certas se encontrando, e não de uma errada.
+
+     Sem ele, o cliente chama o RPC enquanto houver passo: num laço, para sempre.
+     Num celular isso é bateria queimada com a tela dizendo "está jogando" sobre
+     uma mesa que não anda.
+
+     O teto é folgado de propósito — três máquinas jogando turnos completos cabem
+     bem abaixo dele — e zera quando a vez volta para gente. */
+  const TETO_PASSOS = 150;
+  const seguidos = useRef(0);
   const [maquinaEmpacou, setMaquinaEmpacou] = useState(false);
 
   const tocarMaquina = useCallback(async () => {
@@ -476,7 +490,13 @@ export function MetropoleGame({
       setPassoBot(passo);
       // só continua a corrente quando houve passo: `null` é o servidor dizendo
       // que não há mais nada de máquina a fazer agora
-      if (passo) setTique((t) => t + 1);
+      if (passo) {
+        seguidos.current += 1;
+        if (seguidos.current > TETO_PASSOS) setMaquinaEmpacou(true);
+        else setTique((t) => t + 1);
+      } else {
+        seguidos.current = 0;
+      }
       return passo;
     } finally {
       tocando.current = false;
@@ -489,6 +509,7 @@ export function MetropoleGame({
   const ultimaLinha = st.log?.[0] ? JSON.stringify(st.log[0]) : null;
 
   useEffect(() => {
+    if (minhaVez) seguidos.current = 0;   // a vez voltou para gente: zera
     if (!temMaquina || acabou || maquinaEmpacou) return;
     /* O respiro maior quando a máquina acabou de rolar: o peão dela ainda vai
        andar, e a caminhada tem o tempo dela. Atropelar as duas coisas dá
@@ -504,6 +525,7 @@ export function MetropoleGame({
     maquinaEmpacou,
     tocarMaquina,
     passoBot,
+    minhaVez,
     st.phase,
     st.turnSeat,
     st.round,
@@ -602,9 +624,20 @@ export function MetropoleGame({
             {st.dados[0]}+{st.dados[1]}
           </span>
         )}
-        <span className="met-relogio mono" data-urgente={urgente}>
-          {Math.floor(resto / 60)}:{String(resto % 60).padStart(2, "0")}
-        </span>
+        {match.turn_deadline ? (
+          <span className="met-relogio mono" data-urgente={urgente}>
+            {Math.floor(resto / 60)}:{String(resto % 60).padStart(2, "0")}
+          </span>
+        ) : (
+          /* "SEM PRESSA" NO LUGAR DA CONTAGEM.
+          
+               Quando a mesa não tem mais nenhuma pessoa além de você, a faxina desliga o
+               relógio (`turn_deadline` nulo) em vez de tirar o seu turno — ver 0065. Sem
+               este ramo, o cliente ficaria mostrando a última contagem congelada, e
+               "0:00" parado na tela lê como "seu tempo acabou", que é exatamente o
+               contrário do que aconteceu. */
+          <span className="met-relogio met-sem-pressa mono">sem pressa</span>
+        )}
         <button
           type="button"
           className="som"

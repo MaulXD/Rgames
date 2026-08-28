@@ -32,7 +32,10 @@ export function JoinForm() {
           spellCheck={false}
           aria-describedby="code-help"
         />
-        <button type="submit" className="btn btn-primary" disabled={!ready}>
+        {/* `btn-brass` e não `btn-primary`: este projeto não tem "primary". O botão
+            estava saindo com a moldura de `.btn` e fundo nenhum — e ele é justamente
+            o de ENTRAR NUMA SALA por código, que é metade do jeito de chegar aqui. */}
+        <button type="submit" className="btn btn-brass" disabled={!ready}>
           Entrar
         </button>
       </div>

@@ -1790,3 +1790,11 @@
   color: var(--fg);
   flex-wrap: wrap;
 }
+
+/* o mesmo selo do Domínio — ver o comentário lá */
+.met-sem-pressa {
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}

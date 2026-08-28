@@ -613,13 +613,17 @@ async function dossieSolo({ token, niveis, tetoPassos }) {
        envelope, a janela pega. E o estado final é conferido sempre. */
     if (n % 8 === 0 && !(await conferirDeducao())) break;
 
-    const t = await rpc(token, "dossie_tocar", { p_match: idP.id });
-    if (t.status !== 200) {
-      problemas.push(`dossie_tocar: ${JSON.stringify(t.body).slice(0, 400)}`);
+    /* Pela conexão DIRETA, e não pelo HTTP — ver o comentário igual na suíte da
+       Metrópole. Aqui a diferença é maior: a partida do Dossiê tem 400 passos. */
+    let passo = null;
+    try {
+      passo = (await db.query("select public.dossie_bot_passo($1::uuid) p", [idP.id])).rows[0].p;
+    } catch (e) {
+      problemas.push(`dossie_bot_passo: ${String(e).slice(0, 200)}`);
       break;
     }
-    if (t.body?.passo) {
-      passos.push(t.body.passo);
+    if (passo) {
+      passos.push(passo);
       semNada = 0;
       n++;
       continue;
@@ -843,7 +847,7 @@ await db.query("select public.dossie_sweep()");
 const depoisG = (
   await db.query(
     `select jsonb_array_length(coalesce(public_state -> 'log', '[]'::jsonb)) n,
-            (public_state ->> 'turnSeat')::int t, status
+            (public_state ->> 'turnSeat')::int t, public_state ->> 'phase' fase, status
        from matches where id = $1`,
     [idG],
   )
@@ -852,10 +856,77 @@ ok(
   Number(depoisG.n) > antesG,
   `a faxina JOGOU o turno da máquina (registro foi de ${antesG} para ${depoisG.n} linhas)`,
 );
+/* A VEZ NÃO PRECISA SAIR DELA, e a primeira versão desta asserção não sabia
+   disso. No Dossiê, quem palpita CONTINUA sendo o `turnSeat` enquanto a fila de
+   refutação anda — a vez só passa depois que todo mundo respondeu. Então a
+   máquina jogar e a fase virar `refute` é exatamente o resultado certo.
+
+   O que se cobra é que ela NÃO tenha ficado parada esperando: ou a vez andou, ou
+   ela palpitou e a mesa está respondendo. */
 ok(
-  Number(depoisG.t) !== botG || depoisG.status !== "running",
-  `e a vez saiu dela (${botG} → ${depoisG.t})`,
+  Number(depoisG.t) !== botG || depoisG.fase === "refute" || depoisG.status !== "running",
+  `e ela não ficou parada: vez ${botG} → ${depoisG.t}, fase ${depoisG.fase}`,
 );
+
+/* ── 2c. no fim, quanto cada máquina já sabia ─────────────────────
+
+   Jogando com gente, "eu estava perto?" se responde sozinha — a mesa comenta.
+   Sozinho, o caso fecha em silêncio. Então a máquina conta, DEPOIS que a partida
+   acabou, e conta só o número.
+
+   O teste guarda as duas coisas: que ela conta, e que ela não conta antes nem
+   conta demais. */
+
+// `iniR` é a RESPOSTA de `dossie_start`, e `idR` é o id da partida. Passar a
+// resposta como id fazia o RPC recusar por outro motivo e o teste dizer a coisa
+// certa pelo motivo errado — que é pior que reprovar.
+const rodandoAinda = (
+  await rpc(P[0].token, "dossie_deducoes", { p_match: idR })
+).body;
+ok(
+  /MATCH_NOT_FINISHED/.test(JSON.stringify(rodandoAinda)),
+  "com a partida rolando, quanto a máquina já sabe NÃO sai — isso é informação de jogo",
+);
+
+if (solo.acabou) {
+  const deFora2 = (await rpc(P[2].token, "dossie_deducoes", { p_match: solo.id })).body;
+  ok(
+    /NOT_A_PLAYER/.test(JSON.stringify(deFora2)),
+    "e quem não estava na mesa não lê o caderno de ninguém",
+  );
+
+  const dedu = (await rpc(P[0].token, "dossie_deducoes", { p_match: solo.id })).body;
+  ok(
+    Array.isArray(dedu?.maquinas) && dedu.maquinas.length === solo.bots.length,
+    `com a partida encerrada, as ${solo.bots.length} máquinas contam quanto sabiam: ${(dedu?.maquinas ?? [])
+      .map((m) => `${m.nome}=${m.riscadas}`)
+      .join(", ")}`,
+  );
+  ok(
+    (dedu?.maquinas ?? []).every((m) => Number(m.riscadas) > 0),
+    "e cada uma tinha riscado alguma coisa — zero seria uma máquina que não deduziu nada",
+  );
+
+  /* A LINHA QUE NÃO PODE SER CRUZADA: sai a CONTAGEM, nunca a lista. A regra
+     "o estado privado de um jogador é dele" não pode ter exceção por
+     conveniência — a primeira exceção é a que ensina a fazer a segunda. */
+  const texto = JSON.stringify(dedu);
+  const cartasDoCaso = [
+    ...solo.tema.suspects.map((x) => x.id),
+    ...solo.tema.weapons.map((x) => x.id),
+    ...solo.tema.rooms.map((x) => x.id),
+  ];
+  ok(
+    !cartasDoCaso.some((c) => texto.includes(c)),
+    "e nenhuma CARTA aparece na resposta: sai o número, nunca a lista",
+  );
+
+  const soMaquinas = (dedu?.maquinas ?? []).map((m) => Number(m.seat));
+  ok(
+    !soMaquinas.includes(solo.meu),
+    "e gente não entra na conta nem depois do fim — o bloco de anotações de uma pessoa é dela",
+  );
+}
 
 /* ── 3. o nível é o quanto ela infere ────────────────────────────────────── */
 

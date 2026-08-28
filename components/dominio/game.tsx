@@ -77,7 +77,39 @@ export type Assento = {
  *  jogo de tabuleiro, ver o adversario jogar é metade do jogo.
  *
  *  1200ms é o tempo de ler "Vez de Creuza" e olhar para o mapa. */
-const PENSA_MS = 1200;
+const PENSA_MS = 850;
+
+/**
+ * O rótulo técnico de um passo de máquina virado frase.
+ *
+ * Desde 0068 a máquina do Domínio joga um PASSO por vez, e não o turno inteiro:
+ * reforça, ataca, avança, remaneja, passa. Sem a frase, a pessoa veria o mapa
+ * mudar cinco vezes seguidas sem saber o que está acontecendo — e no Domínio o
+ * que está acontecendo é literalmente um ataque contra ela.
+ */
+function frasePasso(passo: string): string {
+  const nome = (id?: string) => (id ? (POR_ID[id]?.nome ?? id) : "");
+  const m = /^(\w+)\(\d+\)\s*(.*)$/.exec(passo);
+  if (!m) return passo;
+  const [, k, resto] = m;
+  const partes = resto.split(/\s+/);
+  switch (k) {
+    case "troca":
+      return "trocou cartas";
+    case "reforca":
+      return `reforçou ${nome(partes[0])}`;
+    case "ataca":
+      return `atacou ${nome(partes[0])}` + (/e toma$/.test(resto) ? " e tomou" : "");
+    case "avanca":
+      return "avançou";
+    case "remaneja":
+      return "remanejou";
+    case "passa":
+      return "passou a vez";
+    default:
+      return passo;
+  }
+}
 
 /** As mensagens de erro do servidor, em português e no contexto certo. */
 const RECADO: Record<string, string> = {
@@ -246,12 +278,29 @@ export function DominioGame({
      nunca chegava a oferecer o botão de tentar de novo — ela ficava dizendo
      "está jogando" sobre uma máquina que não ia jogar mais. */
   const [tique, setTique] = useState(0);
+  const [passoBot, setPassoBot] = useState<string | null>(null);
+  /* UM TETO DE PASSOS SEGUIDOS DE MÁQUINA.
+
+     A causa do laço de 0070 está consertada no servidor. Este teto é seguro
+     contra o PRÓXIMO laço — e vai existir um, porque ele nasce de duas regras
+     certas se encontrando, e não de uma errada.
+
+     Sem ele, o cliente chama o RPC enquanto houver passo: num laço, para sempre.
+     Num celular isso é bateria queimada com a tela dizendo "está jogando" sobre
+     uma mesa que não anda.
+
+     O teto é folgado de propósito — três máquinas jogando turnos completos cabem
+     bem abaixo dele — e zera quando a vez volta para gente. */
+  const TETO_PASSOS = 150;
+  const seguidos = useRef(0);
 
   const tocarMaquina = useCallback(async () => {
     if (tocando.current) return;
     tocando.current = true;
     try {
-      const { error } = await supabaseBrowser().rpc("dominio_tocar", { p_match: match.id });
+      const { data, error } = await supabaseBrowser().rpc("dominio_tocar", {
+        p_match: match.id,
+      });
       if (error) {
         const msg = (error as { message?: string }).message ?? "";
         // outra pessoa da mesa tocou primeiro: nao e erro, e a corrida resolvida
@@ -265,18 +314,25 @@ export function DominioGame({
         return;
       }
       falhasSeguidas.current = 0;
+      setPassoBot((data as { passo?: string } | null)?.passo ?? null);
+      seguidos.current += 1;
+      if (seguidos.current > TETO_PASSOS) setMaquinaEmpacou(true);
+      else setTique((t) => t + 1);
     } finally {
       tocando.current = false;
     }
   }, [match.id]);
 
   useEffect(() => {
+    if (minhaVez) seguidos.current = 0;   // a vez voltou para gente: zera
     if (!maquinaNaVez || acabou || maquinaEmpacou) return;
     // o setState mora DENTRO do temporizador; no corpo do efeito ele seria uma
     // renderização encadeada, e o lint deste projeto recusa — com razão
     const id = setTimeout(() => void tocarMaquina(), PENSA_MS);
     return () => clearTimeout(id);
-  }, [maquinaNaVez, acabou, maquinaEmpacou, st.turnSeat, st.round, tique, tocarMaquina]);
+  }, [maquinaNaVez, acabou, maquinaEmpacou, st.turnSeat, st.round, tique, tocarMaquina,
+    minhaVez,
+  ]);
 
   /* ── som e brilho conforme o log anda ───────────────────────────────── */
   useEffect(() => {
@@ -577,9 +633,20 @@ export function DominioGame({
               ? "ataque"
               : "remanejo"}
         </span>
-        <span className="turno-relogio mono" data-urgente={urgente}>
-          {Math.floor(resto / 60)}:{String(resto % 60).padStart(2, "0")}
-        </span>
+        {match.turn_deadline ? (
+          <span className="turno-relogio mono" data-urgente={urgente}>
+            {Math.floor(resto / 60)}:{String(resto % 60).padStart(2, "0")}
+          </span>
+        ) : (
+          /* "SEM PRESSA" NO LUGAR DA CONTAGEM.
+
+     Quando a mesa não tem mais nenhuma pessoa além de você, a faxina desliga o
+     relógio (`turn_deadline` nulo) em vez de tirar o seu turno — ver 0065. Sem
+     este ramo, o cliente ficaria mostrando a última contagem congelada, e
+     "0:00" parado na tela lê como "seu tempo acabou", que é exatamente o
+     contrário do que aconteceu. */
+          <span className="turno-relogio turno-sem-pressa mono">sem pressa</span>
+        )}
         <button
           type="button"
           className="som"
@@ -631,6 +698,7 @@ export function DominioGame({
                 <i />
               </span>
               {nomePorAssento[st.turnSeat]} está jogando
+              {passoBot ? <span className="dim"> · {frasePasso(passoBot)}</span> : null}
             </p>
           )}
 

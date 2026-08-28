@@ -62,6 +62,38 @@ export function Reveal({
 
   const atual = missed[Math.min(qual, missed.length - 1)];
   const meuTotal = scores[meId] ?? 0;
+
+  /* ── O QUE A MÁQUINA ACHOU E VOCÊ NÃO ───────────────────────────
+
+     "As melhores que escaparam" mostra o que NINGUÉM achou, e essa lista é sobre
+     a grade. Jogando sozinho, a lista que dói é outra: o que a Creuza achou e
+     você deixou passar. Uma é sobre o quanto a grade era rica; a outra é sobre
+     você ter perdido — e é a segunda que faz apertar "Outra grade".
+
+     Só palavra que valeu ponto para ela entra: mostrar o que foi ANULADO (as
+     duas acharam) seria mostrar empate como derrota. */
+  /* Sem `useMemo`: `found` é `st.found ?? {}`, um objeto novo a cada
+     renderização, e uma dependência instável faz o compilador do React desistir
+     de otimizar o componente inteiro. A conta é de algumas dezenas de palavras
+     numa tela que aparece uma vez por partida — o compilador cuida dela melhor
+     do que uma memoização quebrada. */
+  const roubadas = (() => {
+    const minhas = new Set((found[meId] ?? []).map((w) => w.w));
+    const porPalavra = new Map<string, { w: string; pts: number; quem: string }>();
+    for (const s of seats) {
+      if (!s.is_bot) continue;
+      for (const w of found[s.user_id] ?? []) {
+        if (w.dup || minhas.has(w.w)) continue;
+        const antes = porPalavra.get(w.w);
+        if (!antes || w.pts > antes.pts) {
+          porPalavra.set(w.w, { w: w.w, pts: w.pts, quem: s.display_name });
+        }
+      }
+    }
+    return [...porPalavra.values()].sort((a, b) => b.pts - a.pts).slice(0, 8);
+  })();
+
+  const quantasMaquinas = seats.filter((s) => s.is_bot).length;
   const aproveitamento = st.maxScore ? Math.round((meuTotal / st.maxScore) * 100) : 0;
 
   return (
@@ -90,7 +122,7 @@ export function Reveal({
               {p.achadas.length === 0 ? (
                 <p className="dim reveal-empty">nenhuma palavra</p>
               ) : (
-                <ul className="wordlist reveal-list">
+                <ul className="wordlist">
                   {p.achadas.map((w, i) => (
                     <li
                       key={w.w + i}
@@ -177,6 +209,25 @@ export function Reveal({
               </p>
             </div>
           </div>
+
+          {roubadas.length > 0 && (
+            <div className="panel reveal-missed-list reveal-roubadas">
+              <p className="eyebrow">
+                {quantasMaquinas === 1
+                  ? `${roubadas[0].quem} achou e você não`
+                  : "As máquinas acharam e você não"}
+              </p>
+              <ul className="wordlist">
+                {roubadas.map((w) => (
+                  <li key={w.w}>
+                    <span className="mono">{w.w}</span>
+                    {quantasMaquinas > 1 && <span className="roubada-quem dim">{w.quem}</span>}
+                    <span className="wordlist-pts">+{w.pts}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {missed.length > 0 && (
             <div className="panel reveal-missed-list">

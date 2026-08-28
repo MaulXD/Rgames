@@ -1094,3 +1094,22 @@
     animation: none;
   }
 }
+
+/* ── "a máquina achou e você não" ───────────────────────────────
+
+   Fica ANTES de "as melhores que escaparam", e a borda é mais quente de
+   propósito: uma lista é sobre a grade ter sido rica, a outra é sobre você ter
+   perdido. A segunda é a que faz apertar "Outra grade". */
+.reveal-roubadas {
+  border-color: var(--vivo-vermelho);
+}
+.reveal-roubadas .eyebrow {
+  color: var(--vivo-vermelho);
+}
+
+.roubada-quem {
+  margin-left: auto;
+  padding-right: 0.6rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+}

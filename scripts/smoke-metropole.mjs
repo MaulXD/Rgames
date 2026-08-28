@@ -2163,14 +2163,22 @@ async function metSolo({ token, niveis, tetoPassos }) {
       break;
     }
 
-    // a máquina primeiro: ela pode ter passo pendente FORA da vez (leilão, troca)
-    const t = await rpc(token, "met_tocar", { p_match: idP });
-    if (t.status !== 200) {
-      problemas.push(`met_tocar: ${JSON.stringify(t.body).slice(0, 150)}`);
-      break;
-    }
-    if (t.body?.passo) {
-      passos.push(t.body.passo);
+    /* A máquina primeiro: ela pode ter passo pendente FORA da vez (leilão,
+       troca). E o passo vai pela conexão DIRETA, não pelo HTTP.
+
+       Cada passo por `met_tocar` custava um round-trip até o Supabase — ~150ms
+       — e uma partida solo tem 240 passos. Pela conexão pg o mesmo passo custa
+       ~5ms, e a suíte inteira deixou de levar dez minutos.
+
+       O caminho do RPC não fica sem teste: ele tem asserções próprias logo
+       acima (recusa quem não está na mesa, devolve o rótulo do passo). O que a
+       partida longa mede é o CÉREBRO, e `met_tocar` não faz nada além de
+       conferir quem chamou e chamar `met_bot_passo`. */
+    const passo = (
+      await db.query("select public.met_bot_passo($1::uuid) p", [idP])
+    ).rows[0].p;
+    if (passo) {
+      passos.push(passo);
       semNada = 0;
       n++;
       continue;
@@ -2236,6 +2244,27 @@ async function metSolo({ token, niveis, tetoPassos }) {
       n++;
       continue;
     }
+    /* O HUMANO PASSIVO RESPONDE PROPOSTA — recusando.
+
+       Deixar proposta pendurada não é só grosseria: cada uma ocupa uma das três
+       vagas da máquina, e com as três cheias ela para de propor. O teste ficaria
+       exercitando a proposta uma vez e nunca mais, e a impressão seria de que a
+       funcionalidade funciona pouco quando na verdade é o teste que a estrangula.
+
+       Recusar é o comportamento passivo certo: não dá vantagem à máquina e
+       devolve a vaga. */
+    const paraMim = (st.ofertas ?? []).find((o) => Number(o.para) === meu);
+    if (paraMim) {
+      await rpc(token, "met_offer_reply", {
+        p_match: idP,
+        p_id: paraMim.id,
+        p_aceita: false,
+      });
+      semNada = 0;
+      n++;
+      continue;
+    }
+
     if (st.phase === "rolar" && (st.players[String(meu)]?.jail ?? 0) > 0) {
       await rpc(token, "met_jail", { p_match: idP, p_escolha: "dado" });
       semNada = 0;
@@ -2321,7 +2350,11 @@ ok(
 
 /* ── 2. UMA PARTIDA SOLO INTEIRA ─────────────────────────────────────────── */
 
-const solo = await metSolo({ token: P[0].token, niveis: ["medio", "dificil"], tetoPassos: 1200 });
+/* O TETO DE PASSOS É FOLGA, NÃO LIMITE. Uma partida de vinte rodadas com três na
+   mesa gasta uns setenta passos por rodada quando há leilão — e 1200 caía
+   exatamente em cima disso, então o teste reprovava por chegar ao teto, não por
+   a partida ter travado. Teto que é o resultado esperado não mede nada. */
+const solo = await metSolo({ token: P[0].token, niveis: ["medio", "dificil"], tetoPassos: 2400 });
 ok(!solo.erro, `a partida solo montou${solo.erro ? ": " + solo.erro : ""}`);
 if (!solo.erro) {
   ok(
@@ -2330,11 +2363,37 @@ if (!solo.erro) {
       ? `${solo.n} passos e a economia nunca ficou inválida`
       : `ECONOMIA QUEBRADA: ${solo.problemas[0]}`,
   );
+  /* O LAÇO DA PROPOSTA, que só uma partida inteira pegaria.
+
+     Sem o teto de uma proposta por rodada (0070), duas máquinas ficam em
+     propor-recusar-propor para sempre: recusar tira a oferta da lista, a vaga
+     volta, e a proposta recomeça na mesma vez. Medido antes do conserto:
+     propoe:535, troca:recusa:534 em 1200 passos.
+
+     A checagem é de PROPORÇÃO e não de número absoluto: numa partida saudável a
+     negociação é tempero, nunca o prato. */
+  const propostas = solo.passos.filter((p) => p.startsWith("propoe")).length;
+  ok(
+    propostas <= solo.n / 8,
+    `a negociação é tempero e não o prato: ${propostas} propostas em ${solo.n} passos` +
+      " — sem teto por rodada, duas máquinas ficam em propor-recusar para sempre",
+  );
+
   ok(
     solo.acabou,
     solo.acabou
       ? `e a partida ACABOU sozinha — a Metrópole é jogável sozinho`
-      : `não acabou em ${solo.n} passos (rodada ${solo.st.round})`,
+      : `não acabou em ${solo.n} passos (rodada ${solo.st.round}) — ` +
+        Object.entries(
+          solo.passos.reduce((c, p) => {
+            const k = p.split(/[ (]/)[0];
+            c[k] = (c[k] ?? 0) + 1;
+            return c;
+          }, {}),
+        )
+          .sort((a, b) => b[1] - a[1])
+          .map(([k, v]) => `${k}:${v}`)
+          .join(" "),
   );
   console.log(`         primeiros passos: ${solo.passos.slice(0, 6).join(" · ")}`);
   console.log(
@@ -2557,6 +2616,140 @@ if (prop.status === 200) {
   );
 }
 
+/* ── 3b. a máquina PROPÕE troca ────────────────────────────────
+
+   Numa mesa solo, uma máquina que só RESPONDE proposta tira metade da Metrópole
+   do jogo. Mas esperar que a situação aconteça numa partida não serve de teste:
+   ela só propõe quando falta UMA escritura para fechar um grupo dela, e isso pode
+   não ocorrer em vinte rodadas — na primeira execução depois de 0064, não
+   ocorreu. Então a situação é montada de propósito. */
+
+const salaP = (await rpc(P[0].token, "create_room", { p_game: "metropole" })).body;
+await rpc(P[0].token, "adicionar_bot", { p_room: salaP.id, p_nivel: "dificil" });
+const iniP = await rpc(P[0].token, "met_start", { p_room: salaP.id });
+const elencoP = (
+  await db.query(
+    `select mp.seat, p.is_bot from match_players mp join profiles p on p.id = mp.user_id
+      where mp.match_id = $1 order by mp.seat`,
+    [iniP.body.id],
+  )
+).rows;
+const meuP = Number(elencoP.find((e) => !e.is_bot).seat);
+const botP = Number(elencoP.find((e) => e.is_bot).seat);
+
+// um grupo de cor: a máquina fica com todas menos uma, e a pessoa com a que falta
+const grupoP = (
+  await db.query(
+    `select c ->> 'id' id, c ->> 'g' g
+       from game_themes gt
+       join matches m on gt.id = (m.public_state ->> 'map')
+       cross join jsonb_array_elements(gt.data -> 'casas') c
+      where m.id = $1 and c ->> 'g' = 'marrom'
+      order by (c ->> 'pos')::int`,
+    [iniP.body.id],
+  )
+).rows;
+
+let estadoP = (
+  await db.query("select public_state ps from matches where id = $1", [iniP.body.id])
+).rows[0].ps;
+grupoP.forEach((c, i) => {
+  estadoP.props[c.id] = {
+    owner: i === 0 ? meuP : botP,
+    casas: 0,
+    hotel: false,
+    hipotecada: false,
+  };
+});
+estadoP.turnSeat = botP;
+estadoP.phase = "acao";
+estadoP.pendente = null;
+estadoP.players[String(botP)].cash = 12000;
+await db.query("update matches set public_state = $2::jsonb where id = $1", [
+  iniP.body.id,
+  JSON.stringify(estadoP),
+]);
+
+const passoP = (
+  await db.query("select public.met_bot_passo($1::uuid) p", [iniP.body.id])
+).rows[0].p;
+ok(
+  /^propoe/.test(passoP ?? ""),
+  `faltando uma escritura para fechar o grupo, ela PROPÕE: ${passoP ?? "não propos"}`,
+);
+
+const ofertaP = (
+  await db.query(
+    "select public_state -> 'ofertas' o from matches where id = $1",
+    [iniP.body.id],
+  )
+).rows[0].o;
+if (Array.isArray(ofertaP) && ofertaP.length) {
+  const o = ofertaP[0];
+  const preco = (
+    await db.query(
+      `select (c ->> 'preco')::int p from game_themes gt
+        join matches m on gt.id = (m.public_state ->> 'map')
+        cross join jsonb_array_elements(gt.data -> 'casas') c
+       where m.id = $1 and c ->> 'id' = $2`,
+      [iniP.body.id, grupoP[0].id],
+    )
+  ).rows[0].p;
+  ok(
+    Number(o.de) === botP && Number(o.para) === meuP,
+    `a proposta é dela para mim (de ${o.de} para ${o.para})`,
+  );
+  ok(
+    (o.quer?.props ?? []).includes(grupoP[0].id),
+    `e ela pede exatamente a escritura que FECHA o grupo dela (${(o.quer?.props ?? []).join(", ")})`,
+  );
+  ok(
+    Number(o.da?.cash ?? 0) >= preco,
+    `e paga acima da tabela: R$ ${o.da?.cash} por uma de R$ ${preco} — proposta ofensiva gasta uma vaga por nada`,
+  );
+}
+
+/* E a tranquila NÃO propõe, pela mesma razão que não aceita. */
+const salaQ = (await rpc(P[0].token, "create_room", { p_game: "metropole" })).body;
+await rpc(P[0].token, "adicionar_bot", { p_room: salaQ.id, p_nivel: "facil" });
+const iniQ = await rpc(P[0].token, "met_start", { p_room: salaQ.id });
+const botQ = Number(
+  (
+    await db.query(
+      `select mp.seat from match_players mp join profiles p on p.id = mp.user_id
+        where mp.match_id = $1 and p.is_bot limit 1`,
+      [iniQ.body.id],
+    )
+  ).rows[0].seat,
+);
+const meuQ = botQ === 0 ? 1 : 0;
+let estadoQ = (
+  await db.query("select public_state ps from matches where id = $1", [iniQ.body.id])
+).rows[0].ps;
+grupoP.forEach((c, i) => {
+  estadoQ.props[c.id] = {
+    owner: i === 0 ? meuQ : botQ,
+    casas: 0,
+    hotel: false,
+    hipotecada: false,
+  };
+});
+estadoQ.turnSeat = botQ;
+estadoQ.phase = "acao";
+estadoQ.pendente = null;
+estadoQ.players[String(botQ)].cash = 12000;
+await db.query("update matches set public_state = $2::jsonb where id = $1", [
+  iniQ.body.id,
+  JSON.stringify(estadoQ),
+]);
+const passoQ = (
+  await db.query("select public.met_bot_passo($1::uuid) p", [iniQ.body.id])
+).rows[0].p;
+ok(
+  !/^propoe/.test(passoQ ?? ""),
+  `na MESMA situação, a tranquila não propõe (${passoQ}) — não negociar é o comportamento de quem ainda não entendeu o jogo`,
+);
+
 /* ── 4. o nível significa algo? ──────────────────────────────────────────── */
 
 const contraFacil = await metSolo({ token: P[0].token, niveis: ["facil"], tetoPassos: 700 });
@@ -2645,20 +2838,23 @@ if (!contraFacil.erro && !contraDif.erro) {
     `a que FECHA o grupo vale mais para quem entende o jogo: tranquila vê R$ ${valores.f} (o preço), firme R$ ${valores.m}, impiedosa R$ ${valores.d}`,
   );
 
-  /* A última asserção comportamental que é estável de verdade: sem reserva,
-     a tranquila compra mais. Vale em qualquer partida, porque é a consequência
-     direta de `met_bot_reserva('facil') = 0`. */
+  /* A TERCEIRA ASSERÇÃO COMPORTAMENTAL TAMBÉM CAIU, e pelo mesmo motivo das duas
+     anteriores: "a tranquila compra mais" é verdade em média e falso em partidas
+     individuais — mediu 8 contra 7, depois 9 contra 6, depois 6 contra 7, e
+     nessa última reprovou. Onde a máquina cai importa mais que a política dela
+     numa amostra de uma partida.
+
+     A regra fica conferida onde mora (as duas funções acima), e o comportamento
+     vira relatório. Um número que balança não vira asserção: teste que reprova
+     por sorte do dado ensina a ignorar a saída vermelha. */
   const compras = (r) => r.passos.filter((p) => p.startsWith("compra")).length;
-  ok(
-    compras(contraFacil) >= compras(contraDif),
-    `e na mesa a tranquila compra mais, porque não guarda nada (${compras(contraFacil)} contra ${compras(contraDif)})`,
-  );
 
   const constroi = (r) => r.passos.filter((p) => p.startsWith("constroi")).length;
   const apertos = (r) => r.passos.filter((p) => p.startsWith("divida:")).length;
   const caixa = (r) => r.bots.reduce((a, x) => a + (r.st.players[String(x)]?.cash ?? 0), 0);
   console.log(
-    `         observado — construções: ${constroi(contraFacil)} / ${constroi(contraDif)}` +
+    `         observado — compras: ${compras(contraFacil)} / ${compras(contraDif)}` +
+      ` · construções: ${constroi(contraFacil)} / ${constroi(contraDif)}` +
       ` · apertos: ${apertos(contraFacil)} / ${apertos(contraDif)}` +
       ` · caixa final: ${caixa(contraFacil)} / ${caixa(contraDif)} (tranquila / impiedosa)`,
   );

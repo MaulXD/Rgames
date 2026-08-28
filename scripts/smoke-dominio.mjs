@@ -1283,6 +1283,7 @@ async function partidaSolo({ token, niveis, tetoTurnos }) {
   let turnos = 0;
   let turnosBot = 0;
   let conquistasBot = 0;
+  let maxPorTurno = 0;
   let acabou = false;
 
   while (turnos < tetoTurnos) {
@@ -1350,22 +1351,39 @@ async function partidaSolo({ token, niveis, tetoTurnos }) {
       }
     } else {
       const antes = { ...st.donos };
-      const t = await rpc(token, "dominio_tocar", { p_match: idPartida });
-      if (t.status !== 200) {
-        problemas.push(
-          `dominio_tocar no assento ${st.turnSeat}: ${JSON.stringify(t.body).slice(0, 150)}`,
+      /* Pela conexão DIRETA, e não pelo HTTP: cada turno por `dominio_tocar`
+         custava um round-trip até o Supabase, e esta suíte roda TRÊS partidas
+         inteiras. O RPC tem asserções próprias logo acima; o que a partida longa
+         mede é o cérebro, e ele é o mesmo dos dois lados. */
+      let feito = 0;
+      const antesConquistas = conquistasBot;
+      try {
+        feito = Number(
+          (await db.query("select public.dominio_bot_turno($1::uuid) n", [idPartida])).rows[0].n,
         );
+      } catch (e) {
+        problemas.push(`dominio_bot_turno no assento ${st.turnSeat}: ${String(e).slice(0, 200)}`);
+        break;
+      }
+      if (feito === 0) {
+        problemas.push(`a máquina do assento ${st.turnSeat} não fez nada`);
         break;
       }
       turnosBot++;
       /* QUANTOS TERRITÓRIOS ELA TOMOU NESTE TURNO, contados no mapa e não no
          registro: `dominio_log` guarda 80 linhas, e uma partida de 36 turnos
          passa disso. Medir pelo registro seria medir a janela do registro. */
-      const depois = (t.body?.public_state ?? {}).donos ?? {};
+      const depois =
+        (
+          await db.query("select public_state from matches where id = $1", [idPartida])
+        ).rows[0].public_state.donos ?? {};
       const dela = Number(st.turnSeat);
       for (const ter of Object.keys(antes)) {
         if (Number(antes[ter]) !== dela && Number(depois[ter]) === dela) conquistasBot++;
       }
+      // o MÁXIMO num único turno: é o que a política garante, e o que dá um teste
+      // que não balança com o dado
+      maxPorTurno = Math.max(maxPorTurno, conquistasBot - antesConquistas);
     }
     turnos++;
   }
@@ -1395,6 +1413,7 @@ async function partidaSolo({ token, niveis, tetoTurnos }) {
     turnos,
     turnosBot,
     conquistasBot,
+    maxPorTurno,
     /* A FORÇA DE UM NÍVEL: territórios tomados POR TURNO de máquina.
        É a medida certa por dois motivos. Primeiro, ela não satura: contar
        territórios no fim dá 42 para qualquer dupla que vença, e contra um humano
@@ -1504,6 +1523,83 @@ ok(
   `o registro cresceu de ${antesFaxina} para ${(depoisFaxina.l ?? []).length} linhas: a máquina fez coisas`,
 );
 
+/* ── 2b. o relógio não corre contra quem está sozinho ────────────────
+
+   O relógio do turno existe para proteger AS OUTRAS PESSOAS de quem sumiu. Numa
+   mesa em que todo o resto é máquina, não há quem proteger — e o que ele faz ali
+   é tirar o turno de quem atendeu o telefone. No celular esse é o caso COMUM, não
+   o raro: sair do aplicativo já é sair da aba, e o modo solo é onde isso mais
+   acontece.
+
+   As duas pontas são testadas, e a segunda é a que impede o conserto de virar
+   buraco: com OUTRA PESSOA na mesa, o relógio volta a correr normalmente. */
+
+// a vez volta para a pessoa, e o relógio estoura
+await db.query(
+  `update matches set
+     public_state = jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
+       '{phase}', '"reforco"'),
+     turn_deadline = now() - interval '1 second'
+   where id = $1`,
+  [iniT.body.id, meuT],
+);
+await db.query("select public.dominio_sweep()");
+const soloRelogio = (
+  await db.query(
+    `select turn_deadline, (public_state ->> 'turnSeat')::int t from matches where id = $1`,
+    [iniT.body.id],
+  )
+).rows[0];
+ok(
+  soloRelogio.turn_deadline === null,
+  "numa mesa só com máquinas, a faxina DESLIGA o relógio em vez de tirar o turno",
+);
+ok(
+  Number(soloRelogio.t) === meuT,
+  `e a vez continua sendo minha (assento ${soloRelogio.t}) — atender o telefone não custa um turno`,
+);
+
+/* A CONTRAPROVA. Com outra pessoa na mesa o relógio volta a correr, senão o
+   conserto vira um jeito de travar a partida dos outros. */
+const salaDupla = (await rpc(P[0].token, "create_room", { p_game: "dominio" })).body;
+await rpc(P[1].token, "join_room", { p_code: salaDupla.code });
+await rpc(P[0].token, "adicionar_bot", { p_room: salaDupla.id, p_nivel: "medio" });
+const iniD = await rpc(P[0].token, "dominio_start", { p_room: salaDupla.id });
+if (iniD.status === 200) {
+  const humanoD = Number(
+    (
+      await db.query(
+        `select mp.seat from match_players mp join profiles p on p.id = mp.user_id
+          where mp.match_id = $1 and not p.is_bot order by mp.seat limit 1`,
+        [iniD.body.id],
+      )
+    ).rows[0].seat,
+  );
+  await db.query(
+    `update matches set
+       public_state = jsonb_set(jsonb_set(public_state, '{turnSeat}', to_jsonb($2::int)),
+         '{phase}', '"reforco"'),
+       turn_deadline = now() - interval '1 second'
+     where id = $1`,
+    [iniD.body.id, humanoD],
+  );
+  await db.query("select public.dominio_sweep()");
+  const duplaRelogio = (
+    await db.query(
+      `select turn_deadline, (public_state ->> 'turnSeat')::int t from matches where id = $1`,
+      [iniD.body.id],
+    )
+  ).rows[0];
+  ok(
+    Number(duplaRelogio.t) !== humanoD,
+    `com OUTRA PESSOA na mesa o relógio corre normalmente e a vez passa (${humanoD} → ${duplaRelogio.t}) — o conserto não pode virar um jeito de travar a partida dos outros`,
+  );
+  ok(
+    duplaRelogio.turn_deadline !== null,
+    "e o relógio do próximo continua de pé",
+  );
+}
+
 /* ── 3. UMA PARTIDA SOLO INTEIRA ─────────────────────────────────────────── */
 
 const solo = await partidaSolo({ token: P[0].token, niveis: ["medio", "dificil"], tetoTurnos: 400 });
@@ -1589,14 +1685,49 @@ if (!contraFacil.erro && !contraDif.erro) {
       ? "as duas rodaram sem quebrar o mapa"
       : `MAPA QUEBRADO: ${contraFacil.problemas[0] ?? contraDif.problemas[0]}`,
   );
+  /* O NÍVEL É CONFERIDO ONDE ELE MORA, e não na média de uma partida.
+
+     Este teste comparava territórios tomados por turno entre as duas duplas. Em
+     três execuções seguidas ele mediu 0,50 contra 3,17; depois 1,63 contra 4,32;
+     depois 1,79 contra 2,26 — e nessa última reprovou, porque o dado foi bom
+     para a tranquila. Uma partida é uma amostra de UM, e teste que reprova por
+     sorte do dado é pior que teste nenhum: ensina a ignorar a saída vermelha.
+
+     Foi a mesma lição que a Metrópole deu duas vezes em 0055 (patrimônio final e
+     caixa final mediram a coisa errada). Então 0062 tirou os três números do meio
+     do turno e pôs numa tabela com nome, e o teste lê a tabela. */
+  const agressao = (
+    await db.query(
+      `select nivel, t_margem, t_teto, t_vezes
+         from unnest(array['facil', 'medio', 'dificil']) nivel,
+              lateral public.dominio_bot_agressao(nivel)`,
+    )
+  ).rows;
+  const porNivel = Object.fromEntries(agressao.map((r) => [r.nivel, r]));
   ok(
-    contraDif.porTurno > contraFacil.porTurno * 1.3,
-    `o nível NÃO é rótulo: a tranquila toma ${contraFacil.porTurno.toFixed(2)} territórios por turno e a impiedosa ${contraDif.porTurno.toFixed(2)}` +
-      ` (${contraFacil.conquistasBot}/${contraFacil.turnosBot} contra ${contraDif.conquistasBot}/${contraDif.turnosBot})`,
+    Number(porNivel.facil.t_margem) > Number(porNivel.medio.t_margem) &&
+      Number(porNivel.medio.t_margem) > Number(porNivel.dificil.t_margem),
+    `a exigência de vantagem cai com o nível: tranquila pede +${porNivel.facil.t_margem}, firme +${porNivel.medio.t_margem}, impiedosa +${porNivel.dificil.t_margem}` +
+      " (em paridade o atacante leva vantagem, e só a impiedosa sabe disso)",
   );
   ok(
-    contraFacil.porTurno > 0,
-    `e a tranquila TOMA algo (${contraFacil.conquistasBot} territórios): adversario que nunca ataca não é fácil, é enfeite`,
+    Number(porNivel.facil.t_teto) < Number(porNivel.medio.t_teto) &&
+      Number(porNivel.medio.t_teto) < Number(porNivel.dificil.t_teto),
+    `e o número de ataques por turno sobe: ${porNivel.facil.t_teto}, ${porNivel.medio.t_teto}, ${porNivel.dificil.t_teto}`,
+  );
+
+  /* E NA MESA, o que a política GARANTE — não o que ela costuma dar.
+     A tranquila ataca no máximo duas vezes por turno, então ela nunca toma mais
+     de dois territórios num turno. Isso é um TETO, e teto não depende de dado. */
+  ok(
+    contraFacil.maxPorTurno <= Number(porNivel.facil.t_teto),
+    `e a tranquila nunca tomou mais de ${contraFacil.maxPorTurno} território(s) num turno — o teto dela é ${porNivel.facil.t_teto}, e teto não depende de sorte`,
+  );
+
+  console.log(
+    `         observado — territórios por turno: tranquila ${contraFacil.porTurno.toFixed(2)},` +
+      ` impiedosa ${contraDif.porTurno.toFixed(2)}` +
+      ` (${contraFacil.conquistasBot}/${contraFacil.turnosBot} contra ${contraDif.conquistasBot}/${contraDif.turnosBot})`,
   );
 }
 

@@ -18,6 +18,7 @@ conta opcional, hospedado na Vercel com Supabase como backend autoritativo.
 | [05 — PRD Metrópole](05-PRD-METROPOLE.md) | Banco Imobiliário / economia |
 | [06 — Roadmap](06-ROADMAP.md) | Fases, marcos, critérios de saída, estimativas |
 | [07 — Sistema de Temas](07-SISTEMA-DE-TEMAS.md) | Um motor, muitos mundos: contrato de pacote, seleção, sorteio, validador, orçamento |
+| [08 — As Máquinas](08-MAQUINAS.md) | Jogar sozinho: o ator explícito, o ritmo de um passo por vez, os níveis, a dedução honesta do Dossiê |
 
 ## Decisões travadas
 

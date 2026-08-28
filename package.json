@@ -20,7 +20,8 @@
     "cidade": "node scripts/seed-metropole.mjs",
     "smoke:metropole": "node scripts/smoke-metropole.mjs",
     "dossie": "node scripts/seed-dossie.mjs",
-    "bots": "node scripts/seed-bots.mjs"
+    "bots": "node scripts/seed-bots.mjs",
+    "css": "node scripts/check-css.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

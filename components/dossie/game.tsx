@@ -112,9 +112,34 @@ export function DossieGame({
   const tocando = useRef(false);
   const falhasBot = useRef(0);
   const [maquinaEmpacou, setMaquinaEmpacou] = useState(false);
+  /* ── QUANTO CADA MÁQUINA JÁ SABIA ──────────────────────────────
+
+     Jogando com gente, a pergunta "eu estava perto?" se responde sozinha: a mesa
+     comenta, alguém diz "eu já sabia da corda na rodada quatro". Sozinho, o caso
+     fecha em silêncio.
+
+     O servidor só conta depois que a partida acabou, e só a CONTAGEM — ver 0067.
+     A lista de cartas dela continua sendo dela. */
+  const [deducoes, setDeducoes] = useState<
+    { seat: number; nome: string; riscadas: number }[] | null
+  >(null);
   // o mesmo contador do Domínio, pelo mesmo motivo: sem ele a primeira falha
   // parava a corrente e a tela nunca oferecia o botão
   const [tique, setTique] = useState(0);
+  /* UM TETO DE PASSOS SEGUIDOS DE MÁQUINA.
+
+     A causa do laço de 0070 está consertada no servidor. Este teto é seguro
+     contra o PRÓXIMO laço — e vai existir um, porque ele nasce de duas regras
+     certas se encontrando, e não de uma errada.
+
+     Sem ele, o cliente chama o RPC enquanto houver passo: num laço, para sempre.
+     Num celular isso é bateria queimada com a tela dizendo "está jogando" sobre
+     uma mesa que não anda.
+
+     O teto é folgado de propósito — três máquinas jogando turnos completos cabem
+     bem abaixo dele — e zera quando a vez volta para gente. */
+  const TETO_PASSOS = 150;
+  const seguidos = useRef(0);
 
   const tocarMaquina = useCallback(async () => {
     if (tocando.current) return;
@@ -132,6 +157,9 @@ export function DossieGame({
         return;
       }
       falhasBot.current = 0;
+      seguidos.current += 1;
+      if (seguidos.current > TETO_PASSOS) setMaquinaEmpacou(true);
+      else setTique((t) => t + 1);
       /* O RÓTULO DO PASSO NÃO VAI PARA A TELA AQUI, e a Metrópole leva.
          Lá ele conta o que ninguém mais contaria ("comprou o Ver-o-Peso"); no
          Dossiê o registro da mesa JÁ conta tudo que é público, linha por linha, e
@@ -144,6 +172,7 @@ export function DossieGame({
   }, [match.id]);
 
   useEffect(() => {
+    if (minhaVez || devoRefutar) seguidos.current = 0;   // voltou para gente: zera
     if (!temMaquina || st.phase === "over" || maquinaEmpacou) return;
     if (!maquinaNaVez && !maquinaRefutando) return;
     // o setState mora dentro do temporizador
@@ -159,6 +188,8 @@ export function DossieGame({
     st.turnSeat,
     st.seq,
     tique,
+    minhaVez,
+    devoRefutar,
   ]);
 
   useEffect(() => {
@@ -219,6 +250,23 @@ export function DossieGame({
     const { error } = await supabaseBrowser().rpc(fn, args);
     if (error) setErro(traduz(error.message));
   }
+
+  /* Este efeito vive ACIMA dos retornos antecipados: hook depois de `return`
+     roda em ordem diferente entre renderizações, e o React proíbe — com razão. */
+  useEffect(() => {
+    if (st.phase !== "over" || deducoes !== null) return;
+    let vivo = true;
+    void supabaseBrowser()
+      .rpc("dossie_deducoes", { p_match: match.id })
+      .then(({ data }: { data: unknown }) => {
+        if (!vivo) return;
+        const d = data as { maquinas?: { seat: number; nome: string; riscadas: number }[] } | null;
+        if (d?.maquinas?.length) setDeducoes(d.maquinas);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [st.phase, match.id, deducoes]);
 
   if (!caso) return <p className="eyebrow py-16">Abrindo o dossiê…</p>;
 
@@ -313,6 +361,26 @@ export function DossieGame({
           <p className="desfecho-com">com {nomeDaCarta(caso, st.solution.weapon)}</p>
           <p className="desfecho-onde">na {nomeDaCarta(caso, st.solution.room)}</p>
           {caso.encerramento && <p className="desfecho-nota">{caso.encerramento}</p>}
+
+          {deducoes && deducoes.length > 0 && (
+            <div className="desfecho-sabia">
+              <p className="eyebrow">O que elas já sabiam</p>
+              <ul>
+                {deducoes.map((d) => (
+                  <li key={d.seat}>
+                    <span>{d.nome}</span>
+                    <span className="mono">
+                      {d.riscadas} {d.riscadas === 1 ? "carta riscada" : "cartas riscadas"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="desfecho-sabia-nota dim">
+                Riscada é carta que ela provou não estar no envelope. Compare com o seu
+                bloco — é aí que dá para ver se faltou pouco.
+              </p>
+            </div>
+          )}
           <button className="btn btn-brass mt-4 w-full" onClick={onSair}>
             Voltar para a sala
           </button>

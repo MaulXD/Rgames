@@ -1072,3 +1072,11 @@
   gap: 0.6rem;
   color: var(--fg);
 }
+
+/* "sem pressa" no lugar do relógio, quando a mesa só tem máquinas além de você */
+.turno-sem-pressa {
+  font-size: 0.66rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}

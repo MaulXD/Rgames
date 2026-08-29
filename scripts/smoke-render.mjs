@@ -376,7 +376,41 @@ monta("metropole/propostas na mesa", Propostas, {
   meuAssento: 0,
   onResponder: nada,
   onRetirar: nada,
-}, ["propõe", "Aceitar"]);
+  /* As três cláusulas pelo texto que elas REALMENTE produzem. Pedi a palavra
+     "opção" e reprovou: a frase diz "direito de comprar". O marcador tem de
+     sair da tela, e não do nome que eu dou à coisa por dentro. */
+}, ["propõe", "Aceitar", "por rodada", "isenção de aluguel", "direito de comprar"]);
+
+/* A MESA DE NEGOCIAÇÃO é a tela mais densa que este projeto tem: escolhe com
+   quem, monta os dois lados, e cada lado aceita dinheiro, propriedades, cartas
+   de saída e TRÊS tipos de cláusula com campos próprios.
+
+   Ela é também onde estavam os cinco campos sem nome acessível, e o motivo é o
+   mesmo que a torna difícil de acertar: muito controle, pouco texto, e cada
+   pedaço só aparece depois de um clique. Uma tela assim é a última que alguém
+   abre de propósito para conferir, e a primeira que quebra. */
+const { MesaDeNegociacao } = await import("@/components/metropole/negociar");
+
+monta(
+  "metropole/mesa de negociação",
+  MesaDeNegociacao,
+  {
+    props,
+    jogadores: [
+      { seat: 0, cor: "carmim", cash: 12000, livras: 1, quebrado: false },
+      { seat: 1, cor: "jade", cash: 8000, livras: 0, quebrado: false },
+      { seat: 2, cor: "prussia", cash: 3000, livras: 2, quebrado: false },
+    ],
+    nomes,
+    meuAssento: 0,
+    rodada: 8,
+    rodadaFinal: 20,
+    ocupado: false,
+    onPropor: nada,
+    onFechar: nada,
+  },
+  ["Creuza", "Nestor"],
+);
 
 /* ══════════════════════════════════════════════════════════════════════════
    DOMÍNIO — a mão de cartas, nos dois mapas

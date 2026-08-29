@@ -804,12 +804,37 @@ if (achadas.length > 0) {
     await db.query("select stats -> 'rara' r from profiles where id = $1", [A.id])
   ).rows[0]?.r;
 
-  ok(
-    !!posto0?.w && Number(posto0.posto) > 0,
-    posto0
-      ? `a partida guardou uma palavra rara: ${posto0.w}, posto ${posto0.posto}`
-      : "nenhuma palavra rara foi guardada depois de uma partida inteira",
-  );
+  /* HAVIA O QUE GUARDAR? A pergunta vem antes da asserção, e a primeira versão
+     deste teste pulou essa parte — exigia que a partida SEMPRE deixasse uma
+     palavra rara, e reprovou numa rodada em que nenhuma das palavras achadas
+     tinha posto no corpus.
+
+     Não era defeito da função: era o teste medindo a sorte da grade. Se nenhuma
+     palavra da rodada é elegível, não guardar é o comportamento certo, e dizer
+     isso na saída vale mais que reprovar. */
+  const elegiveis = (
+    await db.query(
+      `select count(*)::int n from public.dict_pt d
+        where d.norm = any($1::text[]) and d.freq is not null
+          and public.palavra_apresentavel(d.norm)`,
+      [achadas],
+    )
+  ).rows[0].n;
+
+  if (elegiveis === 0) {
+    ok(
+      true,
+      "nenhuma das palavras desta rodada tem posto no corpus — nada a guardar, e não guardar é o certo",
+    );
+  } else {
+    ok(
+      !!posto0?.w && Number(posto0.posto) > 0,
+      posto0
+        ? `a partida guardou uma palavra rara: ${posto0.w}, posto ${posto0.posto}` +
+          ` (${elegiveis} elegível(is) na rodada)`
+        : `havia ${elegiveis} palavra(s) elegível(is) e nenhuma foi guardada`,
+    );
+  }
 
   /* E ELA TEM POSTO DE VERDADE. Esta é a checagem que guarda a lição do
      ONO/ADE/ADELE: `freq` é nulo para a maior parte do dicionário, e ler nulo
@@ -839,7 +864,7 @@ if (achadas.length > 0) {
      é exatamente ali que mora o palavrão. O perfil existe para ser mostrado.
 
      A palavra continua valendo na partida — pontua, aparece na revelação, conta
-     para as conquistas. O que ela não faz é virar troéu permanente.
+     para as conquistas. O que ela não faz é virar troféu permanente.
 
      E o teste confere as DUAS direções, porque uma lista de bloqueio que bloqueia
      demais é tão defeituosa quanto uma que bloqueia de menos: `cágado` e
@@ -854,7 +879,7 @@ if (achadas.length > 0) {
   ok(
     veredicto.SODOMIA === false && veredicto.CARALHO === false,
     veredicto.SODOMIA === false
-      ? "palavrão não vira troéu do perfil (e continua valendo na partida)"
+      ? "palavrão não vira troféu do perfil (e continua valendo na partida)"
       : "SODOMIA passaria como a palavra mais rara do perfil de alguém",
   );
   ok(
@@ -875,7 +900,7 @@ if (achadas.length > 0) {
     naoEntrou !== "CARALHO",
     naoEntrou !== "CARALHO"
       ? "— e nem por posto altíssimo ela entra: o filtro está na apuração, antes de gravar"
-      : "gravou CARALHO como troéu por ter posto alto",
+      : "gravou CARALHO como troféu por ter posto alto",
   );
 
   /* A POLÍTICA, em três chamadas. */

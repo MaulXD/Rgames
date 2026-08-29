@@ -15,7 +15,7 @@ export type Stats = {
   /**
    * A palavra mais rara já achada, e o posto dela na lista de frequência de
    * fala. Posto MAIOR é mais raro — e só entram palavras que TÊM posto: sem
-   * posto, o corpus nunca ouviu a palavra, e aí ela não é troéu, é ruído
+   * posto, o corpus nunca ouviu a palavra, e aí ela não é troféu, é ruído
    * (ver 0094).
    */
   rara?: { w: string; posto: number };

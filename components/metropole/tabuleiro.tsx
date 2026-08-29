@@ -195,7 +195,15 @@ function Quadro({
             <span
               key={p.seat}
               className="peao"
-              style={{ background: COLORS[p.cor].enamel, borderColor: COLORS[p.cor].ink }}
+              /* `?? "grafite"` como em todo outro lugar que lê cor de peão.
+                 Esta linha era a única sem a rede, e a diferença é grande: um
+                 peão sem cor é um peão cinza em qualquer outra tela e era o
+                 TABULEIRO INTEIRO quebrado nesta. Cor é aparência; aparência
+                 faltando não derruba tela. */
+              style={{
+                background: COLORS[p.cor ?? "grafite"].enamel,
+                borderColor: COLORS[p.cor ?? "grafite"].ink,
+              }}
               data-preso={p.preso}
               title={p.nome}
             >

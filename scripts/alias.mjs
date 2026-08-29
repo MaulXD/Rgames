@@ -1,73 +1,22 @@
 /**
- * Um gancho de resolução que ensina o Node a entender `@/`.
+ * Ensina o Node a importar o código do cliente.
  *
  *   node --import ./scripts/alias.mjs scripts/smoke-bloco.mjs
  *
  * POR QUE ISTO EXISTE. O Node 24 tira os tipos do TypeScript sozinho — dá para
  * importar um `.ts` direto, sem compilar, sem `tsx`, sem `vitest`, sem
- * dependência nova. A única coisa que falta é o apelido `@/`, que é do
- * `tsconfig` e o Node não lê.
+ * dependência nova. Faltam quatro coisas, e as quatro estão em
+ * `scripts/alias-hooks.mjs`: o apelido `@/`, a extensão implícita, o atributo do
+ * JSON e o JSX.
  *
- * Doze linhas resolvem, e o que elas destravam é grande: a lógica PURA deste
- * projeto — o bloco de dedução do Dossiê, a pontuação do Letreiro, o grafo do
- * Domínio — passa a ser testável em Node, do mesmo jeito que as suítes de
- * fumaça já testam o servidor.
+ * O que isso destrava é grande: a lógica PURA deste projeto — o bloco de dedução
+ * do Dossiê, a pontuação do Letreiro, o grafo do Domínio — e, com o JSX, os
+ * COMPONENTES. As suítes já provam o servidor; isto é o que faltava para provar
+ * a tela.
  *
- * O bloco de dedução é o caso que mais precisava: ele é, nas palavras do próprio
- * arquivo, "o que separa quem joga bem de quem joga mal no Detetive de mesa", e
- * até agora não tinha um único teste — porque era TypeScript, e as suítes eram
- * `.mjs` contra o banco.
- *
- * NÃO É UM EMPACOTADOR. Ele resolve `@/` e mais nada; qualquer coisa que
- * dependa de bundler (CSS, JSX, `next/*`) continua de fora, e é por isso que o
- * que se testa aqui é lógica pura.
+ * NÃO É UM EMPACOTADOR. Ele resolve caminho e transforma JSX, e mais nada:
+ * `next/image`, CSS e o que depender do bundler continuam de fora.
  */
-import { pathToFileURL } from "node:url";
 import { register } from "node:module";
 
-const raiz = pathToFileURL(new URL("..", import.meta.url).pathname).href;
-
-register(
-  `data:text/javascript,
-   const RAIZ = ${JSON.stringify(new URL("..", import.meta.url).href)};
-   import { existsSync } from "node:fs";
-   import { fileURLToPath } from "node:url";
-   /* O TypeScript importa sem extensao ("@/lib/dossie"); o Node exige a
-      extensao. Sondar .ts e .tsx e o que fecha a distancia, e nao ha ambiguidade
-      porque este projeto nao tem .js ao lado de .ts. */
-   function comExtensao(url) {
-     if (existsSync(fileURLToPath(url))) return url;
-     for (const ext of [".ts", ".tsx", "/index.ts"]) {
-       const tentativa = url + ext;
-       if (existsSync(fileURLToPath(tentativa))) return tentativa;
-     }
-     return url;
-   }
-   /* O TypeScript importa JSON sem cerimonia (resolveJsonModule); o Node exige
-      um atributo de importacao. Poe-lo no codigo da aplicacao para agradar um
-      carregador de teste seria o rabo abanando o cachorro -- o atributo entra
-      aqui, onde o teste mora. */
-   /* O atributo tem de sair no RESULTADO do gancho, e nao no contexto que se
-      passa adiante: o contexto e o que o gancho RECEBEU, e o Node valida contra
-      o que ele DEVOLVE. Perdi duas tentativas nisso. */
-   async function comJson(promessa) {
-     const resultado = await promessa;
-     return resultado.url.endsWith(".json")
-       ? { ...resultado, importAttributes: { type: "json" }, format: "json" }
-       : resultado;
-   }
-   export async function resolve(especificador, contexto, proximo) {
-     if (especificador.startsWith("@/")) {
-       const u = comExtensao(new URL(especificador.slice(2), RAIZ).href);
-       return comJson(proximo(u, contexto));
-     }
-     if (especificador.startsWith("./") || especificador.startsWith("../")) {
-       const u = comExtensao(new URL(especificador, contexto.parentURL).href);
-       return comJson(proximo(u, contexto));
-     }
-     return proximo(especificador, contexto);
-   }`,
-  import.meta.url,
-);
-
-void raiz;
+register("./alias-hooks.mjs", import.meta.url);

@@ -344,12 +344,12 @@ Não "partidas jogadas". Coisas que a pessoa quer contar para os amigos:
 > para a maior parte do dicionário: a lista de frequência de fala cobre uma fração das 248.632
 > palavras. Ler nulo como "raríssima" premiaria `ababalhar` e `aaleniano` — o MESMO defeito que
 > fez a revelação mostrar ONO, ADE e ADELE. Sem posto, o corpus nunca ouviu a palavra, e palavra
-> que ninguém diz não é troéu.
+> que ninguém diz não é troféu.
 >
 > **E O TROFÉU PRECISA SER APRESENTÁVEL.** A primeira rodada de teste guardou `sodomia`. Não foi
 > azar: o seletor procura o INCOMUM, e num dicionário completo de português é exatamente ali que
 > mora o palavrão. A palavra continua valendo na partida — pontua, aparece na revelação, conta
-> para as conquistas. O que ela não faz é virar o troéu permanente do perfil, que existe para
+> para as conquistas. O que ela não faz é virar o troféu permanente do perfil, que existe para
 > ser mostrado. A lista está em `data/letreiro-fora-do-trofeu.txt`, é de RADICAIS, e
 > `npm run trofeu` imprime tudo o que cada um captura — porque prefixo é fácil de errar, e a
 > primeira versão bloqueou `cágado` e `trepadeira`.

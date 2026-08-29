@@ -163,7 +163,7 @@ export function DominioGame({
   const { user } = useSession();
   const st = match.public_state;
   /* QUAL MAPA. Vantara ou o recorte Relâmpago, e a resposta vem do ESTADO da
-     partida — nunca das regras da sala. O anântrio pode trocar de modo entre
+     partida — nunca das regras da sala. O anfitrião pode trocar de modo entre
      duas partidas, e o mapa de uma partida em curso é o que ela começou com. */
   const mapa = mapaDe(st.map);
 

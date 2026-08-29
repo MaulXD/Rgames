@@ -173,6 +173,9 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | Os critérios de aceite conferidos contra a EVIDÊNCIA | ✅ os PRDs subestimavam o que está construído, e checklist desatualizado é pior que nenhum. Domínio 17→6, Letreiro 24→11, Dossiê 31→15, Plataforma 11→8 — e o que fica aberto fica com o motivo escrito |
 | O bloco de dedução ganhou testes | ✅ ele é "o que separa quem joga bem de quem joga mal" e não tinha nenhum. O Node 24 tira os tipos sozinho: 16 verificações de lógica pura, zero dependência nova |
 | Cliente e servidor concordam sobre o remanejo | ✅ `conectados` (TypeScript) e `dominio_conectado` (PL/pgSQL) respondem a mesma pergunta e não compartilham código. 3.200 comparações nos dois mapas: a tela não acende o que o servidor recusa |
+| A abertura do Dossiê quebrava em três dos quatro casos | ✅ **primeiro relato de alguém JOGANDO**, e ele achou de primeira o que 760 verificações de servidor não achariam nunca: a narração publicada como objeto, e a abertura a percorre com `.map` |
+| A tela de erro passa a dizer o que aconteceu | ✅ não havia `global-error`. A parede padrão do Next, em inglês, sem a mensagem — quem relata só conseguia dizer "deu erro" |
+| `npm run smoke:pacotes` | ✅ a fronteira entre o conteúdo que o cliente EMPACOTA e o que o servidor PUBLICA. Editar `vantara.json` sem republicar faz a tela desenhar uma fronteira que o servidor não conhece |
 
 ---
 

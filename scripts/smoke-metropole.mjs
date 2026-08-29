@@ -1980,12 +1980,29 @@ ok(
    sorteio. O que mede é a DISTRIBUIÇÃO, e é isso que está aqui. Se o viés
    voltar, este teste reprova na hora. Ver a migração 0038. */
 const SORTEIOS = 300;
-const contagem = new Map();
-for (let seed = 1; seed <= SORTEIOS; seed++) {
-  const r = await sorteia({ ...estadoBase(), round: 5, evento: null }, 5, seed * 1000);
-  const id = r.evento?.id;
-  contagem.set(id, (contagem.get(id) ?? 0) + 1);
-}
+
+/* AS TREZENTAS NUMA CONSULTA SÓ, e não trezentas consultas.
+
+   Medido: o laço sequencial levava 113 dos 586 segundos da suíte — quase um
+   quinto do tempo total, e nenhum dele era trabalho. Era ida e volta até o
+   Supabase, trezentas vezes, para uma função PURA que o banco resolve em
+   microssegundos.
+
+   `generate_series` faz o laço lá dentro. O que se mede continua exatamente o
+   mesmo: as mesmas sementes, espaçadas do mesmo jeito, na mesma função. */
+const contagem = new Map(
+  (
+    await db.query(
+      `select public.met_evento(gt.data, $1::jsonb, s.n * 1000, 5) -> 'evento' ->> 'id' id,
+              count(*)::int quantas
+         from public.game_themes gt,
+              generate_series(1, $2) s(n)
+        where gt.id = 'capibara'
+        group by 1`,
+      [JSON.stringify({ ...estadoBase(), round: 5, evento: null }), SORTEIOS],
+    )
+  ).rows.map((r) => [r.id, r.quantas]),
+);
 const justo = SORTEIOS / 6;
 const faltando = CIDADE.eventos.filter((e) => !contagem.has(e.id)).map((e) => e.id);
 ok(
@@ -2002,11 +2019,20 @@ ok(
 );
 
 // a obra sorteia um grupo, e ele existe
-let achouObra = null;
-for (let seed = 1; seed <= 60 && !achouObra; seed++) {
-  const r = await sorteia({ ...estadoBase(), round: 5, evento: null }, 5, seed * 1000);
-  if (r.evento?.id === "obra") achouObra = r.evento;
-}
+/* A primeira semente que produz a obra, achada pelo banco. Mesmo motivo do
+   laço acima: sessenta idas e voltas para uma função pura. */
+const achouObra =
+  (
+    await db.query(
+      `select public.met_evento(gt.data, $1::jsonb, s.n * 1000, 5) -> 'evento' v
+         from public.game_themes gt,
+              generate_series(1, 60) s(n)
+        where gt.id = 'capibara'
+          and public.met_evento(gt.data, $1::jsonb, s.n * 1000, 5) -> 'evento' ->> 'id' = 'obra'
+        order by s.n limit 1`,
+      [JSON.stringify({ ...estadoBase(), round: 5, evento: null })],
+    )
+  ).rows[0]?.v ?? null;
 ok(!!achouObra, "a obra na avenida sai, e ela é a que sorteia um grupo");
 if (achouObra) {
   ok(
@@ -2856,8 +2882,17 @@ ok(
 
 /* ── 4. o nível significa algo? ──────────────────────────────────────────── */
 
-const contraFacil = await metSolo({ token: P[0].token, niveis: ["facil"], tetoPassos: 700 });
-const contraDif = await metSolo({ token: P[0].token, niveis: ["dificil"], tetoPassos: 700 });
+/* AS DUAS AO MESMO TEMPO. Elas são partidas separadas, em salas separadas, e
+   nada nelas se cruza — a comparação acontece DEPOIS, sobre os dois resultados.
+   Em série eram quatro minutos de espera de rede uma atrás da outra.
+
+   O `Promise.all` aqui é seguro pelo mesmo motivo que as suítes rodam em
+   paralelo no `npm run verifica`: as varreduras usam `for update skip locked`, e
+   cada partida só mexe na própria linha. */
+const [contraFacil, contraDif] = await Promise.all([
+  metSolo({ token: P[0].token, niveis: ["facil"], tetoPassos: 700 }),
+  metSolo({ token: P[0].token, niveis: ["dificil"], tetoPassos: 700 }),
+]);
 ok(
   !contraFacil.erro && !contraDif.erro,
   `as duas partidas de comparação montaram${contraFacil.erro || contraDif.erro ? ": " + (contraFacil.erro ?? contraDif.erro) : ""}`,

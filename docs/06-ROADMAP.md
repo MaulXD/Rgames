@@ -178,7 +178,8 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | `npm run smoke:pacotes` | ✅ a fronteira entre o conteúdo que o cliente EMPACOTA e o que o servidor PUBLICA. Editar `vantara.json` sem republicar faz a tela desenhar uma fronteira que o servidor não conhece |
 | `npm run smoke:render` | ✅ 27 telas dos quatro jogos MONTADAS com o conteúdo publicado, sem navegador e sem dependência nova — o SWC já vem dentro do Next. Reproduz o defeito da abertura e achou um segundo: o peão do tabuleiro da Metrópole era a única leitura de cor sem rede |
 | As telas INTEIRAS do Domínio, da Metrópole e do Letreiro | ✅ 44 KB, 21 KB e 6 KB de HTML com uma partida de verdade. As folhas não têm o que o contêiner tem: o ramo por FASE |
-| `npm run verifica` | ✅ as doze etapas num comando, com relatório. As cinco suítes em paralelo: **29,6 min → 15,3 min** |
+| `npm run verifica` | ✅ as doze etapas num comando, com relatório. As cinco suítes em paralelo: **29,6 min → 12,3 min** |
+| A Metrópole sozinha caiu de 9m46s para 5m17s | ✅ 300 sorteios de evento eram 300 idas e voltas ao Supabase para uma função PURA — 113 dos 586 segundos, e nenhum deles trabalho. `generate_series` faz o laço dentro do banco |
 
 ---
 

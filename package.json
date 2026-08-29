@@ -26,7 +26,7 @@
     "trofeu": "node scripts/seed-trofeu.mjs",
     "dossie": "node scripts/seed-dossie.mjs",
     "bots": "node scripts/seed-bots.mjs",
-    "css": "node scripts/check-css.mjs"
+    "css": "node --import ./scripts/alias.mjs scripts/check-css.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",

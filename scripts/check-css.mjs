@@ -4,12 +4,13 @@
  *
  *   npm run css
  *
- * São quatro perguntas, e todas têm resposta calculável a partir do código:
+ * São cinco perguntas, e todas têm resposta calculável a partir do código:
  *
  *   1. toda classe usada num componente existe no CSS?
  *   2. todo campo de digitação tem nome acessível?
  *   3. toda regra que pinta texto e fundo passa no piso de contraste da WCAG?
  *   4. todo alvo de toque cabe no dedo?
+ *   5. toda facção do Domínio tem uma hachura própria, para quem não separa cores?
  *
  * POR QUE ISTO EXISTE. Ninguém abriu o site ainda: todo o layout deste projeto
  * foi raciocinado a partir do código, e a maior lacuna declarada no roadmap é
@@ -437,8 +438,85 @@ if (baixinhos.length === 0) {
   );
 }
 
+/* ── e toda facção tem uma trama própria? ─────────────────────────────────────
+
+   O Domínio pinta cada facção com a cor do avatar dela, e cor sozinha exclui
+   quem não separa cores. O PRD 00 §110 promete "padrão de hachura associado
+   para daltonismo", e o mapa cumpre: sete tramas em SVG, ligadas por
+   [data-cor="x"] .ter-textura { fill: url(#tex-…) }.
+
+   O que não existia era o GUARDA. A ligação mora no CSS e a paleta mora no
+   TypeScript, e nada obriga as duas a andarem juntas: uma cor nova entra na
+   paleta, ninguém lembra da trama, e duas facções voltam a ser distinguíveis só
+   pela cor. Não quebra nada, não avisa nada, e some no meio de um mapa de 42
+   territórios.
+
+   TRÊS COISAS SE CONFEREM, e a segunda é a que eu quase esqueci:
+
+     1. toda cor tem trama — menos UMA, a de referência, que fica lisa de
+        propósito, porque "liso" também é um padrão;
+     2. nenhuma trama se repete. Duas facções com a mesma hachura são, entre si,
+        exatamente o caso que a hachura existe para evitar;
+     3. e a trama que o CSS pede EXISTE no SVG. Um url(#tex-x) que não resolve
+        não pinta nada — e o que aparece é uma facção lisa, calada, igual à de
+        referência. */
+
+const { COLORS } = await import("@/lib/avatar");
+
+const cssDominio = readFileSync(join(cssDir, "dominio.css"), "utf8");
+const tramaDe = new Map();
+for (const m of cssDominio.matchAll(
+  /\[data-cor="([a-z]+)"\]\s*\.ter-textura\s*\{[^}]*url\(#(tex-[a-z-]+)\)/g,
+)) {
+  tramaDe.set(m[1], m[2]);
+}
+
+/** A facção lisa. É UMA, e o nome está aqui porque comentário não é mecanismo. */
+const LISA = "carmim";
+
+const semTrama = Object.keys(COLORS).filter((c) => c !== LISA && !tramaDe.has(c));
+if (semTrama.length === 0) {
+  console.log(
+    `  ok      as ${tramaDe.size} facções não-lisas têm trama própria, e a ${LISA} é lisa de propósito`,
+  );
+} else {
+  console.error(
+    `  FALHA   facção só com cor: ${semTrama.join(", ")} — sem hachura, quem não separa cores não separa elas`,
+  );
+}
+
+const porTrama = new Map();
+for (const [cor, tex] of tramaDe) porTrama.set(tex, [...(porTrama.get(tex) ?? []), cor]);
+const colididas = [...porTrama.entries()].filter(([, cores]) => cores.length > 1);
+if (colididas.length === 0) {
+  console.log("  ok      e nenhuma trama se repete entre duas facções");
+} else {
+  for (const [tex, cores] of colididas) {
+    console.error(
+      `  FALHA   a trama ${tex} serve ${cores.join(" e ")} — as duas ficam iguais sem cor`,
+    );
+  }
+}
+
+const mapaSvg = readFileSync(join(raiz, "components", "dominio", "mapa.tsx"), "utf8");
+const noSvg = new Set([...mapaSvg.matchAll(/<pattern\s+id="(tex-[a-z-]+)"/g)].map((m) => m[1]));
+const orfasDeTrama = [...new Set(tramaDe.values())].filter((t) => !noSvg.has(t));
+if (orfasDeTrama.length === 0) {
+  console.log(`  ok      e as ${noSvg.size} tramas que o CSS pede existem no SVG do mapa\n`);
+} else {
+  console.error(
+    `  FALHA   trama que não existe no SVG: ${orfasDeTrama.join(", ")} — a facção sai lisa\n`,
+  );
+}
+
 process.exit(
-  orfas.length === 0 && anonimos.length === 0 && fracos.length === 0 && baixinhos.length === 0
+  orfas.length === 0 &&
+  anonimos.length === 0 &&
+  fracos.length === 0 &&
+  baixinhos.length === 0 &&
+  semTrama.length === 0 &&
+  colididas.length === 0 &&
+  orfasDeTrama.length === 0
     ? 0
     : 1,
 );

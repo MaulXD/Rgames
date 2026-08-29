@@ -699,5 +699,20 @@ automáticos em tinta impressa; suas anotações, em tinta de caneta. A diferen�
 **Sensação**
 - [ ] Alguém olhando sua tela por cima do ombro não vê a carta refutada sem você segurar
 - [ ] A reconstituição roda em 60fps no Galaxy A54, nos quatro casos
-- [ ] Peões distinguíveis em escala de cinza, nos quatro casos
+- [ ] Peões distinguíveis em escala de cinza, nos quatro casos — **MEDIDO, e a paleta não
+      sustenta.** As oito cores da plataforma têm luminância entre 24 e 61, com dois grupos
+      praticamente colados: vinho/prússia/carmim em 24–27, e terracota/jade em 39,6/40,0. Nos
+      quatro casos publicados o par mais parecido fica em ΔL 0,3 (Ras Zamir), 0,8 (Meridiano-9 e
+      Solar) e 2,2 (Aurora).
+
+      Não é escolha de elenco: por força bruta, dos 28 conjuntos de seis cores possíveis apenas
+      DOIS chegam a ΔL 3, e 3 ainda é pouco para o olho. O que resolveria é abrir a faixa de
+      luminância da paleta — decisão de direção de arte, não de quem publica um caso. Por isso
+      `npm run dossie` MEDE e imprime o número a cada publicação, em vez de reprovar tema por
+      uma coisa que o tema não pode consertar.
+
+      **E o impacto hoje é zero**, o que muda a urgência: `suspects[].color` e `suspects[].crest`
+      não são lidos por nenhum componente. O peão no mapa é o avatar do JOGADOR, que carrega
+      corpo e enfeite além da cor — os dois canais que o PRD 00 §110 promete para quem não
+      separa as cores. Os campos do pacote existem para os peões 3D que ainda não existem.
 - [ ] Cada caso passa no teste de [Direção de Arte §1](01-DIRECAO-DE-ARTE.md)

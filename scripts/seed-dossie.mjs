@@ -360,6 +360,22 @@ function ok(cond, msg) {
 }
 
 const CORES = ["carmim", "terracota", "ocre", "oliva", "jade", "grafite", "prussia", "vinho"];
+
+/* Os esmaltes, copiados de lib/avatar.ts porque este script roda em Node puro e
+   aquele arquivo é TypeScript do cliente. Se um dia divergirem, o número que
+   sai daqui passa a descrever uma paleta que não existe — e é por isso que a
+   cópia é destas oito linhas e não do módulo inteiro: oito linhas dá para
+   conferir de olho. */
+const ENAMEL = {
+  carmim: "#FF4D5E",
+  terracota: "#FF8A2B",
+  ocre: "#FFC42E",
+  oliva: "#5FD13A",
+  jade: "#25C08B",
+  grafite: "#2FD8C4",
+  prussia: "#2E8CFF",
+  vinho: "#B25CFF",
+};
 const PISOS = ["madeira", "tapete", "ladrilho"];
 const CLIMAS = ["misterio", "brincadeira", "neon", "areia", "orbita"];
 
@@ -425,6 +441,44 @@ function valida(t) {
     `toda cor de suspeito está na paleta da plataforma (${cores.join(", ")})`,
   );
   ok(new Set(cores).size === 6, "as seis cores são distintas — dois suspeitos da mesma cor se confundem");
+
+  /* E QUÃO DISTINTAS ELAS SÃO EM ESCALA DE CINZA.
+
+     Isto é um RELATÓRIO e não uma reprovação, e a diferença é deliberada.
+
+     O PRD 03 §12 pede "peões distinguíveis em escala de cinza, nos quatro
+     casos", e a paleta da plataforma não sustenta isso: as oito cores têm
+     luminância entre 24 e 61, com dois grupos praticamente colados —
+     vinho/prússia/carmim em 24–27, e terracota/jade em 39,6/40,0.
+
+     Medido por força bruta: dos 28 conjuntos de seis cores possíveis, apenas
+     DOIS chegam a uma separação mínima de 3 pontos, e 3 pontos ainda é pouco
+     para o olho. Ou seja: não existe escolha de elenco que resolva. O que
+     resolveria é abrir a faixa de luminância da paleta, e isso é decisão de
+     direção de arte — não de quem publica um caso.
+
+     Reprovar aqui deixaria o projeto sem publicar tema nenhum por causa de uma
+     coisa que o tema não pode consertar. Então o validador MEDE, imprime, e
+     deixa o número à vista de quem for decidir. */
+  const luz = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const f = (c) => {
+      const x = c / 255;
+      return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    };
+    return (0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)) * 100;
+  };
+  let piorPar = [Infinity, ""];
+  for (let i = 0; i < cores.length; i++) {
+    for (let j = i + 1; j < cores.length; j++) {
+      const d = Math.abs(luz(ENAMEL[cores[i]]) - luz(ENAMEL[cores[j]]));
+      if (d < piorPar[0]) piorPar = [d, `${cores[i]}/${cores[j]}`];
+    }
+  }
+  console.log(
+    `         em escala de cinza, o par mais parecido é ${piorPar[1]} ` +
+      `(ΔL ${piorPar[0].toFixed(1)}) — ver PRD 03 §12`,
+  );
   ok(
     t.suspects.every((s) => s.name && s.role && s.crest),
     "todo suspeito tem nome, papel e brasão",

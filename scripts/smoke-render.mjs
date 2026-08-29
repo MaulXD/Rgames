@@ -441,6 +441,116 @@ for (const qual of ["vantara", "relampago"]) {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   AS TELAS INTEIRAS, com uma partida de verdade
+
+   Até aqui foram FOLHAS: componentes que recebem o conteúdo por propriedade. As
+   folhas são onde moram os `.map` que quebram, mas elas não têm o que os
+   contêineres têm — o ramo por FASE.
+
+   `MetropoleGame` desenha coisa diferente em rolar, comprar, leilão, cadeia e
+   falência; `DominioGame` em reforço, ataque, remanejo e fim. Cada um desses é
+   um caminho de código que só existe quando a partida está naquele estado, e
+   nenhum deles aparece numa folha isolada.
+
+   Eles montam porque recebem `match` e `assentos` por propriedade — não há
+   busca em efeito no caminho. O `SessionProvider` entra em volta porque
+   `useSession` LEVANTA sem ele, e de propósito: um componente que lê a sessão
+   fora do provedor é um erro de montagem, não um caso a tratar.
+
+   COM `user: null`, o que se renderiza é a visão de ESPECTADOR — sem "sua vez",
+   sem os botões de ação. É menos que a visão de quem joga e é o que dá para
+   fazer sem forjar uma sessão, e cobre o mesmo desenho de tabuleiro, painel e
+   registro. Vale dizer em vez de fingir que cobre tudo.
+
+   O DOSSIÊ FICA DE FORA, e o motivo é honesto: `DossieGame` busca o caso num
+   efeito, e efeito não roda aqui — ele pararia em "Abrindo o dossiê…" e o teste
+   diria "montou" sobre uma frase de carregamento. As três telas dele já são
+   cobertas como folhas, que é onde o conteúdo dele realmente entra.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const { SessionProvider } = await import("@/components/session");
+const { DominioGame } = await import("@/components/dominio/game");
+const { MetropoleGame } = await import("@/components/metropole/game");
+const { LetreiroGame } = await import("@/components/letreiro/game");
+
+/** Uma partida de cada jogo, com os assentos como o lobby os entrega. */
+async function partidaDe(jogo, ondeMais = "m.status = 'running'") {
+  const m = (
+    await db.query(
+      `select m.id, m.status, m.turn_deadline, m.ends_at, m.started_at, m.public_state
+         from public.matches m
+        where m.game_key = $1 and ${ondeMais}
+        order by m.started_at desc limit 1`,
+      [jogo],
+    )
+  ).rows[0];
+  if (!m) return null;
+  const assentos = (
+    await db.query(
+      `select mp.user_id, p.display_name, p.avatar, p.is_bot
+         from public.match_players mp join public.profiles p on p.id = mp.user_id
+        where mp.match_id = $1 order by mp.seat`,
+      [m.id],
+    )
+  ).rows;
+  return { match: m, assentos };
+}
+
+const AS_TELAS = [
+  {
+    jogo: "dominio",
+    componente: DominioGame,
+    propNome: "assentos",
+    extra: { onSair: nada },
+    /* O registro da partida: prova que o ramo de fase chegou até o fim da tela,
+       e não parou num estado vazio no meio. */
+    contem: "turno",
+  },
+  {
+    jogo: "metropole",
+    componente: MetropoleGame,
+    propNome: "assentos",
+    extra: { onSair: nada },
+    contem: "quadro",
+  },
+  {
+    jogo: "letreiro",
+    componente: LetreiroGame,
+    propNome: "seats",
+    extra: { onLeaveMatch: nada, onRematch: nada },
+    /* A rodada do Letreiro dura três minutos e acaba sozinha, então quase nunca
+       há uma "rodando" no banco. A que existe está em REVELAÇÃO, e ela serve
+       melhor: é a fase com mais coisa na tela. */
+    ondeMais: "m.public_state ->> 'phase' in ('round', 'reveal')",
+    /* Na revelação o LetreiroGame delega para o Reveal, cuja raiz é a classe
+       .reveal e não .letreiro — pedir a classe do contêiner reprovava uma
+       tela que estava certa. "Conferência" é o título do primeiro ato, e prova
+       que a delegação aconteceu. */
+    contem: "Conferência",
+  },
+];
+
+for (const t of AS_TELAS) {
+  const dados = await partidaDe(t.jogo, t.ondeMais ?? "m.status = 'running'");
+  if (!dados) {
+    ok(true, `${t.jogo}/tela inteira: nenhuma partida rodando no banco — nada a montar`);
+    continue;
+  }
+  monta(
+    `${t.jogo}/tela inteira (fase ${dados.match.public_state.phase ?? "—"})`,
+    SessionProvider,
+    {
+      children: createElement(t.componente, {
+        match: dados.match,
+        [t.propNome]: dados.assentos,
+        ...t.extra,
+      }),
+    },
+    t.contem,
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    E A REGRESSÃO QUE ORIGINOU TUDO ISTO
 
    A narração como objeto em vez de lista. Não basta a suíte passar hoje: ela

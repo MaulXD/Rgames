@@ -177,6 +177,7 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | A tela de erro passa a dizer o que aconteceu | ✅ não havia `global-error`. A parede padrão do Next, em inglês, sem a mensagem — quem relata só conseguia dizer "deu erro" |
 | `npm run smoke:pacotes` | ✅ a fronteira entre o conteúdo que o cliente EMPACOTA e o que o servidor PUBLICA. Editar `vantara.json` sem republicar faz a tela desenhar uma fronteira que o servidor não conhece |
 | `npm run smoke:render` | ✅ 27 telas dos quatro jogos MONTADAS com o conteúdo publicado, sem navegador e sem dependência nova — o SWC já vem dentro do Next. Reproduz o defeito da abertura e achou um segundo: o peão do tabuleiro da Metrópole era a única leitura de cor sem rede |
+| As telas INTEIRAS do Domínio, da Metrópole e do Letreiro | ✅ 44 KB, 21 KB e 6 KB de HTML com uma partida de verdade. As folhas não têm o que o contêiner tem: o ramo por FASE |
 | `npm run verifica` | ✅ as doze etapas num comando, com relatório. As cinco suítes em paralelo: **29,6 min → 15,3 min** |
 
 ---

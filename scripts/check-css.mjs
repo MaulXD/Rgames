@@ -10,7 +10,8 @@
  *   2. todo campo de digitação tem nome acessível?
  *   3. toda regra que pinta texto e fundo passa no piso de contraste da WCAG?
  *   4. todo alvo de toque cabe no dedo?
- *   5. toda facção do Domínio tem uma hachura própria, para quem não separa cores?
+ *   5. toda facção do Domínio e todo grupo da Metrópole têm textura própria, para
+ *      quem não separa cores?
  *
  * POR QUE ISTO EXISTE. Ninguém abriu o site ainda: todo o layout deste projeto
  * foi raciocinado a partir do código, e a maior lacuna declarada no roadmap é
@@ -509,6 +510,68 @@ if (orfasDeTrama.length === 0) {
   );
 }
 
+/* ── e todo grupo da Metrópole também? ────────────────────────────────────────
+
+   Mesma promessa, outro jogo, e o mesmo guarda faltando. Os oito grupos de
+   propriedade da Capibara são identificados por cor na faixa do quadro, e a cor
+   sozinha exclui a mesma gente.
+
+   Aqui a textura vem de background-image e não de url(#…), então a checagem
+   olha outra coisa — mas a pergunta é idêntica: existe um segundo canal, e ele
+   é único por grupo?
+
+   A FACÇÃO LISA TAMBÉM EXISTE AQUI, e é o marrom: o grupo mais barato do
+   tabuleiro, o que menos precisa ser identificado de longe. Deixar UM liso é
+   deliberado nos dois jogos — sem um liso de referência, o olho não tem contra
+   o que comparar as tramas. */
+
+const cssMet = readFileSync(join(cssDir, "metropole.css"), "utf8");
+const texturaDoGrupo = new Map();
+for (const m of cssMet.matchAll(
+  /\.quadro-faixa\[data-g="([a-z-]+)"\]\s*\{([^}]*)\}/g,
+)) {
+  /* A chave é o VALOR INTEIRO da declaração, sem espaço em branco — e não o
+     nome da função de gradiente. A primeira versão usava só o nome e acusou
+     seis grupos de terem a mesma textura: todos usam
+     `repeating-linear-gradient`, e o que os separa é o ÂNGULO — 45°, -45°, 90°,
+     0°, e dois deles cruzados. Comparar pelo nome da função é responder "são os
+     dois listrados?", que não é a pergunta. */
+  const decl = /background-image\s*:\s*([\s\S]*?);/.exec(m[2])?.[1];
+  const tamanho = /background-size\s*:\s*([^;]+)/.exec(m[2])?.[1] ?? "";
+  if (decl) texturaDoGrupo.set(m[1], `${decl}|${tamanho}`.replace(/\s+/g, ""));
+}
+
+const grupos = JSON.parse(
+  readFileSync(join(raiz, "lib", "metropole", "cidade.json"), "utf8"),
+).grupos.map((g) => g.id);
+
+const GRUPO_LISO = "marrom";
+
+const gruposSemTextura = grupos.filter((g) => g !== GRUPO_LISO && !texturaDoGrupo.has(g));
+if (gruposSemTextura.length === 0) {
+  console.log(
+    `  ok      os ${texturaDoGrupo.size} grupos não-lisos da Metrópole têm textura própria, e o ${GRUPO_LISO} é liso`,
+  );
+} else {
+  console.error(
+    `  FALHA   grupo só com cor: ${gruposSemTextura.join(", ")} — a faixa do quadro fica sem segundo canal`,
+  );
+}
+
+const porTextura = new Map();
+for (const [g, t] of texturaDoGrupo) porTextura.set(t, [...(porTextura.get(t) ?? []), g]);
+const gruposColididos = [...porTextura.entries()].filter(([, gs]) => gs.length > 1);
+if (gruposColididos.length === 0) {
+  console.log("  ok      e nenhuma textura de grupo se repete\n");
+} else {
+  for (const [t, gs] of gruposColididos) {
+    console.error(
+      `  FALHA   ${gs.join(" e ")} usam a MESMA textura — ficam iguais sem cor\n` +
+        `          ${t.slice(0, 88)}\n`,
+    );
+  }
+}
+
 process.exit(
   orfas.length === 0 &&
   anonimos.length === 0 &&
@@ -516,7 +579,9 @@ process.exit(
   baixinhos.length === 0 &&
   semTrama.length === 0 &&
   colididas.length === 0 &&
-  orfasDeTrama.length === 0
+  orfasDeTrama.length === 0 &&
+  gruposSemTextura.length === 0 &&
+  gruposColididos.length === 0
     ? 0
     : 1,
 );

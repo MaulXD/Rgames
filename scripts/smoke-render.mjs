@@ -55,16 +55,42 @@ const conn = new URL(process.env.POSTGRES_URL_NON_POOLING);
 conn.searchParams.set("uselibpqcompat", "true");
 const db = new pg.Pool({ connectionString: conn.toString(), max: 2, keepAlive: true });
 
-/** Monta um componente e conta o que saiu. Estourar é a única falha. */
-function monta(nome, componente, props) {
+/**
+ * Monta um componente e confere que ele desenhou o que devia.
+ *
+ * `contem` é a diferença entre "montou" e "montou alguma coisa", e ela importa
+ * mais do que parece: quase todo componente deste projeto tem um estado vazio —
+ * "nenhuma proposta na mesa", "carregando os casos" —, e um estado vazio monta
+ * lindamente com propriedade errada. Uma suíte que só exige `length > 0` passa
+ * a valer zero no dia em que eu passar a propriedade com o nome trocado.
+ *
+ * O marcador é sempre um dado que veio do BANCO — o nome de um território, de
+ * um caso, de uma propriedade. Assim ele prova as duas pontas de uma vez: o
+ * componente montou, e montou com o conteúdo que está publicado.
+ */
+function monta(nome, componente, props, contem) {
+  let html;
   try {
-    const html = renderToStaticMarkup(createElement(componente, props));
-    ok(html.length > 0, `${nome}: montou (${html.length} bytes de HTML)`);
-    return html;
+    html = renderToStaticMarkup(createElement(componente, props));
   } catch (e) {
     ok(false, `${nome}: ESTOUROU — ${String(e?.message).slice(0, 160)}`);
     return "";
   }
+
+  if (contem === undefined) {
+    ok(html.length > 0, `${nome}: montou (${html.length} bytes)`);
+    return html;
+  }
+
+  const alvos = Array.isArray(contem) ? contem : [contem];
+  const sumidos = alvos.filter((a) => !html.includes(a));
+  ok(
+    sumidos.length === 0,
+    sumidos.length === 0
+      ? `${nome}: montou com o conteúdo certo (${html.length} bytes, achou ${alvos.join(", ").slice(0, 42)})`
+      : `${nome}: montou mas SEM ${sumidos.join(", ")} — provavelmente caiu no estado vazio`,
+  );
+  return html;
 }
 
 const nada = () => {};
@@ -101,7 +127,7 @@ for (const caso of casos) {
     caso,
     reviravolta: !!caso.twist,
     onFim: nada,
-  });
+  }, caso.victim.name);
 
   monta(`dossie/${caso.id} · mapa`, Mapa, {
     caso,
@@ -116,7 +142,7 @@ for (const caso of casos) {
     fechados: [caso.rooms[3].id, caso.rooms[4].id],
     aviso: [caso.rooms[5].id],
     onEscolher: nada,
-  });
+  }, [caso.rooms[0].name, caso.rooms[8].name]);
 
   monta(`dossie/${caso.id} · bloco`, Bloco, {
     caso,
@@ -137,7 +163,7 @@ for (const caso of casos) {
     meuAssento: 0,
     pad: { marks: {}, assist: "dedutivo" },
     onPad: nada,
-  });
+  }, [caso.suspects[0].name, caso.weapons[0].name]);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -163,9 +189,14 @@ for (const qual of ["vantara", "relampago"]) {
     alvos: mapa.territorios[0].vizinhos,
     mexeu: [mapa.territorios[1].id],
     onEscolher: nada,
-  });
+  }, mapa.territorios[0].nome);
 
-  monta(`dominio/${qual} · legenda`, LegendaContinentes, { mapa, donos, cores });
+  monta(
+    `dominio/${qual} · legenda`,
+    LegendaContinentes,
+    { mapa, donos, cores },
+    mapa.continentes[0].nome,
+  );
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -193,7 +224,7 @@ for (const g of grades) {
       state: "path",
       onPathChange: nada,
       onCommit: nada,
-    });
+    }, g.grid[0].replace("QU", "Qu"));
   }
 }
 
@@ -225,7 +256,155 @@ monta("metropole/capibara · tabuleiro", Tabuleiro, {
   evento: null,
   destaque: null,
   onEscolher: nada,
-});
+}, CASAS[0].nome);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   LETREIRO — a revelação, que é o pico emocional da rodada
+
+   Ela lê uma partida ENCERRADA de verdade, e não um estado inventado: a
+   revelação depende de `found`, `missed`, `scores`, `counts` e `maxScore`
+   combinando entre si, e um estado montado à mão combina porque eu o montei
+   para combinar.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const { Reveal } = await import("@/components/letreiro/reveal");
+
+const encerrada = (
+  await db.query(
+    `select m.id, m.status, m.ends_at, m.started_at, m.public_state
+       from public.matches m
+      where m.game_key = 'letreiro' and m.public_state ->> 'phase' = 'reveal'
+      order by m.started_at desc limit 1`,
+  )
+).rows[0];
+
+if (encerrada) {
+  const assentos = (
+    await db.query(
+      `select mp.user_id, p.display_name, p.avatar, p.is_bot
+         from public.match_players mp join public.profiles p on p.id = mp.user_id
+        where mp.match_id = $1 order by mp.seat`,
+      [encerrada.id],
+    )
+  ).rows;
+  monta("letreiro/revelação", Reveal, {
+    match: encerrada,
+    seats: assentos,
+    meId: assentos[0]?.user_id ?? "",
+    onDone: nada,
+    onRematch: nada,
+  }, assentos[0]?.display_name ?? "");
+} else {
+  ok(true, "letreiro/revelação: nenhuma partida em revelação no banco — nada a montar");
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   METRÓPOLE — o painel e a mesa de negociação
+
+   A negociação é a tela mais densa do projeto: três tipos de cláusula, cada uma
+   com campos próprios, e foi onde estavam os cinco campos sem nome acessível.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const { Fluxo, MinhasProps } = await import("@/components/metropole/painel");
+const { Contratos, Propostas } = await import("@/components/metropole/negociar");
+
+const nomes = { 0: "Você", 1: "Creuza", 2: "Nestor" };
+const comId = CASAS.filter((c) => c.id);
+
+monta("metropole/fluxo de caixa", Fluxo, {
+  props,
+  seat: 0,
+  cash: 12000,
+  quantosJogam: 3,
+  evento: null,
+  /* Marcador ESTRUTURAL e não numérico. Tentei exigir o patrimônio somado
+     ("R$ 52.700") e ele muda com a hipoteca, com o número de casas, com o
+     sorteio — marcador frágil reprova por motivo errado, e reprovar por motivo
+     errado é como se ensina a ignorar a saída.
+
+     As três seções provam o mesmo sem a fragilidade: "construções" só aparece
+     se a conta percorreu as propriedades, e "salário" só se ela chegou no fluxo
+     por rodada. */
+}, ["Seu balanço", "construções", "salário"]);
+
+monta("metropole/minhas propriedades", MinhasProps, {
+  props,
+  seat: 0,
+  cash: 12000,
+  banco: { casas: 20, hoteis: 8 },
+  evento: null,
+  podeAgir: true,
+  onConstruir: nada,
+  onVender: nada,
+  onHipotecar: nada,
+  onResgatar: nada,
+}, comId[0].nome);
+
+/* Um contrato de CADA tipo. Os três têm desenho próprio e só aparecem juntos
+   numa partida longa — que é justamente a que ninguém jogou até agora. */
+monta("metropole/contratos em vigor", Contratos, {
+  contratos: [
+    { id: "c1", tipo: "parcela", de: 1, para: 0, valor: 500, props: null, rodadas: 4, ate: null },
+    {
+      id: "c2", tipo: "isencao", de: 0, para: 2,
+      valor: 0, props: [comId[0].id, comId[1].id], rodadas: 3, ate: null,
+    },
+    { id: "c3", tipo: "opcao", de: 2, para: 0, valor: 3000, props: [comId[2].id], rodadas: 0, ate: 14 },
+  ],
+  nomes,
+  meuAssento: 0,
+  rodada: 8,
+  onExercer: nada,
+}, ["parcela", "isencao", "opcao"]);
+
+/* E uma oferta com as três cláusulas ao mesmo tempo, que é o caso mais denso
+   que a tela sabe desenhar. */
+monta("metropole/propostas na mesa", Propostas, {
+  ofertas: [
+    {
+      id: "o1", de: 1, para: 0, rodada: 8,
+      da: { dinheiro: 2000, props: [comId[3].id], livras: 1 },
+      quer: {
+        props: [comId[4].id],
+        parcela: { valor: 400, rodadas: 5 },
+        isencao: { props: null, rodadas: 2 },
+        opcao: { prop: comId[5].id, preco: 2500, ate: 15 },
+      },
+    },
+  ],
+  nomes,
+  meuAssento: 0,
+  onResponder: nada,
+  onRetirar: nada,
+}, ["propõe", "Aceitar"]);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   DOMÍNIO — a mão de cartas, nos dois mapas
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const { Mao } = await import("@/components/dominio/cartas");
+
+for (const qual of ["vantara", "relampago"]) {
+  const mapa = mapaDe(qual);
+  const donos = Object.fromEntries(mapa.territorios.map((t, i) => [t.id, i % 3]));
+  monta(`dominio/${qual} · mão de cartas`, Mao, {
+    mapa,
+    /* Cinco cartas: é quando a troca deixa de ser opcional, e é o ramo que a
+       tela menos mostra. */
+    cartas: [
+      { ter: mapa.territorios[0].id, f: "infantaria" },
+      { ter: mapa.territorios[1].id, f: "cavalaria" },
+      { ter: mapa.territorios[2].id, f: "canhao" },
+      { ter: null, f: "coringa" },
+      { ter: mapa.territorios[3].id, f: "infantaria" },
+    ],
+    donos,
+    meuAssento: 0,
+    podeTrocar: true,
+    obrigado: true,
+    onTrocar: nada,
+  }, mapa.territorios[0].nome);
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    E A REGRESSÃO QUE ORIGINOU TUDO ISTO

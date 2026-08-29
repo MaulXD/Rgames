@@ -179,7 +179,8 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | `npm run smoke:render` | ✅ 27 telas dos quatro jogos MONTADAS com o conteúdo publicado, sem navegador e sem dependência nova — o SWC já vem dentro do Next. Reproduz o defeito da abertura e achou um segundo: o peão do tabuleiro da Metrópole era a única leitura de cor sem rede |
 | As telas INTEIRAS do Domínio, da Metrópole e do Letreiro | ✅ 44 KB, 21 KB e 6 KB de HTML com uma partida de verdade. As folhas não têm o que o contêiner tem: o ramo por FASE |
 | E o HTML que SAIU, auditado | ✅ três coisas que só o resultado revela: controle dentro de controle, `id` repetido, campo sem nome. Achou o `id` do avatar, que saía de um hash do bichinho — dois jogadores com o mesmo bicho colidiam |
-| `npm run verifica` | ✅ as doze etapas num comando, com relatório. As cinco suítes em paralelo: **29,6 min → 12,3 min** |
+| A hachura das facções e dos grupos ganhou guarda | ✅ a ligação mora no CSS e a paleta no TypeScript, e nada obrigava as duas a andarem juntas. Uma cor nova sem trama volta a ser só cor, e nada acusa |
+| `npm run verifica` | ✅ as doze etapas num comando, com relatório. As cinco suítes em paralelo: **29,6 min → 12 a 19 min** (a variação é latência de rede, e ela é grande: a mesma suíte do Dossiê mediu 354s e 776s em rodadas seguidas) |
 | A Metrópole sozinha caiu de 9m46s para 5m17s | ✅ 300 sorteios de evento eram 300 idas e voltas ao Supabase para uma função PURA — 113 dos 586 segundos, e nenhum deles trabalho. `generate_series` faz o laço dentro do banco |
 
 ---

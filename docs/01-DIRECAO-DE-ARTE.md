@@ -696,7 +696,10 @@ Regras:
 - [ ] Testado com `prefers-reduced-motion: reduce`
 - [ ] Testado em 375px de largura (iPhone SE) e 1440px
 - [ ] Contraste AA verificado
-- [ ] Se tem cor de jogador: hachura e brasão presentes
+- [x] Se tem cor de jogador: hachura presente — e AUDITADA em `npm run css`. As sete facções
+      não-lisas do Domínio têm trama própria, nenhuma se repete, e toda `url(#tex-…)` que o CSS
+      pede existe no SVG. O mesmo para os sete grupos não-lisos da Metrópole. Em cada jogo UMA
+      fica lisa de propósito: sem um liso de referência, o olho não tem contra o que comparar.
 - [ ] Se tem 3D: cena degrada corretamente com `?fx=min`
 
 ### 9.2 Automatizado no CI

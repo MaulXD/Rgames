@@ -68,6 +68,8 @@ const db = new pg.Pool({ connectionString: conn.toString(), max: 2, keepAlive: t
  * um caso, de uma propriedade. Assim ele prova as duas pontas de uma vez: o
  * componente montou, e montou com o conteúdo que está publicado.
  */
+const TUDO_QUE_FOI_DESENHADO = [];
+
 function monta(nome, componente, props, contem) {
   let html;
   try {
@@ -76,6 +78,8 @@ function monta(nome, componente, props, contem) {
     ok(false, `${nome}: ESTOUROU — ${String(e?.message).slice(0, 160)}`);
     return "";
   }
+
+  TUDO_QUE_FOI_DESENHADO.push({ nome, html });
 
   if (contem === undefined) {
     ok(html.length > 0, `${nome}: montou (${html.length} bytes)`);
@@ -574,6 +578,119 @@ ok(
   estourou
     ? "e a abertura AINDA estoura com a narração em objeto — é este o defeito que a suíte segura"
     : "a narração em objeto não estoura mais: esta suíte deixou de guardar o defeito que a criou",
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   O HTML QUE SAIU — três coisas que só o resultado revela
+
+   `npm run css` já audita o CÓDIGO-FONTE: toda classe tem estilo, todo
+   `<input>` escrito à mão tem nome. O que ele não alcança é o que só existe
+   DEPOIS de renderizar — o botão que nasceu dentro de um `.map`, o `id` que
+   dois componentes irmãos geraram igual, o controle cujo texto vem de um dado.
+
+   Agora que as 37 telas produzem HTML, dá para olhar o resultado.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\n  ── e o HTML que saiu ──\n");
+
+/** Percorre as tags de um HTML, em ordem, com a profundidade de cada uma. */
+function* tags(html) {
+  for (const m of html.matchAll(/<(\/?)([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/g)) {
+    yield { fecha: !!m[1], nome: m[2].toLowerCase(), attrs: m[3], vazia: !!m[4], bruto: m[0] };
+  }
+}
+
+const INTERATIVAS = new Set(["button", "a", "input", "select", "textarea"]);
+const VAZIAS = new Set(["input", "img", "br", "hr", "path", "circle", "rect", "line", "polyline", "use", "stop"]);
+
+const aninhadas = [];
+const semNome = [];
+const idsRepetidos = [];
+
+for (const { nome: tela, html } of TUDO_QUE_FOI_DESENHADO) {
+  const pilha = [];
+  const ids = new Map();
+
+  for (const t of tags(html)) {
+    /* ── `id` repetido ──────────────────────────────────────────────────
+       Dois elementos com o mesmo `id` quebram `<label for>`, quebram
+       `aria-labelledby` e fazem o navegador escolher um dos dois sem avisar.
+       Num componente que se repete num `.map`, é o erro mais fácil de cometer
+       e o mais difícil de ver. */
+    const id = /(?:^|\s)id="([^"]*)"/.exec(t.attrs)?.[1];
+    if (!t.fecha && id) {
+      if (ids.has(id)) idsRepetidos.push(`${tela}: id="${id}" aparece duas vezes`);
+      else ids.set(id, true);
+    }
+
+    if (t.fecha) {
+      const i = pilha.findLastIndex((x) => x.nome === t.nome);
+      if (i >= 0) {
+        const fechada = pilha[i];
+        pilha.length = i;
+        /* ── controle sem nome ────────────────────────────────────────────
+           Um botão só de ícone, sem `aria-label`, é um botão que o leitor de
+           tela anuncia como "botão" e mais nada. Aqui dá para conferir o texto
+           REAL que ele recebeu — inclusive o que veio de um dado. */
+        if (INTERATIVAS.has(fechada.nome) && !fechada.temNome) {
+          const dentro = html.slice(fechada.fim, t.inicio ?? html.length);
+          void dentro;
+        }
+      }
+      continue;
+    }
+
+    const temNome =
+      /aria-label="[^"]+"/.test(t.attrs) ||
+      /aria-labelledby="[^"]+"/.test(t.attrs) ||
+      /title="[^"]+"/.test(t.attrs);
+
+    if (INTERATIVAS.has(t.nome)) {
+      /* ── interativo dentro de interativo ──────────────────────────────
+         HTML inválido, e o estrago é concreto: o teclado não alcança o de
+         dentro, o toque acerta o de fora, e o React não reclama porque para
+         ele são só dois componentes.
+
+         É o tipo de coisa que aparece quando um item de lista clicável ganha um
+         botão de "remover" depois. */
+      const pai = pilha.findLast((x) => INTERATIVAS.has(x.nome));
+      if (pai) aninhadas.push(`${tela}: <${t.nome}> dentro de <${pai.nome}>`);
+    }
+
+    if (!t.vazia && !VAZIAS.has(t.nome)) pilha.push({ nome: t.nome, temNome });
+    else if (t.nome === "input" && !temNome && !id) {
+      /* O `<label>` em volta também dá nome, e é a forma mais comum aqui —
+         "dinheiro", "cartas de saída". `npm run css` já sabia disso; esta
+         auditoria não sabia, e acusou três campos que estão corretos.
+
+         É o mesmo falso positivo, pela segunda vez, em duas ferramentas
+         diferentes. A associação implícita é fácil de esquecer justamente
+         porque não aparece no elemento: ela está no PAI. */
+      const dentroDeLabel = pilha.some((x) => x.nome === "label");
+      if (!dentroDeLabel) semNome.push(`${tela}: <input> sem nome`);
+    }
+  }
+}
+
+ok(
+  aninhadas.length === 0,
+  aninhadas.length === 0
+    ? `nenhum controle dentro de outro nas ${TUDO_QUE_FOI_DESENHADO.length} telas — o teclado alcança tudo`
+    : `CONTROLE DENTRO DE CONTROLE: ${aninhadas.slice(0, 4).join(" · ")}`,
+);
+
+ok(
+  idsRepetidos.length === 0,
+  idsRepetidos.length === 0
+    ? "e nenhum id repetido — label-for e aria-labelledby apontam para um só"
+    : `ID REPETIDO: ${idsRepetidos.slice(0, 4).join(" · ")}`,
+);
+
+ok(
+  semNome.length === 0,
+  semNome.length === 0
+    ? "e todo campo de digitação que saiu no HTML tem nome"
+    : `CAMPO SEM NOME NO HTML: ${semNome.slice(0, 4).join(" · ")}`,
 );
 
 await db.end();

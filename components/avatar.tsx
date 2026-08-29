@@ -1,3 +1,4 @@
+import { useId } from "react";
 import {
   COLORS,
   avatarKey,
@@ -231,11 +232,31 @@ export function Avatar({
   still?: boolean;
 }) {
   const c = COLORS[spec.color];
-  const uid = `av-${avatarKey(spec)}`;
+
+  /* DUAS COISAS DIFERENTES QUE ANTES ERAM A MESMA.
+
+     O `uid` servia para duas coisas ao mesmo tempo: o id do `<clipPath>` no
+     DOM e a semente do compasso da respiração. As duas saíam de
+     `avatarKey(spec)`, e para a segunda isso está certo — é o que faz um
+     bichinho respirar sempre no mesmo ritmo, em vez de mudar de compasso a cada
+     re-render.
+
+     Para a primeira estava errado, e a auditoria do HTML renderizado achou:
+     dois jogadores com o MESMO bichinho produzem o mesmo `id`, e `id` repetido
+     é HTML inválido. Na prática o estrago era nulo — os dois `<clipPath>` são
+     idênticos por construção, então tanto faz qual o navegador escolhe. Mas
+     "inválido e por acaso inofensivo" é uma frase que envelhece mal: basta o
+     recorte passar a depender de um campo que a chave não cobre.
+
+     `useId` é a ferramenta feita para isto — única por INSTÂNCIA, e estável
+     entre servidor e cliente, que é o que a hidratação exige. */
+  const uid = useId().replace(/:/g, "");
+  const compassoDoBicho = `av-${avatarKey(spec)}`;
+
   const path = bodyPath(spec.body);
   const anchor = hatAnchor(spec.body);
   const fb = faceBox(spec.body);
-  const atraso = still ? undefined : `${compasso(uid)}ms`;
+  const atraso = still ? undefined : `${compasso(compassoDoBicho)}ms`;
 
   const faceTransform =
     `translate(${fb.dx} ${fb.dy}) ` +

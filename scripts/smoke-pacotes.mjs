@@ -42,6 +42,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
+import { validaTema } from "./valida-tema.mjs";
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
 config({ path: join(raiz, ".env.local"), quiet: true });
@@ -274,6 +275,52 @@ for (const [jogo, campos] of Object.entries(DENTRO)) {
     );
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   E O CRIVO DO PRD 07 §5, EM CIMA DO QUE ESTÁ PUBLICADO
+
+   "Validador — roda no CI, reprova o build." Ele existia, era bom, e rodava num
+   lugar só: dentro de `npm run dossie`, o script que PUBLICA os temas.
+
+   Quer dizer que os pacotes eram conferidos no instante em que alguém decidia
+   republicá-los, e em nenhum outro. Um tema que mudasse no banco depois disso —
+   por migração, por mão na tabela, por uma coluna que passasse a divergir do
+   jsonb — nunca mais seria olhado, e a verificação diria "tudo passou".
+
+   Aqui é o lugar certo para ele: esta suíte é a que pergunta se o que está
+   PUBLICADO tem a forma que a tela espera. Grafo conexo, sem beco sem saída,
+   diâmetro ≤ 4, duas passagens secretas, quinze pares de suspeitos separáveis
+   nos três daltonismos, as seis cartas de pista nomeadas ou nenhuma, e uma
+   reviravolta que o motor saiba executar.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\n  ── e cada pacote do Dossiê passa no crivo do PRD 07 §5 ──");
+
+const temasDossie = (
+  await db.query(
+    "select id, data from public.game_themes where game_key = 'dossie' order by id",
+  )
+).rows;
+
+ok(temasDossie.length === 4, `os quatro casos do Dossiê estão publicados (${temasDossie.length})`);
+
+let reprovas = 0;
+for (const t of temasDossie) {
+  /* O crivo fala uma linha por conferência, e são dezenas por tema. Aqui só
+     interessa o veredicto: quatrocentas linhas de "ok" afogariam as cento e
+     poucas desta suíte. Quem quiser o detalhe roda `npm run dossie`. */
+  validaTema(
+    t.data,
+    (cond, msg) => {
+      if (!cond) {
+        reprovas++;
+        console.error(`  FALHA  ${t.id}: ${msg}`);
+      }
+    },
+    false,
+  );
+}
+ok(reprovas === 0, `nenhum dos ${temasDossie.length} casos está fora do padrão`);
 
 await db.end();
 console.log(falhas === 0 ? "\nTudo passou." : `\n${falhas} falha(s).`);

@@ -197,6 +197,23 @@ Um tema quebrado é pior que um tema ausente. Todo pacote passa por:
 **Idioma**
 - Nenhum texto do tema cai no tema padrão
 
+> **CONSTRUÍDO, e o "roda no CI" custou uma segunda etapa.** O crivo existia e
+> era bom, e rodava num lugar só: dentro de `npm run dossie`, o script que
+> PUBLICA os temas. Quer dizer que os pacotes eram conferidos no instante em que
+> alguém decidia republicá-los, e em nenhum outro — um tema que mudasse no banco
+> depois disso nunca mais seria olhado, e a verificação diria "tudo passou".
+>
+> Agora ele mora em `scripts/valida-tema.mjs` e tem dois usuários: o seed valida
+> o que VAI publicar e reprova antes de escrever; `npm run smoke:pacotes` valida
+> o que ESTÁ publicado, toda verificação.
+>
+> **E ele achou um buraco na primeira leitura.** O cabeçalho do relatório do
+> Solar das Acácias saiu *"undefined · undefined"*: `game_themes` guarda nome,
+> era e chamada em COLUNAS, e o cliente monta o caso com `{...colunas, ...data}`
+> — o jsonb por cima. Um pacote sem `name` funciona por ACIDENTE, porque a
+> coluna sobrevive enquanto nada a sobrescreve. Migração 0119 dá aos quatro
+> pacotes a mesma forma.
+
 ---
 
 ## 6. O custo real

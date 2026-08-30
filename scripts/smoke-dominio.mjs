@@ -1377,17 +1377,43 @@ if (iniRelampago.status === 200) {
   ).rows[0].st;
 
   /* `reforcoLeft` também difere, e é CONSEQUÊNCIA do mapa e não regra nova: o
-     reforço é `max(3, territórios ÷ 2)`, e com 24 repartidos entre três dá 4 em
-     vez dos 7 de Vantara. A fórmula é a mesma; o que mudou foi a entrada.
+     reforço é `max(3, territórios ÷ 2)` MAIS o bônus de cada continente que a
+     pessoa tem inteiro. Com 24 territórios repartidos entre três, a primeira
+     parcela dá 4 em vez dos 7 de Vantara. A fórmula é a mesma; o que mudou foi
+     a entrada.
 
      Por isso ele não é só liberado — é CONFERIDO logo abaixo. Liberar sem
      conferir seria abrir um buraco por onde a próxima diferença de verdade
-     passaria sem ninguém ver. */
+     passaria sem ninguém ver.
+
+     E O BÔNUS DE CONTINENTE ENTRA NA CONTA DO TESTE.
+
+     Ele não entrava, e por isso este teste media a SORTE DO SORTEIO: num mapa
+     de 24 territórios entre três pessoas, alguém começar com um continente
+     pequeno inteiro é comum, e quando acontecia o reforço vinha maior que a
+     fórmula pela metade — o teste reprovava código certo. Aconteceu: 8
+     territórios deram 6 exércitos, e 6 é 4 mais um continente de 2.
+
+     A conta aqui é feita do mapa, do zero, e não perguntando ao servidor: um
+     teste que chama `dominio_reforco` para conferir `dominio_reforco` não
+     confere nada. */
   const meusInicio = Object.values(stRelampago.donos).filter((d) => d === stRelampago.turnSeat).length;
+  const mapaRel = (
+    await db.query("select data d from game_themes where id = 'relampago'")
+  ).rows[0].d;
+  const bonusInteiros = (mapaRel.continentes ?? []).reduce((soma, c) => {
+    const doContinente = mapaRel.territorios.filter((t) => t.continente === c.id);
+    const todosMeus =
+      doContinente.length > 0 &&
+      doContinente.every((t) => stRelampago.donos[t.id] === stRelampago.turnSeat);
+    return soma + (todosMeus ? c.bonus : 0);
+  }, 0);
   ok(
-    stRelampago.reforcoLeft === Math.max(3, Math.floor(meusInicio / 2)),
+    stRelampago.reforcoLeft === Math.max(3, Math.floor(meusInicio / 2)) + bonusInteiros,
     `o reforço inicial sai da MESMA fórmula, com o mapa menor:` +
-      ` ${meusInicio} territórios → ${stRelampago.reforcoLeft} exércitos`,
+      ` ${meusInicio} territórios → ${Math.max(3, Math.floor(meusInicio / 2))}` +
+      `${bonusInteiros ? ` + ${bonusInteiros} de continente inteiro` : ""}` +
+      ` = ${stRelampago.reforcoLeft} exércitos`,
   );
 
   const PODEM_DIFERIR = new Set([

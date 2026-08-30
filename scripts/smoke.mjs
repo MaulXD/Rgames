@@ -8,7 +8,7 @@
  * Não depende de "Anonymous sign-ins" estar ligado — por isso dá para validar
  * o servidor antes de o cliente conseguir entrar.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
@@ -572,6 +572,157 @@ for (const arq of suitesComSql) {
   ok(
     !oferecida("regraQueNaoExiste"),
     "e a auditoria tem dentes: uma chave que o lobby não oferece é reprovada",
+  );
+}
+
+/* ── CHAVE DE ESTADO QUE NINGUÉM LÊ ──────────────────────────────────
+
+   O terceiro disfarce da mesma doença, e o mais silencioso dos três.
+
+   `letreiro_boards.difficulty` era gravada desde a migração 0006, tinha índice
+   próprio, e não tinha um único leitor no projeto inteiro. E havia uma chave
+   no estado privado de todo jogador do Domínio, desde 0019, sempre com uma
+   lista vazia dentro, que ninguém nunca leu nem escreveu.
+
+   Nada quebra. A chave só ocupa espaço e finge ser uma funcionalidade — quem
+   lê o estado privado de uma partida a vê e pergunta o que ela significa. E a
+   resposta é: nada, faz anos.
+
+   NOMES DE CHAVE NÃO ENTRAM NESTE COMENTÁRIO. A varredura procura leitores no
+   código, e este arquivo é código: citar a chave aqui a faria passar por causa
+   da própria explicação de por que ela reprovava.
+
+   A varredura lê as chaves que as funções ESCREVEM em `jsonb_build_object` e
+   procura quem as LÊ: o cliente inteiro, ou outra função do banco. Chave sem
+   leitor dos dois lados é chave morta.
+
+   As chaves são extraídas por POSIÇÃO — primeiro, terceiro, quinto argumento —
+   e não por expressão regular solta, senão o VALOR `'capibara'` de
+   `jsonb_build_object('map', 'capibara')` entraria como se fosse chave. */
+
+{
+  const defs = (
+    await db.query(
+      `select p.proname, pg_get_functiondef(p.oid) d from pg_proc p
+         join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' order by p.proname`,
+    )
+  ).rows.map((r) => ({ nome: r.proname, corpo: r.d.replace(/\r\n/g, "\n") }));
+
+  /** Os argumentos de nível de topo de uma chamada, a partir do parêntese. */
+  function argumentos(texto, aberto) {
+    const out = [];
+    let nivel = 0;
+    let inicio = aberto + 1;
+    let aspas = false;
+    for (let i = aberto; i < texto.length; i++) {
+      const c = texto[i];
+      if (aspas) {
+        if (c === "'") aspas = false;
+        continue;
+      }
+      if (c === "'") aspas = true;
+      else if (c === "(") nivel++;
+      else if (c === ")") {
+        nivel--;
+        if (nivel === 0) {
+          out.push(texto.slice(inicio, i));
+          return out;
+        }
+      } else if (c === "," && nivel === 1) {
+        out.push(texto.slice(inicio, i));
+        inicio = i + 1;
+      }
+    }
+    return out;
+  }
+
+  const escritas = new Map();
+  for (const { nome, corpo } of defs) {
+    /* FUNÇÃO `language sql` QUE SÓ LÊ não guarda nada, e nela o `select` final É
+       o retorno — não existe a palavra `return` para o filtro de baixo achar.
+       `dominio_publico` e `met_publico` montam o estado que sai pela rede a cada
+       chamada; `version` ali é resposta, não campo gravado. */
+    const soLeitura =
+      /LANGUAGE sql/i.test(corpo) &&
+      !/\binsert\s+into\b|\bupdate\s+public\.|\bdelete\s+from\b/i.test(corpo);
+    if (soLeitura) continue;
+
+    for (let i = corpo.indexOf("jsonb_build_object("); i >= 0; i = corpo.indexOf("jsonb_build_object(", i + 1)) {
+      /* GUARDADO é diferente de RETORNADO, e só o primeiro envelhece.
+
+         Um campo que a função devolve e o cliente de hoje ignora não custa
+         nada e não pode ficar velho: ele é recalculado a cada chamada. Um
+         campo GRAVADO no estado fica no banco, ocupa espaço, e um dia alguém
+         o lê achando que significa alguma coisa.
+
+         `dominio_atacar` devolve `eliminou` e `venceu` que o cliente não usa —
+         ele descobre as duas coisas pelo registro, que é a fonte da verdade. É
+         resposta, não estado, e fica de fora desta varredura. */
+      const antes = corpo.slice(Math.max(0, corpo.lastIndexOf(";", i)), i);
+      if (/\breturn\b/.test(antes)) continue;
+      const args = argumentos(corpo, i + "jsonb_build_object".length);
+      for (let a = 0; a < args.length; a += 2) {
+        const m = args[a].trim().match(/^'([a-zA-Z][a-zA-Z0-9_]*)'$/);
+        if (!m) continue;
+        if (!escritas.has(m[1])) escritas.set(m[1], new Set());
+        escritas.get(m[1]).add(nome);
+      }
+    }
+  }
+
+  const juntaSql = defs.map((d) => d.corpo).join("\n");
+  const lerPasta = (dir, exts) => {
+    const out = [];
+    const anda = (d) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        if (e.name === "node_modules" || e.name === ".next" || e.name === ".git") continue;
+        const caminho = join(d, e.name);
+        if (e.isDirectory()) anda(caminho);
+        else if (exts.some((x) => e.name.endsWith(x))) out.push(readFileSync(caminho, "utf8"));
+      }
+    };
+    anda(dir);
+    return out.join("\n");
+  };
+  const cliente =
+    lerPasta(join(raiz, "components"), [".tsx", ".ts"]) +
+    lerPasta(join(raiz, "lib"), [".ts"]) +
+    lerPasta(join(raiz, "app"), [".tsx", ".ts"]) +
+    /* AS SUÍTES CONTAM COMO LEITOR. Um campo que só um teste lê é diagnóstico
+       — `mostrei.tinha` existe para o teste poder perguntar, depois, se a
+       máquina TINHA escolha na hora de refutar. Não é funcionalidade morta: é
+       instrumento, e instrumento sem uso na tela continua sendo instrumento. */
+    lerPasta(join(raiz, "scripts"), [".mjs"]);
+
+  /* Nomes curtos demais para a busca dizer alguma coisa: `id`, `w`, `n`
+     aparecem em qualquer arquivo por acidente. Eles ficam de fora da varredura
+     em vez de virarem exceção, porque o teste não teria como distinguir um
+     leitor de uma coincidência. */
+  const orfas = [...escritas.keys()]
+    .filter((k) => k.length >= 4)
+    .filter(
+      (k) =>
+        !juntaSql.includes(`->> '${k}'`) &&
+        !juntaSql.includes(`-> '${k}'`) &&
+        !juntaSql.includes(`? '${k}'`) &&
+        !cliente.includes(`.${k}`) &&
+        !cliente.includes(`"${k}"`) &&
+        !cliente.includes(`'${k}'`) &&
+        !cliente.includes(`${k}:`) &&
+        !cliente.includes(`${k}?`),
+    )
+    .sort();
+
+  ok(
+    escritas.size > 50,
+    `as funções do banco escrevem ${escritas.size} chaves distintas no estado`,
+  );
+  ok(
+    orfas.length === 0,
+    orfas.length === 0
+      ? "e toda chave com quatro letras ou mais tem quem a leia — nenhuma finge ser funcionalidade"
+      : `CHAVE SEM LEITOR: ${orfas.map((k) => `${k} (${[...escritas.get(k)].slice(0, 2).join(", ")})`).join(" · ")}`,
   );
 }
 

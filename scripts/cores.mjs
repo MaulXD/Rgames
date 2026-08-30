@@ -182,6 +182,27 @@ export function partesDoSeletor(seletor) {
   return saida.length ? saida : null;
 }
 
+/**
+ * `font-size` em pixels, quando dá para saber.
+ *
+ * `clamp(min, ideal, max)` vira o MÍNIMO, e a escolha não é arbitrária: é o
+ * menor tamanho em que aquele texto chega a aparecer, e o piso da WCAG é sobre
+ * o pior caso. Chutar o ideal daria à auditoria uma tela de desktop que o
+ * celular não tem.
+ *
+ * `em` e `%` dependem do pai e viram nulo — herdar do pai é conta de quem tem a
+ * árvore, e chutar 16px aqui seria inventar.
+ */
+export function tamanhoEmPx(valor) {
+  if (!valor) return null;
+  const v = String(valor).trim().toLowerCase();
+  const clamp = /^clamp\(([^,]+),/.exec(v);
+  const alvo = clamp ? clamp[1].trim() : v;
+  const m = /^([\d.]+)(px|rem)$/.exec(alvo);
+  if (!m) return null;
+  return Number(m[1]) * (m[2] === "rem" ? 16 : 1);
+}
+
 function especificidade(partes) {
   let a = 0;
   let b = 0;
@@ -214,11 +235,20 @@ export function regrasDeCor(dir, arquivos = arquivosDeCss(dir)) {
         /(?:^|[;\s])background-color\s*:\s*([^;]+)/.exec(corpo)?.[1]?.trim() ??
         /(?:^|[;\s])background\s*:\s*([^;]+)/.exec(corpo)?.[1]?.trim() ??
         null;
-      if (!cor && !fundo) continue;
+      const px = tamanhoEmPx(/(?:^|[;\s])font-size\s*:\s*([^;]+)/.exec(corpo)?.[1]);
+      const negrito = /font-weight\s*:\s*(?:bold|[6-9]00)/.test(corpo)
+        ? true
+        : /font-weight\s*:\s*(?:normal|[1-5]00)/.test(corpo)
+          ? false
+          : null;
 
-      const tam = /font-size\s*:\s*([\d.]+)(px|rem)/.exec(corpo);
-      const px = tam ? Number(tam[1]) * (tam[2] === "rem" ? 16 : 1) : null;
-      const negrito = /font-weight\s*:\s*(?:bold|[6-9]00)/.test(corpo);
+      /* TAMANHO CONTA COMO DECLARAÇÃO. O piso da WCAG cai de 4,5 para 3 em
+         texto grande, e quem declara o tamanho quase nunca é quem declara a
+         cor: no relógio do Letreiro, `.clock-num` diz o tamanho e
+         `.clock[data-urgent] .clock-num` diz a cor. Ler o tamanho só da regra
+         que pintou faz a auditoria cobrar 4,5 de um número de 27px em negrito,
+         e reprovar o que está certo. */
+      if (!cor && !fundo && px === null && negrito === null) continue;
 
       for (const um of cabeca.split(",")) {
         const partes = partesDoSeletor(um);
@@ -296,8 +326,12 @@ export function bate(partes, pilha) {
 export function declaradas(regras, pilha, tokens) {
   let cor = null;
   let fundo = null;
+  let px = null;
+  let negrito = null;
   let melhorCor = -1;
   let melhorFundo = -1;
+  let melhorPx = -1;
+  let melhorNegrito = -1;
   for (const r of regras) {
     if (!bate(r.partes, pilha)) continue;
     const peso = r.espec * 1e6 + r.ordem;
@@ -308,6 +342,16 @@ export function declaradas(regras, pilha, tokens) {
     if (r.fundo && peso > melhorFundo) {
       melhorFundo = peso;
       fundo = { valor: r.fundo, regra: r };
+    }
+    /* CADA PROPRIEDADE CASCATEIA SOZINHA, e é isso que o navegador faz: o
+       tamanho pode vir de uma regra e a cor de outra, no mesmo elemento. */
+    if (r.px !== null && peso > melhorPx) {
+      melhorPx = peso;
+      px = r.px;
+    }
+    if (r.negrito !== null && peso > melhorNegrito) {
+      melhorNegrito = peso;
+      negrito = r.negrito;
     }
   }
 
@@ -325,8 +369,14 @@ export function declaradas(regras, pilha, tokens) {
 
   /* Sai com alfa e tudo. Compor é decisão de quem tem a árvore: só ele sabe o
      que está atrás. */
+  const inlineTam = inline
+    ? tamanhoEmPx(/(?:^|[;\s])font-size\s*:\s*([^;]+)/.exec(inline)?.[1])
+    : null;
+
   return {
     cor: cor ? { ...cor, rgba: paraRgba(resolveVar(cor.valor, tokens)) } : null,
     fundo: fundo ? { ...fundo, rgba: paraRgba(resolveVar(fundo.valor, tokens)) } : null,
+    px: inlineTam ?? px,
+    negrito,
   };
 }

@@ -652,14 +652,30 @@ conferência.
       fez a revelação mostrar ADELE. E antes da coluna falta a DECISÃO de produto: recusar
       BRASIL a um jogador brasileiro que o achou na grade é defensável pela regra clássica do
       Boggle e desagradável na mesa
-- [ ] Carregamento do dicionário < 500 KB transferidos, e apenas na primeira vez
+- [x] Carregamento do dicionário < 500 KB transferidos, e apenas na primeira vez — **zero KB,
+      e nenhuma vez.** O DAWG no cliente foi o plano da semana 1 e o jogo não precisou dele: o
+      caminho aceso enquanto se digita é geometria de dezesseis células, e quem diz se a
+      palavra vale é o servidor. O dicionário de 1,54 milhão de formas nunca sai do banco, e
+      isso também é o que faz um solver de fora não ganhar nada baixando a página.
+      `npm run peso` mede o que a abertura pede inteira: 215 KB de js, 22 de css
 
 **Tempo real**
-- [ ] Cronômetro dos 6 jogadores sincronizado dentro de 300ms
-- [ ] Relógio do sistema adiantado em 10 min não afeta o cronômetro
+- [ ] Cronômetro dos 6 jogadores sincronizado dentro de 300ms — o mecanismo está lá (todos
+      medem o desvio contra o mesmo cabeçalho `Date`, com meia ida e volta de compensação), e
+      o que falta é a MEDIDA: seis aparelhos de verdade em redes de verdade
+- [x] Relógio do sistema adiantado em 10 min não afeta o cronômetro — o cliente NÃO conta o
+      tempo sozinho: ele mede o desvio do próprio relógio contra o cabeçalho `Date` do
+      servidor, compensando metade da ida e volta, e conta a partir do `ends_at`, que é um
+      instante absoluto no banco. E a defesa que decide é do servidor: palavra enviada depois
+      do `ends_at` é recusada com `TIME_OVER`, e a suíte cobra isso
 - [x] Rodada termina sozinha mesmo se todos fecharem o navegador — a faxina encerra, e o mesmo
       vale para o desafio diário
-- [ ] Reconectar aos 2:30 restaura grade, tempo e lista de palavras
+- [x] Reconectar aos 2:30 restaura grade, tempo e lista de palavras — e a bandeja junto. Não
+      há sessão de rodada no servidor: quem volta é um cliente NOVO com o mesmo token, e monta
+      a tela com duas leituras. **A tentação concreta é a lista:** ela é digitada depressa, uma
+      atrás da outra, e guardar em memória para gravar tudo no fim funciona perfeitamente até o
+      ônibus entrar no túnel — e aí a pessoa perde a rodada inteira. E o tempo não é um
+      contador: é um instante absoluto, senão quem recarregasse ganharia a rodada de novo
 
 **Segurança**
 - [x] Jogador A não consegue ler `match_private_state` de B durante a rodada

@@ -157,13 +157,59 @@ export function Lobby({ code }: { code: string }) {
     };
   }, [status, user, code, loadSeats, loadMatch]);
 
+  /* ── o pulso ────────────────────────────────────────────────────────────
+     DEZ SEGUNDOS, e era trinta. O servidor não enxerga a presença do Realtime:
+     ele tem `last_seen_at`, e é com ele que decide se o anfitrião sumiu de
+     verdade (migração 0120). Com pulso de trinta, o menor limiar honesto seria
+     uns setenta segundos — dois pulsos perdidos e uma folga —, e a sala ficaria
+     mais de um minuto sem quem pode começar a partida.
+
+     O custo é uma chamada trivial a cada dez segundos por pessoa, e só no
+     lobby. É barato pelo que compra. */
   useEffect(() => {
     const id = setInterval(() => {
       const rid = roomIdRef.current;
       if (rid) void supabaseBrowser().rpc("touch_presence", { p_room: rid });
-    }, 30_000);
+    }, 10_000);
     return () => clearInterval(id);
   }, []);
+
+  /* ── O ANFITRIÃO FECHOU O NAVEGADOR ─────────────────────────────────────
+
+     Fechar a aba não avisa ninguém: `leave_room` só roda quando a pessoa APERTA
+     sair. Sem isto, a sala fica com um anfitrião que não existe — e só ele pode
+     começar a partida, mudar as regras da casa e chamar máquina. Cinco pessoas
+     esperando, nenhuma podendo fazer nada.
+
+     DUAS TRANCAS. Esta metade é a RÁPIDA: a presença do Realtime avisa em
+     segundos que ele caiu. Ela não é prova — cliente não é autoridade neste
+     projeto —, e por isso o servidor tem a dele: só concede se o pulso do
+     anfitrião também estiver vencido (migração 0120).
+
+     QUEM PEDE É O MENOR ASSENTO PRESENTE, e só ele. O servidor recalcula
+     sozinho e é idempotente, então quatro pedidos dariam no mesmo — mas quatro
+     pedidos para uma coisa que uma pessoa resolve é barulho de rede à toa.
+
+     E ESPERA SEIS SEGUNDOS ANTES DE PEDIR. Uma queda de Realtime de dois
+     segundos — trocar de wi-fi para 4G, a tela do celular apagar — tira a
+     pessoa da lista de presentes e a devolve logo em seguida. Passar a sala de
+     mão a cada tropeço de rede é pior que o problema. */
+  useEffect(() => {
+    if (!room || !user) return;
+    if (room.host_id === user.id) return;
+    if (online.size === 0) return; // ainda não sincronizou
+    if (online.has(room.host_id)) return;
+
+    const presentes = seats
+      .filter((x) => x.seat !== null && !x.profiles?.is_bot && online.has(x.user_id))
+      .sort((a, b) => a.seat! - b.seat!);
+    if (presentes[0]?.user_id !== user.id) return;
+
+    const id = setTimeout(() => {
+      void supabaseBrowser().rpc("assumir_anfitriao", { p_room: room.id });
+    }, 6_000);
+    return () => clearTimeout(id);
+  }, [room, user, seats, online]);
 
   async function act(fn: () => Promise<{ error: unknown }>) {
     setNote(null);

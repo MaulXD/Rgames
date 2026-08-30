@@ -197,6 +197,117 @@ const dbody = await direct.json().catch(() => null);
 ok(direct.status >= 400 || (Array.isArray(dbody) && dbody.length === 0),
    `escrita direta em room_members e bloqueada (${direct.status})`);
 
+/* ── O ANFITRIÃO FECHOU O NAVEGADOR ─────────────────────────────────────────
+
+   Critério de aceite do PRD 00 §12, e ele não estava construído. Até 0120 a
+   passagem de anfitrião só acontecia dentro de `leave_room` — quer dizer,
+   quando a pessoa APERTA sair. Fechar a aba não avisa ninguém, e a sala ficava
+   com um anfitrião que não existe: só ele começa a partida, muda as regras da
+   casa e chama máquina. Cinco pessoas esperando, nenhuma podendo fazer nada.
+
+   O buraco fica no lugar mais caro possível: na PRIMEIRA coisa que um grupo
+   faz.
+
+   São duas trancas, e aqui se testa a do servidor — a única que é prova. O
+   cliente pede quando a presença do Realtime diz que o anfitrião caiu; o
+   servidor só concede se o pulso dele também estiver vencido. Uma é rápida e
+   não é confiável, a outra é confiável e não é rápida.
+   ───────────────────────────────────────────────────────────────────────── */
+
+const salaH = (await rpc(A.token, "create_room", { p_game: "letreiro" })).body;
+await rpc(B.token, "join_room", { p_code: salaH.code });
+await rpc(C.token, "join_room", { p_code: salaH.code });
+
+/* 1. COM O ANFITRIÃO PRESENTE, NINGUÉM TOMA NADA. É a tranca que impede a sala
+   de ser roubada de quem está sentado nela — e sem ela, um cliente com o
+   relógio errado ou um `fetch` repetido bastaria. */
+await rpc(A.token, "touch_presence", { p_room: salaH.id });
+const cedoH = await rpc(B.token, "assumir_anfitriao", { p_room: salaH.id });
+ok(
+  cedoH.status >= 400 && JSON.stringify(cedoH.body).includes("ANFITRIAO_PRESENTE"),
+  cedoH.status >= 400
+    ? "com o anfitrião presente, ninguém assume a sala dele"
+    : `A SALA FOI TOMADA DE QUEM ESTAVA NELA: ${JSON.stringify(cedoH.body)}`,
+);
+
+/* 2. QUEM NÃO É DA SALA NÃO PEDE. */
+const deForaH = await rpc(
+  (await makeUser(`teste-fora-${stamp}@mesa.invalid`)).token,
+  "assumir_anfitriao",
+  { p_room: salaH.id },
+);
+ok(
+  deForaH.status >= 400 && JSON.stringify(deForaH.body).includes("NOT_A_MEMBER"),
+  deForaH.status >= 400
+    ? "e quem não está na sala não pede a sala"
+    : "ALGUÉM DE FORA ASSUMIU A SALA",
+);
+
+/* 3. PULSO VENCIDO: O MENOR ASSENTO PRESENTE ASSUME.
+
+   O envelhecimento é escrito direto na tabela — é o que uma aba fechada produz
+   depois de vinte e cinco segundos, e esperar vinte e cinco segundos de relógio
+   numa suíte é ensinar a ignorar a saída lenta. */
+const envelhece = await tenta(
+  `${URL_}/rest/v1/room_members?room_id=eq.${salaH.id}&user_id=eq.${A.id}`,
+  {
+    method: "PATCH",
+    headers: {
+      apikey: SVC,
+      Authorization: `Bearer ${SVC}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify({ last_seen_at: new Date(Date.now() - 60_000).toISOString() }),
+  },
+);
+ok(envelhece.status < 300, `o pulso do anfitrião foi envelhecido (${envelhece.status})`);
+await rpc(B.token, "touch_presence", { p_room: salaH.id });
+await rpc(C.token, "touch_presence", { p_room: salaH.id });
+
+const assumiuH = await rpc(C.token, "assumir_anfitriao", { p_room: salaH.id });
+const salaDepoisH = (await get(B.token, `rooms?select=host_id&id=eq.${salaH.id}`)).body?.[0];
+ok(
+  assumiuH.status === 200 && assumiuH.body?.ok === true && salaDepoisH.host_id === B.id,
+  assumiuH.status === 200 && salaDepoisH.host_id === B.id
+    ? "com o pulso vencido, o MENOR assento presente assume — e não quem pediu"
+    : `a passagem não aconteceu: ${JSON.stringify(assumiuH.body)}`,
+);
+
+/* E O PAPEL ANDA JUNTO NOS DOIS LADOS. O antigo continua na sala, então
+   promover sem rebaixar deixaria dois `host` na mesma mesa — e a tela lê o
+   papel para desenhar a coroa. */
+const papeisH =
+  (await get(B.token, `room_members?select=user_id,role&room_id=eq.${salaH.id}`)).body ?? [];
+ok(
+  papeisH.filter((r) => r.role === "host").length === 1 &&
+    papeisH.find((r) => r.role === "host")?.user_id === B.id,
+  papeisH.filter((r) => r.role === "host").length === 1
+    ? "e a sala fica com UM anfitrião — o antigo é rebaixado no mesmo passo"
+    : `a sala ficou com ${papeisH.filter((r) => r.role === "host").length} anfitriões`,
+);
+
+/* 4. E É IDEMPOTENTE. Quatro pessoas podem pedir ao mesmo tempo; o servidor
+   recalcula sozinho e chega no mesmo assento. Quem já é anfitrião ouve "já sou"
+   e não um erro — erro faria a tela piscar vermelho por nada. */
+const denovoH = await rpc(B.token, "assumir_anfitriao", { p_room: salaH.id });
+ok(
+  denovoH.status === 200 && denovoH.body?.motivo === "JA_SOU",
+  denovoH.status === 200
+    ? "e quem já é anfitrião ouve 'já sou', não um erro"
+    : `pedir de novo deu erro: ${JSON.stringify(denovoH.body)}`,
+);
+
+const terceiroH = await rpc(C.token, "assumir_anfitriao", { p_room: salaH.id });
+ok(
+  terceiroH.status >= 400 || terceiroH.body?.ok === false,
+  "e o novo anfitrião, presente, não é derrubado pelo pedido seguinte",
+);
+
+await rpc(A.token, "leave_room", { p_room: salaH.id });
+await rpc(B.token, "leave_room", { p_room: salaH.id });
+await rpc(C.token, "leave_room", { p_room: salaH.id });
+
 // migracao de host: o host sai, o assento 1 assume
 ok((await rpc(A.token, "leave_room", { p_room: room.id })).status < 300, "host sai da sala");
 const after = await get(B.token, `rooms?select=host_id&id=eq.${room.id}`);
@@ -246,6 +357,7 @@ const PERMITIDAS = [
   "create_room", "join_room", "leave_room", "set_color", "set_profile",
   "set_ready", "set_room_settings", "touch_presence",
   "adicionar_bot", "remover_bot",
+  "assumir_anfitriao",
   // Letreiro
   "letreiro_start", "letreiro_submit",
   "letreiro_diario_abrir", "letreiro_diario_submeter", "letreiro_diario_fechar",

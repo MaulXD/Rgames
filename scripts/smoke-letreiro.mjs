@@ -248,6 +248,77 @@ ok(Array.isArray(espiar.body) && espiar.body.length === 0, "RLS: ninguém lê a 
 const minha = await get(A.token, `match_private_state?select=data&match_id=eq.${partida.id}`);
 ok(minha.body?.[0]?.data?.words?.length === 3, "cada um lê a própria lista");
 
+/* ── FECHAR A ABA AOS 2:30 E VOLTAR ─────────────────────────────────────────
+
+   Critério de aceite do PRD 02 §12: "reconectar restaura grade, tempo e lista
+   de palavras".
+
+   Não há sessão de rodada no servidor — quem volta é um cliente NOVO com o mesmo
+   token, e ele monta a tela com duas leituras: a linha da partida e o próprio
+   estado privado. Então o critério é uma pergunta sobre onde as três coisas
+   MORAM, e a resposta certa é "no banco, todas".
+
+   A TENTAÇÃO CONCRETA AQUI É A LISTA DE PALAVRAS. Ela é digitada depressa,
+   uma atrás da outra, e guardar em memória para gravar tudo no fim é a
+   otimização óbvia — funciona perfeitamente até o ônibus entrar no túnel. E aí
+   a pessoa perde os três minutos inteiros, que é a rodada toda.
+
+   E O TEMPO NÃO É UM CONTADOR: é `ends_at`, um instante absoluto. Um contador
+   guardado no cliente reinicia do zero ao voltar, e quem recarregasse ganharia
+   a rodada de novo. */
+const antesDeSumir = (
+  await get(A.token, `match_private_state?select=data&match_id=eq.${partida.id}`)
+).body?.[0]?.data;
+
+const deVolta = (
+  await get(A.token, `matches?select=id,status,ends_at,public_state&id=eq.${partida.id}`)
+).body?.[0];
+const meuDeVolta = (
+  await get(A.token, `match_private_state?select=data&match_id=eq.${partida.id}`)
+).body?.[0]?.data;
+
+ok(
+  Array.isArray(deVolta?.public_state?.grid) &&
+    deVolta.public_state.grid.length === (deVolta.public_state.size ?? 4) ** 2,
+  deVolta?.public_state?.grid
+    ? `a GRADE volta inteira (${deVolta.public_state.grid.length} letras)`
+    : "a grade não voltou",
+);
+ok(
+  typeof deVolta?.ends_at === "string" && !Number.isNaN(Date.parse(deVolta.ends_at)),
+  deVolta?.ends_at
+    ? "o TEMPO volta como instante absoluto, e não como contador — recarregar não ganha rodada nova"
+    : "o tempo não voltou",
+);
+ok(
+  Array.isArray(meuDeVolta?.words) &&
+    meuDeVolta.words.length === (antesDeSumir?.words?.length ?? -1),
+  Array.isArray(meuDeVolta?.words)
+    ? `a LISTA volta com as ${meuDeVolta.words.length} palavras — ela nunca foi estado de React`
+    : `a lista não voltou: ${JSON.stringify(meuDeVolta)}`,
+);
+
+/* E A BANDEJA JUNTO. Ela é congelada no início da partida e não lida da sala
+   (0093): quem volta tem de ver o mesmo material, senão o anfitrião troca a
+   bandeja entre duas partidas e a mesma grade aparece em outra madeira. */
+ok(
+  typeof deVolta?.public_state?.tray === "string",
+  deVolta?.public_state?.tray
+    ? `e a bandeja congelada volta com ela (${deVolta.public_state.tray})`
+    : "a bandeja não voltou",
+);
+
+/* E O QUE NÃO É SEU CONTINUA NÃO SENDO. */
+const tudoPrivado = (
+  await get(A.token, `match_private_state?select=data&match_id=eq.${partida.id}`)
+).body;
+ok(
+  Array.isArray(tudoPrivado) && tudoPrivado.length === 1,
+  Array.isArray(tudoPrivado) && tudoPrivado.length === 1
+    ? "e quem volta recebe UMA linha privada, a dele — reconectar não é ganhar acesso"
+    : `a reconexão trouxe ${tudoPrivado?.length} estados privados`,
+);
+
 // fim do tempo: o banco encerra, não o cliente
 /* ESTA CHECAGEM VEM ANTES de forçar o fim da rodada, e a ordem é o conserto de
    uma falha que aparecia uma vez a cada tantas execuções.

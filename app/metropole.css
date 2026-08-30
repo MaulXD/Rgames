@@ -1741,7 +1741,11 @@
   flex: none;
   font-size: 0.68rem;
   font-weight: 700;
-  color: #8a7f6a;
+  /* ESCURECIDO de #8a7f6a, que dava 3,44:1 sobre o creme do jornal. São 11px, e
+     é onde está o PRAZO do evento da cidade — o número que decide se vale a
+     pena reagir a ele. Texto pequeno e importante é o pior lugar para economizar
+     contraste. */
+  color: #736a58;
 }
 
 .manchete-titulo {

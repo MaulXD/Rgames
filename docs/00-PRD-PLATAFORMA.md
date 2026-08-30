@@ -500,9 +500,32 @@ Instrumentação: Vercel Analytics para web vitals, eventos de produto no própr
       espaço não-quebrável que vem de copiar de uma página. A metade do espaço estava quebrada:
       `btrim` tira das pontas, e o espaço que a pessoa põe está no MEIO
 - [ ] QR Code lido por câmera nativa de iOS e Android leva direto ao apelido
-- [ ] Fechar a aba no meio da partida e reabrir restaura o estado exato, incluindo mão de cartas
-- [ ] Host fecha o navegador → outro jogador vira host em < 5s, sem interação
-- [ ] Um jogador ausente não impede a partida de terminar
+- [x] Fechar a aba no meio da partida e reabrir restaura o estado exato, incluindo mão de cartas
+      — não há sessão de partida no servidor: quem volta é um cliente NOVO com o mesmo token,
+      e monta a tela com duas leituras. As três suítes cobram: o Dossiê (mão, bloco, posição,
+      reviravolta), o Letreiro (grade, tempo, lista de palavras, bandeja) e o Domínio (mão,
+      **objetivo secreto** e mapa). **A tentação concreta é sempre a mesma:** o que a pessoa
+      digita depressa — a lista do Letreiro, o bloco do Dossiê — é o candidato natural a virar
+      estado de React, e funciona perfeitamente até o ônibus entrar no túnel
+- [x] Host fecha o navegador → outro jogador vira host, sem interação — **não estava
+      construído** até a migração 0120, e o buraco ficava no lugar mais caro possível: a
+      PRIMEIRA coisa que um grupo faz. Desde 0002 a passagem só acontecia dentro de
+      `leave_room`, quer dizer, quando a pessoa APERTA sair; fechar a aba deixava a sala com um
+      anfitrião que não existe, e só ele começa a partida, muda as regras e chama máquina.
+
+      **Duas trancas, e cada uma tapa o buraco da outra.** O cliente vê a presença do Realtime
+      e sabe em segundos que ele caiu — mas cliente não é autoridade aqui. O servidor tem
+      `last_seen_at`, que é prova e é grosseiro. Então o cliente só pede quando o Realtime
+      avisa, e o servidor só concede se o pulso também estiver vencido. O pulso do lobby caiu
+      de 30s para 10s por causa disso: com 30, o menor limiar honesto seria mais de um minuto.
+
+      Assume o menor assento presente, e nunca uma máquina. Os "< 5s" continuam sem medida —
+      isso precisa de dois aparelhos e um cronômetro
+- [x] Um jogador ausente não impede a partida de terminar — a faxina de cada jogo joga ou pula
+      por quem sumiu, e as quatro suítes cobram o desfecho: o Dossiê encerra no relógio, o
+      Domínio acaba sozinho em 36 turnos, a rodada do Letreiro é encerrada pelo servidor. No
+      Dossiê a faxina vai além e **refuta pela pessoa** quando ela tem uma das três, porque
+      passar por ela escreveria uma frase falsa no registro que todo caderno da mesa acredita
 - [ ] Convidado cria conta ao fim da partida e o histórico daquela partida está lá
 - [x] Teste de RLS: cliente autenticado como jogador A não consegue ler `match_private_state` de B
       — conferido nas suítes do Dossiê ("o terceiro jogador não vê a carta mostrada") e do Letreiro

@@ -47,6 +47,7 @@ import {
   declaradas,
   razao,
   regrasDeCor,
+  tamanhoEmPx,
   tokensDeCss,
 } from "./cores.mjs";
 
@@ -911,7 +912,7 @@ let semFundo = 0;
 
 for (const { nome: tela, html } of TUDO_QUE_FOI_DESENHADO) {
   const pilha = [CHAO];
-  const efetivo = [{ cor: null, fundo: null, piso: 4.5 }];
+  const efetivo = [{ cor: null, fundo: null, px: null, negrito: false, piso: 4.5 }];
   let posicao = 0;
   let mudo = 0;
   let fechado = 0;
@@ -986,10 +987,17 @@ for (const { nome: tela, html } of TUDO_QUE_FOI_DESENHADO) {
        alfa também compõe, e compõe sobre o que estiver atrás. */
     const fundo = d.fundo ? compoe(d.fundo.rgba, pai.fundo) : pai.fundo;
     const cor = d.cor ? compoe(d.cor.rgba, fundo ?? pai.fundo) : pai.cor;
-    const px = d.cor?.regra?.px ?? null;
-    const negrito = d.cor?.regra?.negrito ?? false;
+    /* O TAMANHO HERDA COMO A COR, e por isso vem da árvore e não da regra que
+       pintou. Quem declara o tamanho quase nunca é quem declara a cor: no
+       relógio do Letreiro, `.clock-num` diz o tamanho e
+       `.clock[data-urgent] .clock-num` diz a cor. Ler o tamanho só de quem
+       pintou fez a auditoria cobrar 4,5:1 de um número de 27px em negrito — o
+       piso dele é 3, e ele passava. Falso positivo é o jeito mais rápido de
+       ensinar a ignorar a saída vermelha. */
+    const px = d.px ?? pai.px;
+    const negrito = d.negrito ?? pai.negrito;
     const grande = px !== null && (px >= 24 || (px >= 18.66 && negrito));
-    efetivo.push({ cor, fundo, piso: grande ? 3 : 4.5 });
+    efetivo.push({ cor, fundo, px, negrito, piso: grande ? 3 : 4.5 });
   }
   olhaTexto(html.slice(posicao));
 }
@@ -998,6 +1006,37 @@ console.log(
   `  ${lidos} pedaço(s) de texto com cor E fundo resolvidos pela árvore` +
     ` (${semFundo} sobre fundo que não dá para resolver)`,
 );
+/* ── E O PISO SAI DO TAMANHO CERTO ────────────────────────────────────────
+
+   A WCAG derruba o piso de 4,5 para 3 em texto grande, e foi aí que esta
+   auditoria deu o primeiro falso positivo: cobrou 4,5:1 do relógio do
+   Letreiro, que tem 27px em negrito e passa com folga no piso dele. O tamanho
+   estava sendo lido da regra que PINTOU, e quem pinta quase nunca é quem
+   dimensiona — `.clock-num` diz o tamanho, `.clock[data-urgent] .clock-num` diz
+   a cor.
+
+   Falso positivo é o jeito mais rápido de ensinar alguém a ignorar a saída
+   vermelha, então o conserto vem com prova. `clamp()` vira o MÍNIMO: é o menor
+   tamanho em que aquele texto chega a aparecer, e o piso da WCAG é sobre o pior
+   caso — chutar o ideal daria à auditoria uma tela de desktop que o celular não
+   tem. */
+const TAMANHOS = [
+  ["2.3rem", 36.8],
+  ["16px", 16],
+  ["clamp(1.7rem, 7vw, 2.3rem)", 27.2],
+  ["1.2em", null],
+  ["inherit", null],
+];
+const tamErradas = TAMANHOS.filter(([v, e]) => tamanhoEmPx(v) !== e);
+ok(
+  tamErradas.length === 0,
+  tamErradas.length === 0
+    ? "e o piso sai do tamanho certo: clamp() vale pelo mínimo, e em/inherit viram 'não sei'"
+    : `O TAMANHO ESTÁ SENDO LIDO ERRADO: ${tamErradas
+        .map(([v, e]) => `"${v}" devia dar ${e} e deu ${tamanhoEmPx(v)}`)
+        .join(" · ")}`,
+);
+
 ok(
   fracos.length === 0,
   fracos.length === 0

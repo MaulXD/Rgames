@@ -370,6 +370,46 @@ if (partida?.public_state) {
   const espiar = await get(P[1].token, `match_private_state?select=data&user_id=eq.${P[0].id}`);
   ok(Array.isArray(espiar.body) && espiar.body.length === 0, "RLS: ninguém lê o objetivo do outro");
 
+  /* ── FECHAR A ABA NO MEIO E VOLTAR ────────────────────────────────────
+     Critério de aceite do PRD 00 §12: "restaura o estado exato, INCLUINDO MÃO
+     DE CARTAS". O Domínio é o jogo em que essa frase tem dentes — aqui a mão
+     vale exércitos, e perdê-la ao recarregar seria perder território.
+
+     Não há sessão de partida no servidor: quem volta é um cliente novo com o
+     mesmo token, e monta a tela com duas leituras. Então o critério é uma
+     pergunta sobre onde as coisas MORAM.
+
+     O objetivo secreto é a segunda metade, e a mais fácil de perder de vista:
+     ele é sorteado uma vez e nunca mais aparece numa resposta pública. Se
+     vivesse na memória do cliente, recarregar deixaria a pessoa jogando sem
+     saber o que precisa fazer para ganhar. */
+  const deVoltaD = (
+    await get(P[0].token, `match_private_state?select=data&match_id=eq.${partida.id}`)
+  ).body?.[0]?.data;
+  const publicoD = (
+    await get(P[0].token, `matches?select=status,public_state&id=eq.${partida.id}`)
+  ).body?.[0];
+
+  ok(
+    Array.isArray(deVoltaD?.cartas),
+    Array.isArray(deVoltaD?.cartas)
+      ? `a MÃO volta (${deVoltaD.cartas.length} cartas) — ela nunca foi estado de React`
+      : `a mão não voltou: ${JSON.stringify(deVoltaD?.cartas)}`,
+  );
+  ok(
+    !!deVoltaD?.objetivo?.texto,
+    deVoltaD?.objetivo?.texto
+      ? "e o OBJETIVO SECRETO volta com ela — recarregar não deixa ninguém jogando às cegas"
+      : "o objetivo não voltou",
+  );
+  ok(
+    !!publicoD?.public_state?.donos &&
+      Object.keys(publicoD.public_state.donos).length > 0,
+    publicoD?.public_state?.donos
+      ? `e o MAPA volta inteiro (${Object.keys(publicoD.public_state.donos).length} territórios com dono)`
+      : "o mapa não voltou",
+  );
+
   const colSeed = await get(P[1].token, `matches?select=seed&id=eq.${partida.id}`);
   ok(colSeed.status >= 400, `a coluna seed é negada ao cliente (status ${colSeed.status})`);
 

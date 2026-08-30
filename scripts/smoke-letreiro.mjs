@@ -420,15 +420,22 @@ ok(salaFim?.status === "lobby", "sala voltou para o lobby");
 
 console.log("\n  ── as palavras que o jogo mostra ──");
 
+/* A LISTA É DE GRAFIAS, e não de normas — a mesma chave que o `build-dict`
+   usa. Ela era lida aqui em NORMA, e por isso a entrada `cao` reprovava a
+   palavra `cao`: duas palavras diferentes que colapsam na mesma chave, e a
+   lista dizia respeito a uma só delas.
+
+   Trinta e quatro entradas estavam nessa situação, e as piores escondiam CAO
+   (posto 1269) e PAO (1969) da revelação. */
 const naoComum = new Set(
   (await readFile(join(root, "data", "letreiro-nao-comum.txt"), "utf8"))
     .split(/\r?\n/)
     .filter((l) => !l.trim().startsWith("#"))
     .flatMap((l) => l.trim().split(/\s+/))
     .filter(Boolean)
-    .map((w) => w.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase()),
+    .map((w) => w.toLowerCase()),
 );
-ok(naoComum.size > 300, `a lista curada tem ${naoComum.size} palavras`);
+ok(naoComum.size > 300, `a lista curada tem ${naoComum.size} grafias`);
 
 /* A INVARIANTE: nenhuma grade SORTEÁVEL mostra palavra da lista curada.
    É a checagem que sobrevive a mim: se um dia alguém acrescentar palavra à
@@ -438,9 +445,23 @@ const gradesAmostra = (
     "select id, size, comuns from letreiro_boards where usavel order by random() limit 300",
   )
 ).rows;
+/* A grade guarda NORMAS; a lista guarda grafias. A ponte é o dicionário, que é
+   quem escolheu qual grafia aquela norma tem — e é exatamente a ponte que o
+   `build-dict` atravessa ao decidir o que é comum. Comparar sem ela é comparar
+   duas coisas que só se parecem. */
+const grafiaDe = new Map(
+  (
+    await db.query("select norm, word from dict_pt where norm = any($1)", [
+      [...new Set(gradesAmostra.flatMap((g) => g.comuns))],
+    ])
+  ).rows.map((r) => [r.norm, r.word]),
+);
 const vazando = [];
 for (const g of gradesAmostra) {
-  for (const w of g.comuns) if (naoComum.has(w)) vazando.push(`${w} (grade ${g.id})`);
+  for (const w of g.comuns) {
+    const grafia = (grafiaDe.get(w) ?? w).toLowerCase();
+    if (naoComum.has(grafia)) vazando.push(`${grafia} (grade ${g.id})`);
+  }
 }
 ok(
   vazando.length === 0,
@@ -462,29 +483,116 @@ ok(
   cortes.every((c, i) => i === 0 || Number(c.pior) >= Number(cortes[i - 1].pior)),
   `o corte escala com o tamanho: ${cortes.map((c) => `${c.len}→${c.pior}`).join(" ")}`,
 );
+/* ── AS TRÊS LETRAS, medidas por nome e não por número ─────────────────────
+
+   Este teste cobrava um corte de 4 mil, e o corte agora é 12 mil. A mudança
+   não é afrouxamento: é a admissão de que em três letras o posto de frequência
+   NÃO separa palavra de fragmento.
+
+   Amostrado entre 4 mil e 12 mil: de um lado `aço`, `nua`, `elo`, `véu`,
+   `baú`, `cru`, `boi`, `uva`, `gol`, `asa`, `crê`, `réu`; do outro `las`,
+   `von`, `fox`, `etc`, `set`, `min`. O corte apertado escondia as primeiras E
+   deixava passar as segundas — errava nas duas direções ao mesmo tempo, e um
+   número diferente não resolveria, porque não há número que separe estas duas
+   listas.
+
+   Quem separa é a lista curada. Por isso o teste passou a nomear as duas
+   pontas em vez de conferir um limiar: um limiar é uma opinião sobre onde
+   cortar, e estas palavras são o que a mesa vê. */
+
+const TRES_BOAS = ["ACO", "ELO", "VEU", "UVA", "GOL", "ASA", "CRU", "BOI", "NUA", "CAL"];
+const TRES_LIXO = ["LAS", "VON", "FOX", "ETC", "SET", "MIN", "OUT", "NET", "POP"];
+
+const tres = (
+  await db.query("select norm, word, comum from dict_pt where norm = any($1)", [
+    [...TRES_BOAS, ...TRES_LIXO],
+  ])
+).rows;
+const estadoDe = new Map(tres.map((r) => [r.norm, r]));
+const escondidas = TRES_BOAS.filter((w) => estadoDe.get(w)?.comum !== true);
+const vazadas = TRES_LIXO.filter((w) => estadoDe.get(w)?.comum === true);
 ok(
-  Number(cortes[0].pior) <= 4000,
-  `palavra de 3 letras só é comum no topo do corpus (pior posto ${cortes[0].pior}) — é ali que vive o lixo`,
+  escondidas.length === 0,
+  escondidas.length === 0
+    ? `as ${TRES_BOAS.length} palavras boas de três letras aparecem na revelação` +
+      ` (${TRES_BOAS.map((w) => estadoDe.get(w)?.word ?? w).join(", ")})`
+    : `a revelação esconde palavra boa de três letras: ${escondidas.join(", ")}`,
+);
+ok(
+  vazadas.length === 0,
+  vazadas.length === 0
+    ? "e o fragmento, a sigla e o artigo estrangeiro ficam de fora"
+    : `VAZOU para a revelação: ${vazadas.join(", ")}`,
 );
 
-/* E O DIA A DIA CONTINUA APARECENDO. Sem esta metade, o teste acima premiaria
-   um filtro que marcasse tudo como não-comum. */
-const diaADia = [
-  "CASA", "MESA", "TEMPO", "NOITE", "AMIGO", "CIDADE", "PALAVRA", "TRABALHO",
-  "DENTRO", "FORA", "PARA", "META", "PORTO", "CLARA", "ESCOLA", "COMIDA",
-  "JANELA", "CADEIRA", "DINHEIRO", "SEMANA", "MINUTO", "CORACAO", "VERDADE",
-];
+/* ── A BATERIA DO DICIONÁRIO ────────────────────────────────────────────────
+
+   Critério de aceite do PRD 02 §11, e um par que só vale junto:
+
+     duzentas palavras do dia a dia brasileiro   TÊM de estar no dicionário
+     cem não-palavras plausíveis                 NÃO podem estar
+
+   Cada metade sozinha é trivial de satisfazer. Um dicionário vazio rejeita
+   todas as não-palavras; um que aceite qualquer coisa aceita todas as comuns. O
+   que custa é as duas ao mesmo tempo, e é por isso que elas moram no mesmo
+   bloco.
+
+   As listas estão em `data/`, e não aqui, porque são CONTEÚDO: quem quiser
+   discutir se GELADEIRA é palavra de todo dia não deveria precisar abrir um
+   arquivo de teste. E as não-palavras foram todas conferidas contra o
+   dicionário antes de entrar — o português é mais largo que a intuição de quem
+   escreve a lista, e PORTAGEM, SABIR e CADEIRÃO foram algumas das candidatas
+   que se revelaram palavras de verdade. */
+
+const listaDe = async (arquivo) =>
+  (await readFile(join(root, "data", arquivo), "utf8"))
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith("#"));
+
+const diaADia = await listaDe("letreiro-dia-a-dia.txt");
+const naoPalavras = await listaDe("letreiro-nao-palavras.txt");
+
+ok(
+  diaADia.length >= 200 && naoPalavras.length >= 100,
+  `a bateria tem ${diaADia.length} palavras do dia a dia e ${naoPalavras.length} não-palavras`,
+);
+
 const estado = (
   await db.query("select norm, comum from dict_pt where norm = any($1)", [diaADia])
 ).rows;
-const faltando = estado.filter((r) => !r.comum).map((r) => r.norm);
 const vistas = new Set(estado.map((r) => r.norm));
 const ausentes = diaADia.filter((w) => !vistas.has(w));
 ok(
-  faltando.length === 0 && ausentes.length === 0,
-  faltando.length === 0 && ausentes.length === 0
-    ? `e as ${diaADia.length} palavras do dia a dia seguem comuns — o filtro não apertou demais`
-    : `O FILTRO APERTOU DEMAIS: escondeu ${faltando.join(", ")}${ausentes.length ? ` · fora do dicionário: ${ausentes.join(", ")}` : ""}`,
+  ausentes.length === 0,
+  ausentes.length === 0
+    ? `as ${diaADia.length} palavras do dia a dia estão todas no dicionário — nenhuma seria recusada na mesa`
+    : `O DICIONÁRIO NÃO CONHECE ${ausentes.length}: ${ausentes.slice(0, 14).join(", ")}`,
+);
+
+/* E ESTAR NO DICIONÁRIO NÃO BASTA: elas precisam continuar COMUNS.
+
+   `comum` é o que o gerador de grades usa para decidir se uma grade vale a pena
+   e o que a revelação mostra como "achadas". Uma palavra que está no
+   dicionário mas não é comum é aceita na mesa e some de toda a ajuda — e a
+   pessoa que digitou CACHAÇA e viu a palavra valer zero na conferência não vai
+   achar que o filtro está bem calibrado. */
+const naoComuns = estado.filter((r) => !r.comum).map((r) => r.norm);
+ok(
+  naoComuns.length === 0,
+  naoComuns.length === 0
+    ? "e todas seguem marcadas como comuns — o filtro de frequência não apertou demais"
+    : `O FILTRO APERTOU DEMAIS: escondeu ${naoComuns.length} — ${naoComuns.slice(0, 14).join(", ")}`,
+);
+
+const coladas = (
+  await db.query("select norm from dict_pt where norm = any($1)", [naoPalavras])
+).rows.map((r) => r.norm);
+ok(
+  coladas.length === 0,
+  coladas.length === 0
+    ? `e nenhuma das ${naoPalavras.length} não-palavras entra — o dicionário não aceita o que parece português`
+    : `O DICIONÁRIO ACEITA ${coladas.length} INVENÇÕES: ${coladas.slice(0, 14).join(", ")}`,
 );
 
 /* A revelação de uma grade de verdade, para o olho humano ver. Um teste que

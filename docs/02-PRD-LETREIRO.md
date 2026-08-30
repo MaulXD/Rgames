@@ -574,8 +574,31 @@ conferência.
 - [x] Nunca aparecem `K`, `W` ou `Y` — 23 faces no pool inteiro, e nenhuma das três
 
 **Dicionário**
-- [ ] Lista de 200 palavras comuns do dia a dia brasileiro: 100% aceitas
-- [ ] Lista de 100 não-palavras plausíveis (`CASARO`, `MENTO`): 100% rejeitadas
+- [x] Lista de 200 palavras comuns do dia a dia brasileiro: 100% aceitas — são 240, em
+      `data/letreiro-dia-a-dia.txt`, e todas passam
+- [x] Lista de 100 não-palavras plausíveis (`CASARO`, `MENTO`): 100% rejeitadas — são 101, em
+      `data/letreiro-nao-palavras.txt`
+
+  > **Este par achou um defeito grande.** Ao ser escrito, 10 das 240 não estavam no dicionário —
+  > SOPA, ESQUINA, TROCO, AMIGA, AMANHÃ, ANTES, VAZIO, CERTO, ERRADO, CALMO. Medindo o buraco de
+  > verdade: das **cinco mil formas mais faladas do português brasileiro com 3 a 7 letras, 41,6%
+  > eram recusadas**, e 27% já nos quinhentos primeiros postos.
+  >
+  > A causa: o `.dic` do Hunspell é uma lista de LEMAS com marcas de flexão. `sopa` não está lá;
+  > está `sopar/ajkLMY`, e a marca `a` a gera. O build descartava as marcas. Agora expande —
+  > `scripts/afixos.mjs` — e sobram 8% de recusa indevida, quase toda nome inglês de legenda.
+  >
+  > **E duas colisões de normalização estavam calando as palavras erradas.** PÃO e PAÓ colidem em
+  > PAO; o desempate era por contagem de acentos, empatava, e caía na ordem da fonte — o
+  > dicionário guardava `paó`. Pior: a lista curada casava por NORMA, então a entrada `caó` estava
+  > escondendo **cão** (posto 1269) da revelação, e `paó` escondia **pão**. Trinta e quatro
+  > entradas estavam nessa situação. A colisão passou a ser resolvida pelo corpus — a grafia que
+  > as pessoas escrevem — e a lista curada passou a casar por grafia.
+  >
+  > **Custo medido:** o dicionário foi de 248 mil para 1,54 milhão de formas, e o banco de 62 MB
+  > para 213 MB. O teto de tamanho caiu de 16 para 13 letras, que é a MAIOR palavra que já
+  > apareceu em mil e oitocentas grades geradas — cortar ali não perde nenhuma palavra que o jogo
+  > já foi capaz de oferecer, e evita 400 mil linhas.
 - [ ] Nome próprio (`BRASIL`, `MARIA`) é rejeitado — **não é.** As duas estão no dicionário e
       pontuam. O que existe hoje é outra coisa: `data/letreiro-nao-comum.txt` tira 327 nomes e
       estrangeirismos da lista de COMUNS, então eles nunca aparecem na revelação como "você

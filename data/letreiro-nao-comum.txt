@@ -87,3 +87,18 @@ supra infra peri hiper hipo
 # comum do português, "meta" é substantivo do dia a dia, "extra", "ante" e
 # "retro" são adjetivos de uso corrente. A segunda passada desta lista tinha as
 # cinco, e o teste de dicionário agora guarda cada uma.
+
+# --- de três letras, entre os postos 4 mil e 12 mil
+#
+# O corte de frequência para três letras subiu de 4 mil para 12 mil, porque
+# nessa faixa moram `aço`, `nua`, `elo`, `véu`, `baú`, `cru`, `boi`, `uva` e
+# `gol` — palavras que a revelação tem de mostrar. Junto delas vem isto, que
+# ela não tem: artigo estrangeiro, sigla, abreviatura e nome.
+#
+# Em três letras a frequência não separa palavra de fragmento; quem separa é
+# esta lista. É trabalho manual e é o trabalho certo — foi tentado dos dois
+# jeitos, e o corte apertado escondia tanta palavra boa quanto deixava passar
+# fragmento.
+las vos von out pop fox rex min etc set boo jan del han chi spa
+fax goa vip too dum csi ice sta pit ada abe abu tai mai lia
+zoe pat mia eve gil air

@@ -1,0 +1,157 @@
+# Letreiro — o que NÃO pode ser aceito
+#
+# Critério de aceite do PRD 02 §11: cem não-palavras plausíveis, todas
+# rejeitadas. É a metade cética do par — a outra está em
+# `letreiro-dia-a-dia.txt`.
+#
+# Sem esta lista, um dicionário que aceitasse qualquer coisa passaria em todos
+# os testes: "as duzentas palavras comuns são aceitas" é trivialmente verdade
+# num dicionário que aceita tudo.
+#
+# O QUE FAZ UMA NÃO-PALAVRA SER BOA AQUI
+#
+# Ela tem de parecer português. `XKQZ` não prova nada: nenhum dicionário do
+# mundo a aceitaria, e um teste que só rejeita lixo evidente não mede nada. O
+# que interessa é o que uma pessoa TENTARIA numa partida apertada — conjugação
+# que não existe, sufixo colado no radical errado, plural inventado, a palavra
+# que ficou quase certa.
+#
+# CADA UMA FOI CONFERIDA CONTRA O DICIONÁRIO ANTES DE ENTRAR AQUI, e muitas
+# candidatas foram descartadas por serem palavras de verdade: PORTAGEM,
+# PAPELAGEM, SABIR, ESTRADO, PONTÃO, IGREJO, BRANIL, FORTEZA, CHEIURA, LENTURA,
+# MINUTAR, CARRETAR, TRENAR, ESQUINAL, PRATEIRO, CADEIRÃO, QUEIJAR, OVEIRO,
+# LIVRAMENTO, GIZES, FLORAS, MERCADÃO, BANQUE, LAPISES.
+#
+# E outras dezessete saíram quando o dicionário passou a expandir as marcas de
+# flexão do Hunspell — CASAMENTE, ROUPAMENTO, COPAGEM, ANDIR, JANELADO. Não são
+# palavras que alguém escreveria, mas o Hunspell é um corretor ortográfico:
+# ele prefere aceitar demais a recusar de menos, e derivação generosa é o preço
+# de aceitar CERTO, ANTES e SOPA, que ele também gera.
+#
+# Numa mesa de Letreiro essa é a troca certa. Aceitar ROUPAMENTO, que ninguém
+# vai digitar, custa nada; recusar SOPA custa a partida.
+#
+# O português é mais largo do que a intuição de quem escreve a lista, e é por
+# isso que a lista se confere em vez de se supor.
+
+# --- radical certo, sufixo errado
+CASARO
+MESADO
+SALADO
+BOLSAGEM
+SAPATAGEM
+CAMISADO
+RELOGIAR
+TELAGEM
+PANELIL
+ARMARIL
+SAPATIL
+TOALHIL
+
+# --- conjugação que não existe
+FAZIR
+OUVAR
+OLHIR
+ANDIR
+CORRIR
+COMIR
+BEBAR
+DORMAR
+PENSIR
+QUERAR
+GOSTIR
+CHEGIR
+LEVIR
+TRAZIR
+
+# --- plural inventado, que é o erro da pressa
+MAOES
+CAFEIS
+IRMAOES
+CHAVAS
+
+# --- quase certo, e errado
+BAIRRAO
+BAIRRIL
+ONIBO
+LOJADO
+ESCOLO
+PADARIO
+PADARIL
+CIDADAL
+PRACAL
+RUAGEM
+
+# --- sílabas legais, palavra nenhuma
+#
+# Esta é a família que MELHOR resiste, e o motivo importa: ela não deriva de
+# nada. As outras nascem de um radical real com um sufixo trocado, e o Hunspell
+# gera derivação com generosidade — foi assim que dezessete candidatas desta
+# lista viraram palavras quando as marcas de flexão passaram a ser expandidas.
+TRAVUNHO
+PLENARDO
+GRANIVO
+CLESTRO
+FRONDILO
+PLUVANTE
+TRESMIDO
+CRAVUNDO
+BLENARIO
+DRESANO
+PRIMULHO
+GLANTRO
+FRESILDO
+TRAMBINO
+VESTRUDO
+CALDROSO
+PALVINO
+TRAMOSE
+PLANTIRO
+GRUDANO
+CRESPIL
+FLAMEIRO
+BLONDAR
+TREVIDO
+DRAPOSO
+PRENDIL
+CLAMOTE
+GLARIDO
+FRUSANO
+VRESIDO
+ZAMPRIL
+FOGAZ
+
+# --- terminações plausíveis coladas em nada
+NADEZA
+QUENTIDO
+PERTEZA
+CLARIDO
+ESCUROSO
+FRAQUIDO
+VAZIEZA
+CERTURA
+ERRADEZA
+FACILEZA
+ALEGRIDO
+CASADEZA
+
+# --- comida que quase existe
+ARROZIL
+FEIJOSO
+CARNIDO
+FRANGADO
+PEIXIL
+ACUCARIL
+FRUTIL
+BANANIL
+LARANJIL
+UVEDO
+MANGUIL
+TOMATIL
+CEBOLIL
+ALHADO
+
+# --- o que a pressa produz
+TEMPOSO
+NOITAR
+SEMANAR

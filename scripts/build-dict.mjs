@@ -4,25 +4,46 @@
  *
  *   npm run dict
  *
- * Fonte: lista de palavras do português brasileiro já expandida (320 mil
- * formas flexionadas), derivada dos dicionários BR.ispell/VERO — os mesmos
- * que o LibreOffice usa. Se a fonte sair do ar, o `.dic` do Hunspell fica
- * como reserva, mas aí precisa de expansão de afixos.
+ * Duas fontes, e a segunda EXPANDIDA — ver `scripts/afixos.mjs`.
+ *
+ * O `.dic` do Hunspell não é uma lista de palavras: é uma lista de lemas com
+ * marcas de flexão. `sopa` não está lá; está `sopar/ajkLMY`, e as regras do
+ * `.aff` dizem que a marca `a` gera `sopa`. Por três versões deste arquivo as
+ * marcas foram descartadas, e o comentário aqui dizia que "ainda assim fecha
+ * buracos reais" — fechava alguns, e abria um enorme.
+ *
+ * MEDIDO: das cinco mil formas mais faladas do português brasileiro com três a
+ * sete letras, 41,6% não estavam no dicionário. Duas em cada cinco palavras que
+ * alguém digita numa partida eram recusadas com "não é palavra". Depois da
+ * expansão sobram 8%, e o que sobra é quase todo nome inglês de legenda.
  *
  * Filtro (docs/02-PRD-LETREIRO.md §4.4):
- *   - 3 a 16 letras
+ *   - 3 a 13 letras
  *   - só A–Z depois de normalizar (NFD, sem diacrítico, maiúscula)
  *   - fora K, W e Y: não existem nos dados do jogo, então nunca sairiam
  *   - fora nome próprio (maiúscula na origem) e abreviatura (com ponto)
  *
- * Colisão de normalização (sede / sedê): fica a grafia com MENOS acento —
- * ela é a que provavelmente existe por si só.
+ * O TETO DE 13 LETRAS é medido, e não escolhido.
+ *
+ * Ele era 16. A expansão de afixos multiplica o dicionário por oito, e guardar
+ * formas que o jogo nunca pode oferecer é pagar disco por nada: numa grade de
+ * 4×4 ou 5×5, a MAIOR palavra que já apareceu em mil e oitocentas grades
+ * geradas tem 13 letras, e palavras de 11 ou mais são 83 de 529 mil — 0,016%.
+ * Cortar em 13 não perde uma única palavra que o jogo já foi capaz de oferecer,
+ * e evita 400 mil linhas.
+ *
+ * Colisão de normalização (pão / paó): fica a grafia que o CORPUS usa — a que
+ * as pessoas de fato escrevem. A regra antiga era "menos acento", que acerta em
+ * sede/sedê por coincidência e erra em pão/paó: as duas têm um acento, o
+ * desempate caía na ordem da fonte, e o dicionário guardava `paó` com o posto
+ * de frequência de `pão`. Quem digitasse PÃO via a palavra valer como rara.
  */
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
+import { expande, regrasDeAfixo } from "./afixos.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 config({ path: join(root, ".env.local"), quiet: true });
@@ -68,7 +89,24 @@ const CORPUS =
  * GUA, DEA, ENA, OUT, NET, GATE, UFO, ADELE, GAEL, NUNO e DUDA — tudo na
  * revelação, que é o momento em que o jogo ENSINA.
  */
-const CORTE_POR_TAMANHO = { 3: 4_000, 4: 18_000, 5: 32_000 };
+/* O CORTE DE TRÊS LETRAS SUBIU DE 4 MIL PARA 12 MIL, e a razão é que ele não
+   estava fazendo o trabalho que se esperava dele.
+
+   Amostrado depois da expansão de afixos, o que vive de 4 mil a 12 mil:
+
+     bom   aço nua ala ame cal ida ave rim gol asa crê réu pus ego voa ria
+           pia aja rum pan véu baú elo eco voe cru boi una vês agi UVA nus doe
+     lixo  las vos von out pop fox rex min etc set boo jan del han chi spa
+           fax goa vip too dum csi ice sta pit
+
+   O corte de 4 mil já deixava passar `las`, `von`, `fox` e `etc`, e já
+   escondia `aço`, `elo`, `véu` e `uva`. Em três letras o posto de frequência
+   simplesmente NÃO SEPARA — a fronteira entre palavra e fragmento não é a
+   frequência, e insistir nela custava as duas coisas ao mesmo tempo.
+
+   Quem separa é a lista curada, que existe justamente para isso e agora casa
+   por grafia. O corte volta a fazer o que sabe: cortar a cauda longa. */
+const CORTE_POR_TAMANHO = { 3: 12_000, 4: 18_000, 5: 32_000 };
 const CORTE_PADRAO = 50_000;
 const corteDe = (len) => CORTE_POR_TAMANHO[len] ?? CORTE_PADRAO;
 
@@ -86,9 +124,18 @@ function naoComum() {
   for (const linha of bruto.split(/\r?\n/)) {
     if (linha.trim().startsWith("#")) continue;
     for (const w of linha.trim().split(/\s+/)) {
-      if (!w) continue;
-      const n = norm(w);
-      if (n) fora.add(n);
+      /* POR GRAFIA, E NAO POR NORMA.
+
+         Por norma, `pao` calava `pao` e `cao` calava `cao`: a lista dizia
+         "nao mostre o pao, que e uma flor obscura" e o jogo parava de mostrar
+         PAO e CAO, duas das palavras mais faladas do portugues. Trinta e
+         quatro entradas estavam nessa situacao, e a auditoria mais abaixo
+         lista as que sobrarem sem calar ninguem.
+
+         A grafia e a chave certa porque e ela que aparece na tela: se o
+         dicionario escolheu `pao` para a norma PAO, a entrada `pao` da lista
+         nao tem a quem se referir. */
+      if (w) fora.add(w.toLowerCase());
     }
   }
   return fora;
@@ -98,6 +145,13 @@ const FONTES = [
   { url: "https://raw.githubusercontent.com/pythonprobr/palavras/master/palavras.txt", dic: false },
   { url: "https://raw.githubusercontent.com/LibreOffice/dictionaries/master/pt_BR/pt_BR.dic", dic: true },
 ];
+
+/** As regras que dizem o que cada marca do `.dic` gera. */
+const AFIXOS =
+  "https://raw.githubusercontent.com/LibreOffice/dictionaries/master/pt_BR/pt_BR.aff";
+
+/** O maior que o jogo já foi capaz de oferecer — ver o cabeçalho. */
+const TETO = 13;
 
 /**
  * Lista curada: emprestimos e uso moderno que a fonte (derivada do VOLP) nao
@@ -125,6 +179,13 @@ const norm = (s) =>
 const diacriticos = (s) => s.normalize("NFD").replace(/[^̀-ͯ]/g, "").length;
 
 async function baixar() {
+  process.stdout.write(`  baixando ${AFIXOS}\n`);
+  const regras = regrasDeAfixo(await (await fetch(AFIXOS)).text());
+  console.log(
+    `  ${regras.size} marcas de flexao,` +
+      ` ${[...regras.values()].reduce((a, r) => a + r.length, 0).toLocaleString("pt-BR")} regras`,
+  );
+
   const linhas = [];
   let vivas = 0;
   for (const f of FONTES) {
@@ -145,16 +206,35 @@ async function baixar() {
     const cru = texto.split(/\r?\n/);
     // a primeira linha do .dic e a contagem de entradas
     const corpo = f.dic ? cru.slice(1) : cru;
-    const limpas = f.dic ? corpo.map((l) => l.split("/")[0]) : corpo;
-    console.log(`  ${limpas.length.toLocaleString("pt-BR")} linhas`);
-    // push(...arr) com 320 mil itens estoura a pilha de chamadas
-    for (const l of limpas) linhas.push(l);
+    console.log(`  ${corpo.length.toLocaleString("pt-BR")} linhas`);
+
+    /* SO O `.dic` TEM MARCAS. A lista do pythonprobr ja vem em formas
+       soltas, e passa-la pelo expansor nao geraria nada: ela nao tem
+       `/FLAGS`. */
+    const antes = linhas.length;
+    for (const l of corpo) {
+      const t = l.trim();
+      if (!t) continue;
+      const [base, flags] = t.split("/");
+      if (!base) continue;
+      // push(...arr) com centenas de milhares de itens estoura a pilha
+      if (f.dic) for (const forma of expande(base, flags, regras)) linhas.push(forma);
+      else linhas.push(base);
+    }
+    console.log(`  ${(linhas.length - antes).toLocaleString("pt-BR")} formas`);
   }
   if (!vivas) throw new Error("nenhuma fonte de dicionário respondeu");
   return linhas;
 }
 
-/** norm -> posto de frequencia (1 = mais falada). Ausente = raro. */
+/**
+ * norm -> { posto, grafia }. Posto 1 e a mais falada; ausente e raro.
+ *
+ * A GRAFIA VEM JUNTO porque ela desempata colisao de normalizacao. `pao` e
+ * `pao` sao a mesma chave para `pao` e `pao` — e a escolha certa entre as duas
+ * nao e "a com menos acento", e sim a que as pessoas escrevem. O corpus e
+ * exatamente essa resposta, e ela ja estava sendo baixada.
+ */
 async function frequencias() {
   process.stdout.write(`  baixando ${CORPUS}\n`);
   const posto = new Map();
@@ -171,7 +251,7 @@ async function frequencias() {
       n++;
       // a primeira ocorrencia e a mais frequente (a lista vem ordenada);
       // formas com e sem acento colapsam no mesmo norm, e fica a melhor
-      if (!posto.has(k)) posto.set(k, n);
+      if (!posto.has(k)) posto.set(k, { posto: n, grafia: palavra });
     }
     console.log(`  ${posto.size.toLocaleString("pt-BR")} formas com frequencia`);
   } catch (e) {
@@ -179,6 +259,13 @@ async function frequencias() {
   }
   return posto;
 }
+
+/* O CORPUS VEM ANTES DA DEDUPLICACAO, e nao depois.
+
+   Ele e quem desempata colisao de normalizacao, entao precisa estar na mao
+   quando o laco escolhe qual grafia guardar. Estava depois, e a colisao caia
+   numa contagem de acentos que acerta em sede/sede por coincidencia. */
+const posto = await frequencias();
 
 const linhas = await baixar();
 console.log(`  ${linhas.length.toLocaleString("pt-BR")} linhas somadas`);
@@ -202,7 +289,7 @@ for (const linha of linhas) {
   }
 
   const n = norm(palavra);
-  if (n.length < 3 || n.length > 16) {
+  if (n.length < 3 || n.length > TETO) {
     descartadas++;
     continue;
   }
@@ -211,8 +298,22 @@ for (const linha of linhas) {
     continue;
   }
 
+  /* COLISAO DE NORMALIZACAO: fica a grafia que o CORPUS usa.
+
+     `pao` e `pao` colidem, e as duas tem um acento — o desempate por contagem
+     de acentos caia na ordem da fonte, e o dicionario guardava `pao`, que
+     ninguem escreve, com o posto de frequencia de `pao`, que todo mundo
+     escreve. Quem digitasse PAO via a palavra valer como rara.
+
+     Sem o corpus (fonte fora do ar), volta a valer o desempate por acento: e
+     pior, mas e melhor que a ordem de chegada. */
   const anterior = dic.get(n);
-  if (!anterior || diacriticos(palavra) < diacriticos(anterior)) {
+  const daMesa = posto.get(n)?.grafia;
+  if (!anterior) {
+    dic.set(n, palavra);
+  } else if (daMesa) {
+    if (palavra === daMesa) dic.set(n, palavra);
+  } else if (diacriticos(palavra) < diacriticos(anterior)) {
     dic.set(n, palavra);
   }
 }
@@ -221,7 +322,7 @@ for (const linha of linhas) {
 let novos = 0;
 for (const extra of EXTRAS) {
   const n = norm(extra);
-  if (!/^[A-Z]+$/.test(n) || /[KWY]/.test(n) || n.length < 3 || n.length > 16) continue;
+  if (!/^[A-Z]+$/.test(n) || /[KWY]/.test(n) || n.length < 3 || n.length > TETO) continue;
   if (!dic.has(n)) {
     dic.set(n, extra);
     novos++;
@@ -242,8 +343,6 @@ console.log(
     .join(" "),
 );
 
-const posto = await frequencias();
-
 // ── carrega ────────────────────────────────────────────────────────────────
 const conn = new URL(process.env.POSTGRES_URL_NON_POOLING);
 conn.searchParams.set("uselibpqcompat", "true");
@@ -259,12 +358,27 @@ console.log(`  ${fora.size} palavra(s) na lista curada do "aceita mas não mostr
    Antes ela vivia em `build-boards.mjs`, que é o CONSUMIDOR — e consumidor que
    decide é regra que se repete no próximo consumidor. Quem tem o corpus, o
    tamanho e a lista curada na mão é este script. */
-const ehComum = (n, p) => p !== null && p <= corteDe(n.length) && !fora.has(n);
+const ehComum = (n, w, p) =>
+  p !== null && p <= corteDe(n.length) && !fora.has(w.toLowerCase());
 
 const entradas = [...dic.entries()].map(([n, w]) => {
-  const p = posto.get(n) ?? null;
-  return [n, w, p, ehComum(n, p)];
+  const p = posto.get(n)?.posto ?? null;
+  return [n, w, p, ehComum(n, w, p)];
 });
+
+/* AS ENTRADAS DA LISTA QUE NAO CALAM MAIS NINGUEM.
+
+   Nao e falha: e limpeza. Uma entrada cuja grafia o dicionario nao escolheu
+   nunca apareceria na revelacao de qualquer jeito, e mante-la na lista da a
+   impressao de que alguem esta cuidando de alguma coisa. */
+const escolhidas = new Set([...dic.values()].map((w) => w.toLowerCase()));
+const inertes = [...fora].filter((w) => !escolhidas.has(w));
+if (inertes.length) {
+  console.log(
+    `  ${inertes.length} entrada(s) da lista curada ja nao calam nada` +
+      ` (o dicionario escolheu outra grafia): ${inertes.slice(0, 12).join(" ")}`,
+  );
+}
 const quantasComuns = entradas.filter((e) => e[3]).length;
 console.log(
   `  ${quantasComuns.toLocaleString("pt-BR")} comuns de ${entradas.length.toLocaleString("pt-BR")}` +
@@ -349,7 +463,18 @@ const LIXO_FORA = [
   // nome de pessoa e de lugar
   "ADELE", "GAEL", "NUNO", "DUDA", "NAGA", "CRIS", "AMIR", "DINA", "NERO",
   "OLGA", "TITO", "SACHA", "EDIPO", "CONAN", "TORINO", "MADRAS", "NILO",
-  "BACO", "ARGO", "CRETA", "NEPAL", "MACAU", "XOGUM", "AZAZEL", "MADONA",
+  "ARGO", "CRETA", "NEPAL", "MACAU", "XOGUM", "AZAZEL", "MADONA",
+  /* BACO SAIU DAQUI, e a razão é a mesma que trouxe PÃO de volta.
+
+     Esta lista é por NORMA, e a norma BACO cabe em duas palavras: o deus Baco,
+     que é nome próprio e não devia aparecer na revelação, e `baço`, que é um
+     órgão do corpo e uma palavra de todo dia. Enquanto a colisão de
+     normalização era resolvida por contagem de acentos, o dicionário guardava
+     `baco` e a entrada estava certa; agora ele guarda `baço`, que o corpus usa,
+     e a entrada passou a esconder a palavra errada.
+
+     Nome próprio que também é palavra comum não se separa por norma — só por
+     grafia, e a grafia certa está no dicionário. */
 ];
 
 const DIA_A_DIA = [

@@ -94,6 +94,12 @@ type Privado = {
   /** você é o assassino — e o envelope veio junto */
   assassino?: boolean;
   envelope?: { suspect: string; weapon: string; room: string };
+  /* ── A MENTIRA (0118) ────────────────────────────────────────────────
+     Uma por partida, e as duas metades moram no privado porque nada nela
+     pode aparecer no público: se aparecesse, a mesa saberia quem é o
+     assassino no instante em que ele pensasse em mentir. */
+  mentiraArmada?: boolean;
+  mentiu?: { seq: number } | null;
 };
 
 export function DossieGame({
@@ -133,6 +139,12 @@ export function DossieGame({
      fosse a outra; separar aqui, uma vez, faz o compilador cobrar a distinção
      em todo lugar que as usa. */
   const refutacao = st.pending?.kind !== "interroga" ? (st.pending ?? null) : null;
+  /* Assassino, com a mentira ainda inteira. As mesmas três condições que
+     `dossie_pode_mentir` exige no servidor, menos a de estar armada — que aqui
+     é o próprio interruptor. A tela não decide nada: ela só evita oferecer o
+     que seria recusado. */
+  const podeMentir = !!priv.assassino && !priv.mentiu && st.phase !== "over";
+  const mentiraArmada = podeMentir && !!priv.mentiraArmada;
   const interrogatorio = st.pending?.kind === "interroga" ? st.pending : null;
 
   const devoRefutar =
@@ -190,6 +202,13 @@ export function DossieGame({
   const [deducoes, setDeducoes] = useState<
     { seat: number; nome: string; riscadas: number }[] | null
   >(null);
+  /* QUEM ERA O ASSASSINO, e onde ele mentiu. Só existe depois do fim: o
+     servidor recusa a pergunta com a partida em andamento, e é essa recusa —
+     não o cuidado da tela — que protege o modo. */
+  const [culpa, setCulpa] = useState<{
+    assassino: number | null;
+    mentira?: { seq: number } | null;
+  } | null>(null);
   // o mesmo contador do Domínio, pelo mesmo motivo: sem ele a primeira falha
   // parava a corrente e a tela nunca oferecia o botão
   const [tique, setTique] = useState(0);
@@ -290,6 +309,8 @@ export function DossieGame({
           pistas: d.pistas ?? { mao: [], avisos: [] },
           assassino: d.assassino,
           envelope: d.envelope,
+          mentiraArmada: d.mentiraArmada,
+          mentiu: d.mentiu ?? null,
         });
       }
     }
@@ -323,8 +344,42 @@ export function DossieGame({
     if (error) setErro(traduz(error.message));
   }
 
+  /* ARMAR A MENTIRA NÃO MEXE NO ESTADO PÚBLICO, e é justamente por isso que
+     este é o único botão do Dossiê que precisa atualizar a tela por conta
+     própria: a releitura do privado é disparada por `st.seq`, e um interruptor
+     que não escreve no registro nunca faria o `seq` andar.
+
+     Otimista, e volta atrás se o servidor recusar — segurar a tela esperando a
+     ida e volta faria o botão parecer emperrado no meio de uma refutação
+     cronometrada. */
+  async function armaMentira() {
+    setErro(null);
+    const antes = priv.mentiraArmada ?? false;
+    setPriv((a) => ({ ...a, mentiraArmada: !antes }));
+    const { error } = await supabaseBrowser().rpc("dossie_arma_mentira", { p_match: match.id });
+    if (error) {
+      setPriv((a) => ({ ...a, mentiraArmada: antes }));
+      setErro(traduz(error.message));
+    }
+  }
+
   /* Este efeito vive ACIMA dos retornos antecipados: hook depois de `return`
      roda em ordem diferente entre renderizações, e o React proíbe — com razão. */
+  useEffect(() => {
+    if (st.phase !== "over" || !st.assassino || culpa !== null) return;
+    let vivo = true;
+    void supabaseBrowser()
+      .rpc("dossie_desfecho", { p_match: match.id })
+      .then(({ data }: { data: unknown }) => {
+        if (!vivo) return;
+        const d = data as { assassino: number | null; mentira?: { seq: number } | null } | null;
+        if (d) setCulpa(d);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [st.phase, st.assassino, culpa, match.id]);
+
   useEffect(() => {
     if (st.phase !== "over" || deducoes !== null) return;
     let vivo = true;
@@ -492,6 +547,39 @@ export function DossieGame({
           <p className="desfecho-onde">na {nomeDaCarta(caso, st.solution.room)}</p>
           {caso.encerramento && <p className="desfecho-nota">{caso.encerramento}</p>}
 
+          {/* ── QUEM ERA, E ONDE ELE MENTIU ──────────────────────────────
+              O pagamento do Modo Assassino. Durante a partida inteira o
+              assento fica escondido no privado de quem é; encerrada, não há
+              mais o que proteger e há o que pagar — a mesa reconstitui a
+              partida sabendo onde estava o buraco.
+
+              A mentira aparece pela linha do registro em que aconteceu, e não
+              como "mentiu em algum momento": é a diferença entre uma revelação
+              e uma fofoca. */}
+          {culpa && culpa.assassino !== null && (
+            <div className="desfecho-culpa">
+              <p className="eyebrow">O assassino era</p>
+              <p className="desfecho-linha">
+                {peoes.find((x) => x.seat === culpa.assassino)?.nome ??
+                  `Assento ${culpa.assassino}`}
+              </p>
+              <p className="desfecho-nota">
+                {culpa.mentira
+                  ? (() => {
+                      const l = (st.log ?? []).find((x) => x.seq === culpa.mentira?.seq);
+                      if (l?.type === "refute") {
+                        return "E mentiu: mostrou uma carta que não tinha.";
+                      }
+                      if (l?.type === "pass") {
+                        return "E mentiu: disse que não podia refutar, podendo.";
+                      }
+                      return `E mentiu uma vez, na linha ${culpa.mentira.seq} do registro.`;
+                    })()
+                  : "E jogou a partida inteira sem gastar a mentira."}
+              </p>
+            </div>
+          )}
+
           {deducoes && deducoes.length > 0 && (
             <div className="desfecho-sabia">
               <p className="eyebrow">O que elas já sabiam</p>
@@ -655,38 +743,61 @@ export function DossieGame({
           </p>
           {(() => {
             const posso = priv.hand.filter((c) => refutacao.guess.includes(c));
-            if (posso.length === 0) {
-              return (
-                <>
+            /* ── A MENTIRA DO ASSASSINO ────────────────────────────────
+               Armada, o painel para de perguntar o que você TEM e passa a
+               oferecer as três do palpite mais a passada: são exatamente as
+               jogadas que o servidor aceita de quem pode mentir, e nenhuma a
+               mais. Quem não é assassino nunca vê este botão, e quem já
+               gastou também não. */
+            const mostraveis = podeMentir && mentiraArmada ? refutacao.guess : posso;
+            return (
+              <>
+                {podeMentir && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost mt-3 w-full dossie-mentir"
+                    aria-pressed={mentiraArmada}
+                    onClick={() => void armaMentira()}
+                  >
+                    {mentiraArmada ? "Mentira armada · desarmar" : "Mentir (uma por partida)"}
+                  </button>
+                )}
+                {mentiraArmada ? (
+                  <p className="mt-2 text-sm dim">
+                    Mostre uma carta que você não tem, ou diga que não pode refutar tendo. A mesa
+                    não vê diferença nenhuma — e a mentira só é gasta se a jogada precisar dela.
+                  </p>
+                ) : mostraveis.length === 0 ? (
                   <p className="mt-2 text-sm dim">
                     Você não tem nenhuma dessas três. Diga isso na mesa — o servidor confere.
                   </p>
+                ) : (
+                  <p className="mt-2 text-sm dim">
+                    Escolha qual mostrar. Só quem acusou vê a carta — a mesa vê apenas que você
+                    mostrou algo.
+                  </p>
+                )}
+                {mostraveis.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {mostraveis.map((c) => (
+                      <button
+                        key={c}
+                        className="btn btn-brass"
+                        onClick={() => void chama("dossie_refute", { p_match: match.id, p_card: c })}
+                      >
+                        {nomeDaCarta(caso, c)}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {(posso.length === 0 || mentiraArmada) && (
                   <button
                     className="btn btn-ghost mt-4 w-full"
                     onClick={() => void chama("dossie_pass_refute", { p_match: match.id })}
                   >
                     Não posso refutar
                   </button>
-                </>
-              );
-            }
-            return (
-              <>
-                <p className="mt-2 text-sm dim">
-                  Escolha qual mostrar. Só quem acusou vê a carta — a mesa vê apenas que você
-                  mostrou algo.
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {posso.map((c) => (
-                    <button
-                      key={c}
-                      className="btn btn-brass"
-                      onClick={() => void chama("dossie_refute", { p_match: match.id, p_card: c })}
-                    >
-                      {nomeDaCarta(caso, c)}
-                    </button>
-                  ))}
-                </div>
+                )}
               </>
             );
           })()}

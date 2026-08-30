@@ -394,6 +394,20 @@
 /* O relógio do modo: à vista desde a primeira rodada, porque a tensão é ver o
    número subir. Um limite que só aparece quando estoura é armadilha. */
 .dossie-relogio { color: var(--vivo-vermelho); }
+
+/* O INTERRUPTOR DA MENTIRA. Só o assassino o vê, e ele precisa PARECER uma
+   alavanca perigosa e não mais um botão da fila: armado, fica no vermelho do
+   modo, para que ninguém a deixe armada por distração e mostre a carta errada
+   achando que estava jogando limpo. */
+.dossie-mentir { border-color: var(--vivo-vermelho); color: var(--vivo-vermelho); }
+.dossie-mentir[aria-pressed="true"] {
+  background: var(--vivo-vermelho);
+  border-color: var(--vivo-vermelho);
+  /* TINTA, e não branco. A paleta viva deste projeto é clara de propósito, e
+     branco não passa no piso da WCAG em nenhum dos dez tons — no vermelho dá
+     3,0:1. A tinta dá 6,5:1. */
+  color: var(--ink);
+}
 .refuta-palpite { margin-top: 0.4rem; font-family: var(--font-fraunces), Georgia, serif; font-variation-settings: "SOFT" 30, "WONK" 1, "opsz" 48; font-size: 1.25rem; color: var(--fg); }
 
 .dossie-desfecho { text-align: center; }
@@ -534,6 +548,22 @@
   font-size: 0.74rem;
   line-height: 1.4;
 }
+
+/* QUEM ERA O ASSASSINO, e onde ele mentiu — no vermelho do modo, e não no
+   amarelo do envelope: a solução do caso e a identidade de quem a escondeu são
+   duas revelações diferentes, e ler as duas no mesmo tom faria a segunda
+   parecer rodapé da primeira. */
+.desfecho-culpa {
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 2px dashed var(--line-strong);
+}
+.desfecho-culpa .desfecho-linha {
+  font-size: clamp(1.5rem, 6vw, 2.2rem);
+  color: var(--vivo-vermelho);
+  text-shadow: none;
+}
+.desfecho-culpa .desfecho-nota { margin-top: 0.6rem; }
 
 /* ══════════════════════════════════════════════════════════════════════════
    AS REVIRAVOLTAS

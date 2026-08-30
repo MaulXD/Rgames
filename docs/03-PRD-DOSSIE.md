@@ -515,7 +515,7 @@ Variante um-contra-todos, e a que a mesa mais vai pedir depois de conhecer.
 
 Um jogador é sorteado assassino e **recebe a solução**. Joga normalmente, mas:
 - Pode **mentir uma vez** por partida: refutar mostrando uma carta que não tem, ou dizer que não
-  pode refutar quando podia — *ainda não construído*
+  pode refutar quando podia ✅
 - Vence se ninguém fechar o caso corretamente em **12 rodadas** ✅
 - Se alguém acertar, o assassino perde e todos os detetives ganham ✅
 
@@ -543,9 +543,53 @@ Os detetives não sabem quem é. Transforma o jogo em dedução social. Combina 
 > **O relógio fica à vista desde a primeira rodada.** Um limite que só aparece quando estoura é
 > armadilha, não regra — e a tensão do modo é justamente ver o número subir.
 >
-> **Falta a mentira**, que é a metade social da variante: refutar com uma carta que não se tem, ou
-> passar podendo refutar. Uma vez por partida, e catchável — é o que dá à mesa alguma coisa para
-> desconfiar além de comportamento.
+> **E A MENTIRA SUBIU** — migração 0118. É a metade social da variante, e sem ela o assassino era
+> um detetive que sabe a resposta e não pode usá-la: joga igual a todo mundo, refuta igual a todo
+> mundo, e a mesa não tem uma única coisa concreta em que reparar.
+>
+> **ARMADA DE PROPÓSITO, E ARMAR NÃO GASTA.** Uma mentira automática — o servidor simplesmente
+> aceitando o que recusaria — se gasta por engano: a pessoa esquece que tem a carta, aperta "não
+> posso refutar", e a única jogada especial da partida evapora num clique que ela nem sabe que deu.
+> `dossie_arma_mentira` é um interruptor, desarma do mesmo jeito que arma, e a cobrança só acontece
+> no instante em que a mentira de fato permite o impossível. Quem arma e depois refuta de verdade
+> sai da rodada com ela inteira.
+>
+> **DEPOIS DO ÁLIBI.** Ele é público, custa uma carta já comprada, e a mesa vê que foi usado.
+> Gastar a peça secreta para fazer o trabalho da barata seria desperdício.
+>
+> **INDISTINGUÍVEL, e é isso que a torna uma mentira.** A linha do registro tem as mesmas chaves e o
+> mesmo assento de uma refutação honesta, a carta chega ao privado de quem palpitou do mesmo jeito,
+> e a palavra não aparece uma única vez no estado público. A suíte confere as duas linhas campo a
+> campo — se sobrasse qualquer marca, quem lesse o DevTools jogaria com a resposta.
+>
+> **E É PEGÁVEL POR TRÊS CAMINHOS, nenhum deles "prestar atenção no jeito da pessoa":** a carta
+> mostrada pode estar na mão de quem viu, e aí ele sabe na hora; pode estar na mão de um terceiro,
+> que passa o resto da partida sabendo; e o desfecho abre tudo. O servidor NÃO impede mentir com uma
+> carta que o outro tem — impedir seria contar ao assassino o que há na mão alheia, e "essa não,
+> escolhe outra" é informação que ele não pode ter. O risco é dele.
+>
+> **`dossie_desfecho` é o pagamento do modo**, e o único lugar do Dossiê que lê o privado de outra
+> pessoa. Só responde a jogador daquela mesa, com a partida encerrada, e aí diz quem era o assassino
+> e em QUE LINHA do registro ele mentiu — pela linha, e não por um "mentiu em algum momento" que não
+> deixa reconstituir nada.
+>
+> **ZERO CANDIDATOS NÃO É CONHECIMENTO, É CONTRADIÇÃO** — e esta é a parte que a mentira obrigou a
+> consertar. Numa partida honesta a carta do envelope nunca entra em `fora`: não há como prová-la
+> fora, porque ela não está com ninguém. Então "sobrou zero" era inalcançável, e `dossie_candidatos`
+> devolvia um vetor vazio que a máquina lia pelo elemento 1 — NULL descendo até
+> `dossie_suggest_como`, a exceção subindo pela faxina, a mesa parada para todo mundo. O defeito de
+> 0033 com outra roupa, esperando o dia em que alguém mentisse.
+>
+> A mentira alcança: a jogada mais forte do modo é mostrar justamente a carta do envelope, e quem
+> acreditar risca a resposta e derruba a categoria inteira. O conserto é a leitura honesta do que
+> aconteceu — se não sobrou nenhum, quem está errado é o caderno, não o mundo, e a categoria volta
+> inteira. A máquina perde a certeza e volta a investigar. Ela não descobre que houve mentira; ela
+> só não trava por causa de uma.
+>
+> **E o bloco assistido de quem joga NÃO ganha essa volta**, de propósito. Para a máquina, categoria
+> vazia é uma decisão impossível de tomar; para uma pessoa, é a descoberta. Um caderno que risca
+> todos os seis suspeitos está gritando que alguém mentiu — e apagar esse grito seria esconder a
+> única prova que a mesa consegue ver sozinha.
 
 ---
 

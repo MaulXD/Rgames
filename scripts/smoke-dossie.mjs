@@ -3481,6 +3481,270 @@ if (iniAss.status === 200) {
     ok(aindaRola === "running", `e a partida continua de pé (${aindaRola})`);
   }
 
+  /* ── A MENTIRA (PRD 03 §6.9, migração 0118) ──────────────────────────────
+
+     A metade social do modo. Uma por partida: refutar mostrando uma carta que
+     não se tem, ou passar podendo refutar.
+
+     O que estes testes cobram, em ordem de importância:
+
+       1. sem armar, as regras de sempre valem — senão qualquer um mente
+       2. o estado público não muda ao armar, nem depois de mentir. Se mudasse,
+          quem lesse o DevTools jogaria com a resposta
+       3. só o assassino arma, e uma vez só
+       4. armar não gasta: quem arma e refuta de verdade sai com a mentira
+          inteira
+       5. zero candidatos não trava a máquina
+  */
+  if (tokAssassino) {
+    const assento = Number(comEnvelope[0].seat);
+    const mao = comEnvelope[0].data.hand ?? [];
+    const outro = privados.find((x) => Number(x.seat) !== assento);
+    const temaAss = (
+      await db.query("select data from game_themes where id = 'solar-das-acacias'")
+    ).rows[0].data;
+    const idsDe = (k) => temaAss[k].map((x) => x.id);
+    const trioCom = (susp, arma, sala) => [susp, arma, sala];
+    const foraDaMao = (k) => idsDe(k).filter((c) => !mao.includes(c));
+
+    /** Põe a mesa numa refutação em que só o assassino pode responder. */
+    async function encena(trio) {
+      await db.query(
+        `update matches set public_state = public_state || jsonb_build_object(
+            'phase', 'refute', 'pending', jsonb_build_object(
+              'bySeat', $2::int, 'guess', $3::jsonb, 'queue', $4::jsonb, 'at', 0))
+          where id = $1`,
+        [mAss.id, Number(outro.seat), JSON.stringify(trio), JSON.stringify([assento])],
+      );
+    }
+    const leEstado = async () =>
+      (await db.query("select public_state st from matches where id = $1", [mAss.id])).rows[0].st;
+    const lePrivado = async () =>
+      (
+        await db.query(
+          "select data from match_private_state where match_id = $1 and user_id = $2",
+          [mAss.id, assassinoUid],
+        )
+      ).rows[0].data;
+
+    /* 1. SEM ARMAR, AS REGRAS DE SEMPRE. */
+    const mentirosa = foraDaMao("suspects")[0];
+    await encena(trioCom(mentirosa, foraDaMao("weapons")[0], foraDaMao("rooms")[0]));
+    const semArmar = await rpc(tokAssassino, "dossie_refute", {
+      p_match: mAss.id,
+      p_card: mentirosa,
+    });
+    ok(
+      semArmar.status >= 400 && JSON.stringify(semArmar.body).includes("NOT_IN_HAND"),
+      semArmar.status >= 400
+        ? "sem armar, mostrar carta que não se tem continua sendo recusado"
+        : `O ASSASSINO MENTIU DE GRAÇA: ${JSON.stringify(semArmar.body).slice(0, 120)}`,
+    );
+
+    /* 2. SÓ O ASSASSINO ARMA. */
+    const detetive = P.find((x) => x.id === outro.user_id);
+    if (detetive) {
+      const tentou = await rpc(detetive.token, "dossie_arma_mentira", { p_match: mAss.id });
+      ok(
+        tentou.status >= 400 && JSON.stringify(tentou.body).includes("NAO_E_ASSASSINO"),
+        tentou.status >= 400
+          ? "e um detetive não arma mentira nenhuma"
+          : "UM DETETIVE ARMOU A MENTIRA DO ASSASSINO",
+      );
+    }
+
+    /* 3. ARMAR NÃO MEXE NO ESTADO PÚBLICO.
+
+       É a linha que sustenta o modo inteiro: se armar deixasse qualquer marca,
+       a mesa saberia quem é o assassino no instante em que ele pensasse em
+       mentir. Conferido campo a campo, e a `version` junto — ela é o que a
+       tela escuta. */
+    const antesArmar = await leEstado();
+    const versaoAntes = (
+      await db.query("select version from matches where id = $1", [mAss.id])
+    ).rows[0].version;
+    const armou = await rpc(tokAssassino, "dossie_arma_mentira", { p_match: mAss.id });
+    const depoisArmar = await leEstado();
+    const versaoDepois = (
+      await db.query("select version from matches where id = $1", [mAss.id])
+    ).rows[0].version;
+    ok(armou.status === 200 && armou.body?.armada === true, "o assassino arma a mentira");
+    ok(
+      JSON.stringify(antesArmar) === JSON.stringify(depoisArmar) &&
+        versaoAntes === versaoDepois,
+      JSON.stringify(antesArmar) === JSON.stringify(depoisArmar)
+        ? "e nada no estado público mudou — nem um campo, nem a versão"
+        : "ARMAR A MENTIRA APARECE NO ESTADO PÚBLICO",
+    );
+
+    /* E DESARMA DO MESMO JEITO QUE ARMA: uma jogada que só liga é uma
+       armadilha para quem clicou por engano. */
+    const desarmou = await rpc(tokAssassino, "dossie_arma_mentira", { p_match: mAss.id });
+    ok(
+      desarmou.status === 200 && desarmou.body?.armada === false,
+      "e o mesmo botão desarma",
+    );
+    await rpc(tokAssassino, "dossie_arma_mentira", { p_match: mAss.id });
+
+    /* 4. ARMAR NÃO GASTA. Refutar de verdade com a mentira armada sai de graça:
+       a cobrança é no momento em que ela permite o impossível, e não antes. */
+    const naMao = mao.find((c) => idsDe("suspects").includes(c))
+      ?? mao.find((c) => idsDe("weapons").includes(c))
+      ?? mao[0];
+    const ondeCabe = idsDe("suspects").includes(naMao)
+      ? 0
+      : idsDe("weapons").includes(naMao)
+        ? 1
+        : 2;
+    const trioHonesto = trioCom(
+      foraDaMao("suspects")[0],
+      foraDaMao("weapons")[0],
+      foraDaMao("rooms")[0],
+    );
+    trioHonesto[ondeCabe] = naMao;
+    await encena(trioHonesto);
+    const honesta = await rpc(tokAssassino, "dossie_refute", { p_match: mAss.id, p_card: naMao });
+    const depoisHonesta = await leEstado();
+    const linhaHonesta = depoisHonesta.log?.[0];
+    ok(honesta.status === 200, "com a mentira armada, ele refuta de verdade");
+    ok(
+      (await lePrivado()).mentiu == null,
+      "e a mentira continua inteira — armar não gasta, gastar é permitir o impossível",
+    );
+
+    /* 5. A MENTIRA: mostrar a carta do ENVELOPE, que é a jogada mais forte do
+       modo e a que derruba uma categoria inteira do caderno de quem acreditar. */
+    const doEnvelope = mAss.solution.suspect;
+    await encena(trioCom(doEnvelope, foraDaMao("weapons")[0], foraDaMao("rooms")[0]));
+    const mentiu = await rpc(tokAssassino, "dossie_refute", {
+      p_match: mAss.id,
+      p_card: doEnvelope,
+    });
+    ok(
+      mentiu.status === 200,
+      mentiu.status === 200
+        ? "e armada, mostra uma carta que não tem — a do envelope"
+        : `a mentira foi recusada: ${JSON.stringify(mentiu.body).slice(0, 140)}`,
+    );
+
+    const depoisMentira = await leEstado();
+    const linhaMentira = depoisMentira.log?.[0];
+
+    /* INDISTINGUÍVEL, e é isso que a torna uma mentira. A linha do registro tem
+       as mesmas chaves e o mesmo assento da refutação honesta de três passos
+       atrás; a diferença está só no `seq`, que anda em toda linha. */
+    const chaves = (l) => Object.keys(l ?? {}).sort().join(",");
+    ok(
+      linhaMentira && chaves(linhaMentira) === chaves(linhaHonesta)
+        && linhaMentira.type === "refute" && linhaMentira.seat === assento,
+      linhaMentira && chaves(linhaMentira) === chaves(linhaHonesta)
+        ? `e a linha do registro é igualzinha à honesta (${chaves(linhaMentira)})`
+        : `a mentira deixou marca no registro: ${JSON.stringify(linhaMentira)}`,
+    );
+    ok(
+      !/mentir|mentiu|mentira/i.test(JSON.stringify(depoisMentira)),
+      "e o estado público inteiro não diz a palavra em lugar nenhum",
+    );
+
+    /* E A CARTA CHEGA A QUEM PALPITOU COMO SE FOSSE VERDADE — é o que faz o
+       caderno dele riscar a resposta do caso. */
+    const vistoPeloOutro = (
+      await db.query(
+        "select data -> 'seen' v from match_private_state where match_id = $1 and user_id = $2",
+        [mAss.id, outro.user_id],
+      )
+    ).rows[0].v;
+    const ultima = (vistoPeloOutro ?? []).at(-1);
+    ok(
+      ultima?.card === doEnvelope && Number(ultima?.from) === assento,
+      ultima?.card === doEnvelope
+        ? "e quem palpitou recebeu a carta como qualquer outra, com o assento de quem mostrou"
+        : `a carta mentirosa não chegou: ${JSON.stringify(ultima)}`,
+    );
+
+    /* 6. UMA POR PARTIDA. */
+    const gasta = await lePrivado();
+    ok(
+      gasta.mentiu?.seq === linhaMentira?.seq && gasta.mentiraArmada == null,
+      gasta.mentiu?.seq === linhaMentira?.seq
+        ? `a mentira ficou gasta, e guardada na linha ${gasta.mentiu.seq} do registro`
+        : `o gasto não bateu com a linha: ${JSON.stringify(gasta.mentiu)}`,
+    );
+    const denovo = await rpc(tokAssassino, "dossie_arma_mentira", { p_match: mAss.id });
+    ok(
+      denovo.status >= 400 && JSON.stringify(denovo.body).includes("MENTIRA_GASTA"),
+      denovo.status >= 400
+        ? "e não há segunda: o interruptor recusa"
+        : "O ASSASSINO ARMOU A MENTIRA DUAS VEZES",
+    );
+
+    /* E COM ELA GASTA, PASSAR TENDO A CARTA VOLTA A SER RECUSADO. */
+    await encena(trioHonesto);
+    const passouTendo = await rpc(tokAssassino, "dossie_pass_refute", { p_match: mAss.id });
+    ok(
+      passouTendo.status >= 400 && JSON.stringify(passouTendo.body).includes("YOU_MUST_REFUTE"),
+      passouTendo.status >= 400
+        ? "e gasta a mentira, esquecer de refutar volta a ser impossível"
+        : "PASSOU TENDO A CARTA COM A MENTIRA JÁ GASTA",
+    );
+    await db.query(
+      "update matches set public_state = public_state || jsonb_build_object('pending', null, 'phase', 'turn') where id = $1",
+      [mAss.id],
+    );
+
+    /* 7. O DESFECHO NÃO RESPONDE COM A PARTIDA DE PÉ.
+
+       Se respondesse, o modo acabaria: bastaria perguntar. */
+    const cedoDemais = await rpc(tokAssassino, "dossie_desfecho", { p_match: mAss.id });
+    ok(
+      cedoDemais.status >= 400 && JSON.stringify(cedoDemais.body).includes("MATCH_NOT_FINISHED"),
+      cedoDemais.status >= 400
+        ? "com a partida de pé, o desfecho se recusa a dizer quem é o assassino"
+        : `O DESFECHO ENTREGOU O ASSASSINO NO MEIO DA PARTIDA: ${JSON.stringify(cedoDemais.body)}`,
+    );
+  }
+
+  /* ── ZERO CANDIDATOS NÃO É CONHECIMENTO, É CONTRADIÇÃO ────────────────────
+
+     A mentira alcança um estado que a partida honesta nunca alcança: a carta do
+     envelope riscada. Aí a categoria inteira cai, e a máquina lia o elemento 1
+     de um vetor vazio — NULL descendo até `dossie_suggest_como`, a exceção
+     subindo pela faxina, a mesa parada para todo mundo.
+
+     Função pura, então a decisão se mede direto, sem partida no meio. */
+  {
+    const temaZ = (
+      await db.query("select data from game_themes where id = 'solar-das-acacias'")
+    ).rows[0].data;
+    const todos = temaZ.suspects.map((x) => x.id);
+    const chama = async (fora) =>
+      (
+        await db.query("select public.dossie_candidatos($1::jsonb, $2::jsonb, 'suspect') c", [
+          JSON.stringify(temaZ),
+          JSON.stringify({ fora }),
+        ])
+      ).rows[0].c;
+
+    ok(
+      (await chama([])).length === todos.length,
+      "sem nada riscado, a categoria inteira é candidata",
+    );
+    const umSo = await chama(todos.slice(1));
+    ok(
+      umSo.length === 1 && umSo[0] === todos[0],
+      umSo.length === 1
+        ? "riscando cinco dos seis, sobra um — que é como a máquina fecha o caso"
+        : `sobrou ${umSo.length}, e devia sobrar 1`,
+    );
+    const nenhum = await chama(todos);
+    ok(
+      nenhum.length === todos.length,
+      nenhum.length === todos.length
+        ? "e riscando os seis, a categoria VOLTA INTEIRA — o caderno está errado, não o mundo"
+        : `com tudo riscado sobrou ${nenhum.length}, e a máquina leria o elemento 1 de um vetor vazio`,
+    );
+  }
+
   /* ── DOZE RODADAS, E ELE VENCE ───────────────────────────────────────────
      O relógio é empurrado até a última rodada e a vez é passada: a virada é o
      que fecha a partida, e é onde a regra mora. */
@@ -3505,6 +3769,59 @@ if (iniAss.status === 200) {
     fim.st.winner === null && fim.st.solution?.suspect === mAss.solution.suspect,
     "e o envelope é aberto para a mesa ver o que passou debaixo do nariz de todo mundo",
   );
+
+  /* ── O DESFECHO: AGORA PODE ─────────────────────────────────────────────
+     Durante a partida o assento do assassino não existe em lugar nenhum que
+     alguém alcance. Encerrada, não há mais o que proteger e há o que pagar: a
+     mesa reconstitui a partida sabendo quem era e ONDE ele mentiu — pela linha
+     do registro, e não por um "mentiu em algum momento" que não deixa
+     reconstituir nada.
+
+     E ela responde a jogador da mesa, e só. */
+  if (tokAssassino) {
+    const desf = await rpc(tokAssassino, "dossie_desfecho", { p_match: mAss.id });
+    ok(
+      desf.status === 200 && Number(desf.body?.assassino) === Number(comEnvelope[0].seat),
+      desf.status === 200
+        ? `acabada a partida, o desfecho conta quem era (assento ${desf.body?.assassino})`
+        : `o desfecho não respondeu: ${JSON.stringify(desf.body).slice(0, 140)}`,
+    );
+    ok(
+      typeof desf.body?.mentira?.seq === "number",
+      typeof desf.body?.mentira?.seq === "number"
+        ? `e aponta a linha ${desf.body.mentira.seq} do registro, onde ele mentiu`
+        : `e não aponta a mentira: ${JSON.stringify(desf.body?.mentira)}`,
+    );
+
+    /* E TODO MUNDO DA MESA VÊ A MESMA COISA: a revelação é da mesa, não de
+       quem perguntou primeiro. */
+    const detetiveFim = P.find((x) => x.id === privados.find(
+      (y) => Number(y.seat) !== Number(comEnvelope[0].seat))?.user_id);
+    if (detetiveFim) {
+      const dele = await rpc(detetiveFim.token, "dossie_desfecho", { p_match: mAss.id });
+      ok(
+        dele.status === 200 && Number(dele.body?.assassino) === Number(comEnvelope[0].seat),
+        "e os detetives leem o mesmo desfecho",
+      );
+    }
+
+    /* QUEM NÃO ESTAVA NA MESA NÃO LÊ. Partida encerrada não é partida
+       pública: o assento do assassino é da mesa que jogou.
+
+       O forasteiro é criado AQUI, e não procurado entre os três de sempre —
+       procurar devolveria `undefined`, porque os três jogaram esta partida, e o
+       teste sumiria sem uma linha na saída dizendo que sumiu. Teste que se pula
+       em silêncio é pior que teste que não existe: ele conta como cobertura. */
+    const forasteiro = await player(`dos-fora-${stamp}@mesa.invalid`);
+    P.push(forasteiro);
+    const fora = await rpc(forasteiro.token, "dossie_desfecho", { p_match: mAss.id });
+    ok(
+      fora.status >= 400 && JSON.stringify(fora.body).includes("NOT_A_PLAYER"),
+      fora.status >= 400
+        ? "e quem não jogou aquela partida não lê o desfecho dela"
+        : "O DESFECHO VAZOU PARA QUEM NÃO ESTAVA NA MESA",
+    );
+  }
 }
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });

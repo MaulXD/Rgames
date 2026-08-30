@@ -66,8 +66,8 @@ gente e terminar uma partida.
 
 | | Motor | Interface | Verificações | O que falta |
 |---|---|---|---|---|
-| **Letreiro** | ✅ | ✅ | 143 | nêmesis (precisa de tabela própria) |
-| **Dossiê** | ✅ | ✅ | 128 | cartas de pista (§6.8) |
+| **Letreiro** | ✅ | ✅ | 143 | — |
+| **Dossiê** | ✅ | ✅ | 128 | — |
 | **Domínio** | ✅ | ✅ | 187 | — |
 | **Metrópole** | ✅ | ✅ | 285 | animação de construção |
 
@@ -181,6 +181,8 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | E o HTML que SAIU, auditado | ✅ três coisas que só o resultado revela: controle dentro de controle, `id` repetido, campo sem nome. Achou o `id` do avatar, que saía de um hash do bichinho — dois jogadores com o mesmo bicho colidiam |
 | A hachura das facções e dos grupos ganhou guarda | ✅ a ligação mora no CSS e a paleta no TypeScript, e nada obrigava as duas a andarem juntas. Uma cor nova sem trama volta a ser só cor, e nada acusa |
 | `npm run verifica` | ✅ as doze etapas num comando, com relatório. As cinco suítes em paralelo: **29,6 min → 12 a 19 min** (a variação é latência de rede, e ela é grande: a mesma suíte do Dossiê mediu 354s e 776s em rodadas seguidas) |
+| A mentira do Modo Assassino (§6.9 do PRD) | ✅ a metade social da variante: refutar com uma carta que não se tem, ou passar podendo. Armada de propósito, uma por partida, e INDISTINGUÍVEL — a suíte compara a linha honesta e a mentirosa campo a campo |
+| E o defeito que ela destravou | ✅ **zero candidatos não é conhecimento, é contradição**. A carta do envelope nunca entrava em `fora` numa partida honesta, então a máquina lia o elemento 1 de um vetor vazio e ninguém tinha motivo para desconfiar. A mentira alcança: mostrar a carta do envelope derruba a categoria inteira |
 | A Metrópole sozinha caiu de 9m46s para 5m17s | ✅ 300 sorteios de evento eram 300 idas e voltas ao Supabase para uma função PURA — 113 dos 586 segundos, e nenhum deles trabalho. `generate_series` faz o laço dentro do banco |
 
 ---

@@ -43,6 +43,7 @@ import { config } from "dotenv";
 import pg from "pg";
 import {
   arquivosDeCss,
+  compoe,
   declaradas,
   razao,
   regrasDeCor,
@@ -974,11 +975,17 @@ for (const { nome: tela, html } of TUDO_QUE_FOI_DESENHADO) {
     /* HERDA A COR; O FUNDO NÃO SE HERDA — ELE SE ATRAVESSA. Um elemento sem
        fundo é transparente, e o que aparece atrás dele é o fundo do pai. Dá na
        mesma conta, e a diferença de nome importa: fundo com alfa não é
-       transparente, é uma mistura que este módulo se recusa a chutar, e por
-       isso ele vira `null` e a tela some da contagem em vez de virar um número
-       inventado. */
-    const cor = d.cor ? d.cor.rgb : pai.cor;
-    const fundo = d.fundo ? d.fundo.rgb : pai.fundo;
+       transparente, é uma MISTURA — e mistura sobre um fundo conhecido é conta
+       exata, `a·frente + (1−a)·fundo` por canal, que é o que o compositor faz.
+       Este projeto usa muito alfa (`rgb(255 77 94 / 0.1)` é o painel do
+       assassino), e recusar a conta jogaria fora um terço da tela.
+
+       O que continua virando `null`, e some da contagem em vez de virar número
+       inventado: alfa sobre fundo que ninguém resolveu, gradiente e imagem. */
+    /* O FUNDO PRIMEIRO, porque a cor do texto pode precisar dele: `color` com
+       alfa também compõe, e compõe sobre o que estiver atrás. */
+    const fundo = d.fundo ? compoe(d.fundo.rgba, pai.fundo) : pai.fundo;
+    const cor = d.cor ? compoe(d.cor.rgba, fundo ?? pai.fundo) : pai.cor;
     const px = d.cor?.regra?.px ?? null;
     const negrito = d.cor?.regra?.negrito ?? false;
     const grande = px !== null && (px >= 24 || (px >= 18.66 && negrito));

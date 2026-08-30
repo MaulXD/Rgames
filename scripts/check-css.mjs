@@ -38,7 +38,13 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { partesDoSeletor } from "./cores.mjs";
+import {
+  paraRgb,
+  partesDoSeletor,
+  razao,
+  resolveVar,
+  tokensDeCss,
+} from "./cores.mjs";
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -234,55 +240,14 @@ if (anonimos.length === 0) {
    regra que pinta as duas coisas e erra o par —, não a tela inteira. A contagem
    de puladas sai no relatório, senão "0 problemas" mentiria sobre a cobertura. */
 
-/** Resolve `var(--x)` até chegar a um valor concreto, ou nulo se der volta. */
-function resolveVar(valor, tokens, profundidade = 0) {
-  if (profundidade > 8) return null;
-  const m = /^var\(\s*(--[\w-]+)\s*(?:,([^)]*))?\)$/.exec(valor.trim());
-  if (!m) return valor.trim();
-  const achado = tokens.get(m[1]);
-  if (achado !== undefined) return resolveVar(achado, tokens, profundidade + 1);
-  return m[2] ? resolveVar(m[2], tokens, profundidade + 1) : null;
-}
-
-/** #rgb ou #rrggbb → [r,g,b]. Qualquer outra coisa vira nulo, de propósito. */
-function paraRgb(valor) {
-  if (!valor) return null;
-  const v = valor.trim().toLowerCase();
-  if (v === "white") return [255, 255, 255];
-  if (v === "black") return [0, 0, 0];
-  let m = /^#([0-9a-f]{3})$/.exec(v);
-  if (m) return [...m[1]].map((c) => parseInt(c + c, 16));
-  m = /^#([0-9a-f]{6})$/.exec(v);
-  if (m) return [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
-  /* rgb(r g b) e rgb(r,g,b) SEM alfa. Com alfa a cor final depende do que está
-     atrás, e chutar o fundo daria um número com cara de medida. */
-  m = /^rgb\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)\s*\)$/.exec(v);
-  if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
-  return null;
-}
-
-function luminancia([r, g, b]) {
-  const f = (c) => {
-    const x = c / 255;
-    return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-}
-
-function razao(a, b) {
-  const la = luminancia(a);
-  const lb = luminancia(b);
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
+/* A CONTA MORA EM `scripts/cores.mjs`, e mora lá porque esta varredura deixou
+   de ser a única a fazê-la: `npm run smoke:render` faz a mesma pergunta em cima
+   da ÁRVORE renderizada, onde a cor herdada existe. Duas cópias de uma fórmula
+   é o defeito que este projeto mais persegue nos jogos; não faria sentido
+   deixá-lo em pé na ferramenta que persegue. */
 
 /* Os tokens, de todos os arquivos: `--x: valor` no nível que for. */
-const tokens = new Map();
-for (const f of arquivosCss) {
-  const texto = readFileSync(join(cssDir, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
-  for (const m of texto.matchAll(/(--[\w-]+)\s*:\s*([^;}]+)/g)) {
-    if (!tokens.has(m[1])) tokens.set(m[1], m[2].trim());
-  }
-}
+const tokens = tokensDeCss(cssDir, arquivosCss);
 
 const fracos = [];
 let paresLidos = 0;

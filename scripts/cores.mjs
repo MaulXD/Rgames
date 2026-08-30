@@ -60,6 +60,47 @@ export function paraRgb(valor) {
   return null;
 }
 
+/**
+ * Cor com alfa: `rgb(r g b / a)`, `rgba(...)` e `#rrggbbaa`.
+ *
+ * Devolve `{ rgb, alfa }`, e nunca a mistura — quem mistura é quem sabe o que
+ * está atrás. Uma cor com alfa NÃO é uma cor: é uma instrução.
+ */
+export function paraRgba(valor) {
+  if (!valor) return null;
+  const v = String(valor).trim().toLowerCase();
+
+  let m = /^#([0-9a-f]{8})$/.exec(v);
+  if (m) {
+    const n = [0, 2, 4, 6].map((i) => parseInt(m[1].slice(i, i + 2), 16));
+    return { rgb: n.slice(0, 3), alfa: n[3] / 255 };
+  }
+  m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)[\s,/]+([\d.]+)(%?)\s*\)$/.exec(v);
+  if (m) {
+    const a = Number(m[4]) / (m[5] === "%" ? 100 : 1);
+    return { rgb: [1, 2, 3].map((i) => Math.round(Number(m[i]))), alfa: a };
+  }
+  const cheia = paraRgb(v);
+  return cheia ? { rgb: cheia, alfa: 1 } : null;
+}
+
+/**
+ * O que aparece quando uma cor com alfa cai em cima de outra opaca.
+ *
+ * Isto NÃO é chute: `a·frente + (1−a)·fundo` por canal é a conta que o
+ * compositor faz, e ela é exata. É a mesma disciplina do dinheiro deste
+ * projeto — o que dá para calcular, calcula-se; o que não dá vira nulo e sai na
+ * contagem de puladas em vez de virar um número com cara de medida.
+ *
+ * O que continua sendo nulo: alfa sobre fundo desconhecido, gradiente e imagem.
+ */
+export function compoe(frente, fundo) {
+  if (!frente) return null;
+  if (frente.alfa >= 1) return frente.rgb;
+  if (!fundo) return null;
+  return frente.rgb.map((c, i) => Math.round(frente.alfa * c + (1 - frente.alfa) * fundo[i]));
+}
+
 export function luminancia([r, g, b]) {
   const f = (c) => {
     const x = c / 255;
@@ -282,8 +323,10 @@ export function declaradas(regras, pilha, tokens) {
     if (f) fundo = { valor: f, regra: { seletor: "style=", arquivo: "—" } };
   }
 
+  /* Sai com alfa e tudo. Compor é decisão de quem tem a árvore: só ele sabe o
+     que está atrás. */
   return {
-    cor: cor ? { ...cor, rgb: paraRgb(resolveVar(cor.valor, tokens)) } : null,
-    fundo: fundo ? { ...fundo, rgb: paraRgb(resolveVar(fundo.valor, tokens)) } : null,
+    cor: cor ? { ...cor, rgba: paraRgba(resolveVar(cor.valor, tokens)) } : null,
+    fundo: fundo ? { ...fundo, rgba: paraRgba(resolveVar(fundo.valor, tokens)) } : null,
   };
 }

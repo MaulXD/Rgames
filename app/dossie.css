@@ -327,6 +327,17 @@
   justify-content: center;
   gap: 2px;
 }
+/* O peão do caso é um avatar de 28px dentro de um span.
+
+   ELE VINHA GANHANDO CAIXA EMPRESTADA. `.peao` da Metrópole é um disco de 13px
+   com `display: grid`, e as seis folhas são globais — então o avatar do Dossiê
+   era espremido nele. Desfeita a colisão, o span voltou a ser inline, e span
+   inline com SVG dentro carrega a folga de descida da linha embaixo. */
+.peao {
+  display: grid;
+  place-items: center;
+  line-height: 0;
+}
 .peao[data-fantasma="true"] {
   opacity: 0.42;
   filter: grayscale(0.7);

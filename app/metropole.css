@@ -28,6 +28,10 @@
      apertado do projeto inteiro, e justamente onde está o preço que a pessoa
      precisa ler antes de comprar. Esta dá 4,67:1. */
   --met-terra-tinta: #b24b23;
+  /* E O MESMO LATÃO, CLAREADO. Ele escreve o "Você dá" e o "Você recebe" da
+     mesa de negociação, e ali já são duas camadas de tinta translúcida em cima
+     do feltro: 3,63:1. */
+  --met-latao-tinta: #d4b16a;
   --met-papel: #efe4cc;
   --met-tinta: #23201c;
   --met-terra: #d9683c;
@@ -1435,7 +1439,7 @@
   line-height: 1.45;
 }
 .mesa-resumo strong {
-  color: var(--met-latao);
+  color: var(--met-latao-tinta);
 }
 .mesa-acoes {
   display: flex;

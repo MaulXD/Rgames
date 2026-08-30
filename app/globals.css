@@ -39,9 +39,10 @@
   --vivo-rosa: #ff6fa5;
   /* A MESMA ROSA, CLAREADA PARA SER TINTA. A paleta viva foi escolhida para
      PREENCHER, e preencher e escrever pedem coisas diferentes: sobre o feltro
-     claro dos painéis a rosa de preenchimento dá 4,02:1, logo abaixo do piso
-     da WCAG. Esta dá 4,64:1 e é a mesma cor. */
-  --vivo-rosa-tinta: #ff86b3;
+     dos painéis a rosa de preenchimento dá 4,02:1, logo abaixo do piso da
+     WCAG. Esta passa na camada mais clara em que ela aparece — a proposta na
+     mesa, que tem uma tinta de latão por cima do painel. */
+  --vivo-rosa-tinta: #ff96bd;
 
   /* sombras sólidas de cada viva (o "por baixo" do botão de brinquedo) */
   --sob-amarelo: #c58f00;
@@ -58,11 +59,18 @@
   --fg: #fdf7e8;
   --fg-mid: #e2dcc8;
   --fg-dim: #a8c4b6;
-  /* CLAREADA de #7ba392 quando a auditoria da árvore mediu onde ela de fato
-     cai: sobre o feltro escuro dava 4,71:1 e passava, mas quase todo uso dela
-     está DENTRO de um painel, que é mais claro — e ali dava 3,74:1. A cor foi
-     escolhida contra o fundo errado. */
-  --fg-faint: #93b4a6;
+  /* CLAREADA DUAS VEZES, de #7ba392, quando a auditoria da árvore mediu onde
+     ela de fato cai.
+
+     Sobre o feltro escuro ela dava 4,71:1 e passava. Só que este projeto
+     empilha tintas translúcidas em cima do feltro — painel, depois botão,
+     depois destaque —, e cada camada CLAREIA o que está embaixo. A cor foi
+     escolhida contra a primeira e usada na terceira: 3,74:1 dentro do painel,
+     3,96:1 dentro do botão da mesa de negociação.
+
+     Agora ela é escolhida contra a camada MAIS CLARA em que aparece. Nas mais
+     escuras sobra contraste, e sobrar é o lado certo de errar. */
+  --fg-faint: #a5c1b5;
   --accent: var(--vivo-amarelo);
 
   /* sombras: contato curto + ambiente longo */

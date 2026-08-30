@@ -206,6 +206,20 @@ export function DossieGame({
   const [deducoes, setDeducoes] = useState<
     { seat: number; nome: string; riscadas: number }[] | null
   >(null);
+  /* O CADERNO QUE O SERVIDOR GUARDA PARA MIM.
+
+     O registro público tem teto de sessenta linhas — ele viaja inteiro pelo
+     Realtime a cada jogada —, e o bloco assistido deriva do registro do zero a
+     cada renderização. Uma partida deste banco chegou a `seq` 281: duzentas e
+     vinte e uma linhas caíram, e com elas todo "fulano não tem nenhuma das
+     três" que elas provavam.
+
+     A máquina nunca teve esse problema, porque `dossie_deduz` é incremental e
+     guarda o que provou. Isto é a mesma coisa para quem joga. */
+  const [caderno, setCaderno] = useState<{
+    fora?: string[];
+    naoTem?: Record<string, string[]>;
+  } | null>(null);
   /* QUEM ERA O ASSASSINO, e onde ele mentiu. Só existe depois do fim: o
      servidor recusa a pergunta com a partida em andamento, e é essa recusa —
      não o cuidado da tela — que protege o modo. */
@@ -323,6 +337,27 @@ export function DossieGame({
       vivo = false;
     };
   }, [match.id, st.seq]);
+
+  /* NO MESMO COMPASSO do estado privado, e pelo mesmo motivo: uma linha nova no
+     registro pode ser a que empurra a mais velha para fora do teto.
+
+     E o cliente CONTINUA derivando. Isto não substitui `apura` — substituir
+     custaria uma ida e volta por linha do registro, e o bloco se atualizar
+     depois do resto da tela seria pior do que ele esquecer. O que chega daqui é
+     semente: o passado que não cabe mais no registro. */
+  useEffect(() => {
+    if (st.phase === "over") return;
+    let vivo = true;
+    void supabaseBrowser()
+      .rpc("dossie_caderno", { p_match: match.id })
+      .then(({ data }: { data: unknown }) => {
+        if (!vivo || !data) return;
+        setCaderno(data as { fora?: string[]; naoTem?: Record<string, string[]> });
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [match.id, st.seq, st.phase]);
 
   // som conforme o log anda
   useEffect(() => {
@@ -657,6 +692,7 @@ export function DossieGame({
         meuAssento={meuAssento}
         pad={priv.pad ?? { marks: {}, assist: "assistido" }}
         avisos={priv.pistas?.avisos ?? []}
+        semente={caderno ?? undefined}
         onPad={(novo) => {
           setPriv((a) => ({ ...a, pad: novo }));
           void supabaseBrowser().rpc("dossie_pad", { p_match: match.id, p_pad: novo });

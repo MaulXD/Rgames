@@ -12,7 +12,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
-import { tenta } from "./rede.mjs";
+import { comRede, tenta } from "./rede.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 config({ path: join(root, ".env.local"), quiet: true });
@@ -48,7 +48,7 @@ conn.searchParams.set("uselibpqcompat", "true");
 
    Nada aqui depende de sessão: sem `set local`, sem tabela temporária, sem
    trava consultiva. A API de `query` e `end` é a mesma. */
-const db = new pg.Pool({ connectionString: conn.toString(), max: 4, keepAlive: true });
+const db = comRede(new pg.Pool({ connectionString: conn.toString(), max: 4, keepAlive: true }));
 /* Sem `connect()`: no Pool ele reserva uma conexão que precisa ser devolvida,
    e descartar o retorno segura uma das quatro pela partida inteira. O Pool
    abre sozinho na primeira consulta. */
@@ -3352,6 +3352,108 @@ if (!palco.erro) {
     trio.every((c) => naoTemDepois.includes(c))
       ? "e o álibi vale por UMA refutação: na seguinte, a passada volta a valer"
       : "o álibi virou imunidade permanente",
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   O CADERNO QUE O REGISTRO NÃO CARREGA MAIS
+
+   `dossie_log` guarda as SESSENTA linhas mais novas, e o teto tem um bom
+   motivo: o registro viaja inteiro pelo Realtime a cada jogada.
+
+   Só que o bloco assistido de quem joga deriva do registro, do zero, a cada
+   renderização — e uma partida deste banco chegou a `seq` 281 com sessenta
+   linhas guardadas. `npm run smoke:bloco` mede a perda: 54 marcas com o
+   registro inteiro, 9 com o cortado.
+
+   A máquina nunca teve o problema, porque `dossie_deduz` é incremental. O
+   conserto é dar à pessoa o mesmo caderno, e o que se cobra aqui é o que faz
+   dele um caminho seguro: ele devolve o do CHAMADOR e de mais ninguém. Caderno
+   alheio é, literalmente, a mão dos outros deduzida.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\nDOSSIÊ: o caderno que o servidor guarda\n");
+
+{
+  const meuCaderno = await rpc(P[0].token, "dossie_caderno", { p_match: partida.id });
+  ok(
+    meuCaderno.status === 200 &&
+      Array.isArray(meuCaderno.body?.fora) &&
+      typeof meuCaderno.body?.naoTem === "object",
+    meuCaderno.status === 200
+      ? `o caderno volta com ${meuCaderno.body.fora.length} carta(s) fora do envelope`
+      : `o caderno não respondeu: ${JSON.stringify(meuCaderno.body).slice(0, 140)}`,
+  );
+
+  /* AS CARTAS DA PRÓPRIA MÃO ESTÃO NELE, e é a prova mais barata de que ele é
+     MEU: ninguém mais poderia tê-las provado fora do envelope tão cedo. */
+  const minhaMao = (
+    await db.query(
+      "select data -> 'hand' m from match_private_state where match_id = $1 and user_id = $2",
+      [partida.id, P[0].id],
+    )
+  ).rows[0].m;
+  ok(
+    minhaMao.every((c) => meuCaderno.body?.fora?.includes(c)),
+    minhaMao.every((c) => meuCaderno.body?.fora?.includes(c))
+      ? "e traz as cartas da minha mão riscadas do envelope — é o MEU caderno"
+      : `faltou carta da minha mão: ${JSON.stringify(meuCaderno.body?.fora)}`,
+  );
+
+  /* E ELE NÃO ACEITA ASSENTO. A função lê o assento de `auth.uid()` e não
+     recebe parâmetro nenhum além da partida — um parâmetro de assento aqui
+     seria uma porta para ler o caderno alheio. */
+  const comAssento = await rpc(P[1].token, "dossie_caderno", {
+    p_match: partida.id,
+    p_seat: 0,
+  });
+  ok(
+    comAssento.status >= 400,
+    comAssento.status >= 400
+      ? "e não há como pedir o caderno de outro assento — a função não tem esse parâmetro"
+      : "dossie_caderno ACEITOU um assento",
+  );
+
+  /* E CADA UM RECEBE O SEU. Dois jogadores com mãos diferentes não podem
+     receber o mesmo caderno — se recebessem, um deles estaria lendo o do
+     outro. */
+  const doOutro = await rpc(P[1].token, "dossie_caderno", { p_match: partida.id });
+  ok(
+    doOutro.status === 200 &&
+      JSON.stringify(doOutro.body) !== JSON.stringify(meuCaderno.body),
+    doOutro.status === 200 &&
+      JSON.stringify(doOutro.body) !== JSON.stringify(meuCaderno.body)
+      ? "e dois jogadores recebem cadernos DIFERENTES — cada um o seu"
+      : "dois jogadores receberam o mesmo caderno",
+  );
+
+  /* E O ENVELOPE NÃO ESTÁ NELE. `fora` é literalmente "não está no envelope":
+     a solução aparecer ali seria o vazamento que o jogo inteiro existe para
+     impedir. */
+  const solucao = (
+    await db.query("select solution from matches where id = $1", [partida.id])
+  ).rows[0].solution;
+  const vazou = [solucao.suspect, solucao.weapon, solucao.room].filter((c) =>
+    meuCaderno.body?.fora?.includes(c),
+  );
+  ok(
+    vazou.length === 0,
+    vazou.length === 0
+      ? "e nenhuma carta do envelope está riscada nele — seria o contrário de um fato"
+      : `O CADERNO RISCOU CARTA DO ENVELOPE: ${vazou.join(", ")}`,
+  );
+
+  /* QUEM NÃO ESTÁ NA MESA NÃO TEM CADERNO. */
+  const deFora = await rpc(
+    (await player(`dos-cad-${stamp}@mesa.invalid`)).token,
+    "dossie_caderno",
+    { p_match: partida.id },
+  );
+  ok(
+    deFora.status >= 400 && JSON.stringify(deFora.body).includes("NOT_A_PLAYER"),
+    deFora.status >= 400
+      ? "e quem não está na mesa não tem caderno nenhum para pedir"
+      : "O CADERNO VAZOU PARA QUEM NÃO ESTÁ NA MESA",
   );
 }
 

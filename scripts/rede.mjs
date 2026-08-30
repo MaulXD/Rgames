@@ -31,7 +31,7 @@
  */
 
 /** Erros que valem uma segunda tentativa: a conexão, e não a resposta. */
-const PISCADA = /UND_ERR|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|socket hang up|fetch failed/i;
+const PISCADA = /UND_ERR|ECONNRESET|ECONNREFUSED|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up|fetch failed/i;
 
 export async function tenta(url, opts) {
   try {
@@ -47,4 +47,43 @@ export async function tenta(url, opts) {
     await new Promise((r) => setTimeout(r, 800));
     return await fetch(url, opts);
   }
+}
+
+/**
+ * O mesmo remédio para o outro caminho: a conexão direta ao Postgres.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * O `pg.Pool` NÃO COBRE ISTO, e a diferença custou uma verificação inteira.
+ *
+ * Trocar `pg.Client` por `pg.Pool` resolveu a conexão que MORRE no meio: o pool
+ * descarta a ruim e abre outra. O que ele não resolve é a conexão que nunca
+ * chega a existir — um `getaddrinfo ENOTFOUND` na hora de resolver o nome do
+ * servidor sobe direto pelo `db.query`, e a suíte morre no meio com um erro de
+ * DNS ao lado de trezentas linhas verdes.
+ *
+ * Foi o que aconteceu depois de sete minutos de suíte do Dossiê. Nada estava
+ * errado no código; a resolução de nome piscou.
+ *
+ * SUÍTE VERMELHA POR CAUSA DA REDE É O PIOR VERMELHO QUE EXISTE, porque ela
+ * ensina a olhar para o vermelho e pensar "deve ser a internet" — e o dia em
+ * que for de verdade, ninguém olha.
+ *
+ * Uma segunda chance, e só uma, pelas mesmas razões do `tenta` acima: erro de
+ * SQL não é piscada de rede, e repetir um `duplicate key` não conserta nada.
+ */
+export function comRede(pool) {
+  const original = pool.query.bind(pool);
+  pool.query = async (...args) => {
+    try {
+      return await original(...args);
+    } catch (e) {
+      const texto = [e?.message, e?.code, e?.cause?.code, e?.cause?.message]
+        .filter(Boolean)
+        .join(" ");
+      if (!PISCADA.test(texto)) throw e;
+      await new Promise((r) => setTimeout(r, 800));
+      return await original(...args);
+    }
+  };
+  return pool;
 }

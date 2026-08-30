@@ -42,6 +42,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
+import { comRede } from "./rede.mjs";
 import { validaTema } from "./valida-tema.mjs";
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -55,7 +56,7 @@ const ok = (c, m) => {
 
 const conn = new URL(process.env.POSTGRES_URL_NON_POOLING);
 conn.searchParams.set("uselibpqcompat", "true");
-const db = new pg.Pool({ connectionString: conn.toString(), max: 2, keepAlive: true });
+const db = comRede(new pg.Pool({ connectionString: conn.toString(), max: 2, keepAlive: true }));
 
 const publicado = async (id) =>
   (await db.query("select data from public.game_themes where id = $1", [id])).rows[0]?.data;

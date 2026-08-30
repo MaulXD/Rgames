@@ -119,10 +119,37 @@ export function apura(
      padrão vazio porque a mesa que jogou sem o Modo Avançado não tem nenhum —
      e porque uma mesa sem baralho não devia precisar saber que ele existe. */
   avisos: Aviso[] = [],
+  /* ── A SEMENTE, do caderno que o servidor guarda ─────────────────────────
+
+     O registro público tem teto: `dossie_log` guarda as sessenta linhas mais
+     novas, porque ele viaja inteiro pelo Realtime a cada jogada. E `apura`
+     deriva do registro, do zero, a cada renderização — então o que caiu do teto
+     deixava de ser sabido.
+
+     Não é hipótese: uma partida de verdade chegou a `seq` 281 com sessenta
+     linhas guardadas, e `npm run smoke:bloco` mede a perda numa partida de cem
+     linhas — 54 marcas com o registro inteiro, 9 com o cortado.
+
+     A máquina nunca teve esse problema: `dossie_deduz` é incremental e guarda
+     `dedu` no estado privado. Isto aqui é a mesma coisa para quem joga —
+     `dossie_caderno` devolve o que o servidor já provou para ESTE assento, e a
+     derivação a partir do registro fresco continua acontecendo por cima.
+
+     Vazio por padrão: `apura` é uma função pura e continua sendo testável sem
+     nada disso. */
+  semente: { fora?: string[]; naoTem?: Record<string, string[]> } = {},
 ): { fatos: Marcas; conjuntos: Conjunto[] } {
   const fatos: Marcas = {};
   const conjuntos: Conjunto[] = [];
   if (nivel === "manual") return { fatos, conjuntos };
+
+  /* 0. O QUE JÁ ESTAVA PROVADO. Vem primeiro porque é o passado: as linhas do
+     registro que ainda existem vão reafirmar parte disto, e reafirmar um fato
+     não custa nada. O que não vier do registro fica de pé por causa daqui. */
+  for (const c of semente.fora ?? []) poe(fatos, c, ENVELOPE, "x");
+  for (const [assento, cartas] of Object.entries(semente.naoTem ?? {})) {
+    for (const c of cartas) poe(fatos, c, assento, "x");
+  }
 
   // 1. minha mão
   if (meuAssento !== null) {

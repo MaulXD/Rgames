@@ -14,7 +14,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
-import { tenta } from "./rede.mjs";
+import { comRede, tenta } from "./rede.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 config({ path: join(root, ".env.local"), quiet: true });
@@ -50,7 +50,7 @@ conn.searchParams.set("uselibpqcompat", "true");
 
    Nada aqui depende de sessão: sem `set local`, sem tabela temporária, sem
    trava consultiva. A API de `query` e `end` é a mesma. */
-const db = new pg.Pool({ connectionString: conn.toString(), max: 4, keepAlive: true });
+const db = comRede(new pg.Pool({ connectionString: conn.toString(), max: 4, keepAlive: true }));
 /* Sem `connect()`: no Pool ele reserva uma conexão que precisa ser devolvida,
    e descartar o retorno segura uma das quatro pela partida inteira. O Pool
    abre sozinho na primeira consulta. */

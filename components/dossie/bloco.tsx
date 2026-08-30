@@ -53,6 +53,7 @@ export function Bloco({
   meuAssento,
   pad,
   avisos,
+  semente,
   onPad,
 }: {
   caso: Caso;
@@ -66,6 +67,16 @@ export function Bloco({
   /* O que as Cartas de Pista contaram. Ausente na mesa que jogou sem o Modo
      Avançado — e uma mesa sem baralho não devia precisar saber que ele existe. */
   avisos?: Aviso[];
+  /* O QUE O SERVIDOR JÁ PROVOU PARA ESTE ASSENTO.
+
+     O registro público guarda as sessenta linhas mais novas — ele viaja inteiro
+     pelo Realtime a cada jogada —, e este bloco deriva do registro do zero a
+     cada renderização. O que caiu do teto deixava de ser sabido, e uma partida
+     de verdade chegou a `seq` 281 com sessenta linhas guardadas.
+
+     `dossie_caderno` traz o que não cabe mais no registro. Ausente enquanto a
+     resposta não chega, e o bloco funciona sem ela — só com menos memória. */
+  semente?: { fora?: string[]; naoTem?: Record<string, string[]> };
   onPad: (p: Pad) => void;
 }) {
   const [aberto, setAberto] = useState(true);
@@ -75,8 +86,8 @@ export function Bloco({
   const meus: Marcas = pad.marks ?? {};
 
   const { fatos, conjuntos } = useMemo(
-    () => apura(caso, log, mao, vistas, jogadores, meuAssento, nivel, avisos),
-    [caso, log, mao, vistas, jogadores, meuAssento, nivel, avisos],
+    () => apura(caso, log, mao, vistas, jogadores, meuAssento, nivel, avisos, semente),
+    [caso, log, mao, vistas, jogadores, meuAssento, nivel, avisos, semente],
   );
 
   /** Grava com folga: anotar é rápido, e não vale uma ida ao servidor por clique. */

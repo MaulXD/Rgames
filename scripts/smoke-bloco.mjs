@@ -35,6 +35,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
+import { comRede } from "./rede.mjs";
 import {
   ENVELOPE,
   apura,
@@ -56,7 +57,7 @@ const ok = (c, m) => {
    passaria a medir a minha memória. */
 const conn = new URL(process.env.POSTGRES_URL_NON_POOLING);
 conn.searchParams.set("uselibpqcompat", "true");
-const db = new pg.Pool({ connectionString: conn.toString(), max: 2, keepAlive: true });
+const db = comRede(new pg.Pool({ connectionString: conn.toString(), max: 2, keepAlive: true }));
 
 const caso = (
   await db.query("select data from public.game_themes where id = 'solar-das-acacias'")
@@ -444,6 +445,139 @@ ok(
   ciclo.join(" → ") === "x → check → duvida → vazio → x",
   `o ciclo da marca fecha e recomeça: ${ciclo.join(" → ")}`,
 );
+
+/* ══════════════════════════════════════════════════════════════════════════
+   O TETO DO REGISTRO, E O QUE O CADERNO ESQUECE POR CAUSA DELE
+
+   `dossie_log` guarda as SESSENTA linhas mais novas. O teto existe por um bom
+   motivo — o registro viaja inteiro pelo Realtime a cada jogada, e um registro
+   sem teto vira quilobytes por ação num celular.
+
+   Só que `apura` deriva os fatos do REGISTRO, do zero, a cada renderização. Uma
+   partida de verdade deste banco chegou a `seq` 281 com sessenta linhas
+   guardadas: duzentas e vinte e uma linhas caíram, e com elas todo "fulano não
+   tem nenhuma das três" que elas provavam.
+
+   A MÁQUINA NÃO ESQUECE. `dossie_deduz` é incremental: guarda `dedu` no estado
+   privado e só lê as linhas depois do último `visto`. Quer dizer que numa
+   partida longa a máquina segue com o caderno cheio e a pessoa que joga com o
+   bloco assistido volta a ter um caderno vazio — que é exatamente a assimetria
+   que o PRD 03 diz não querer.
+
+   Este teste mede a perda. Ele NÃO é uma prova de bug de `apura`: `apura` faz
+   certo o que lhe pedem. A pergunta é se pedir isso a ela é o suficiente.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+{
+  const TETO = 60;
+
+  /* Uma partida comprida: cada rodada é palpite, três passadas e um andar.
+     Cinco linhas por rodada, vinte rodadas — cem linhas, e o teto corta em
+     sessenta, que são as doze últimas rodadas.
+
+     E OS PALPITES SÃO COMO NUMA PARTIDA DE VERDADE: no começo a mesa VASCULHA,
+     cada palpite numa carta nova; no fim ela INSISTE nos poucos candidatos que
+     sobraram. A primeira versão deste teste sorteava trios ciclando por resto
+     de divisão, e as doze rodadas finais repetiam todas as cartas das oito
+     primeiras — o corte não custava nada e o teste dizia que estava tudo bem.
+
+     Era o teste medindo a própria fixture. Um registro em que as linhas velhas
+     não provam nada que as novas não provem é um registro que pode ser cortado
+     à vontade, e não é assim que uma partida se comporta. */
+  const inteiro = [];
+  let seq = 0;
+  for (let r = 0; r < 20; r++) {
+    const trio =
+      r < 8
+        ? [S[1 + (r % 5)], O[1 + ((r + 2) % 5)], L[1 + r]]
+        : [S[1], O[1], L[1]];
+    inteiro.push({ seq: ++seq, type: "suggest", seat: 0, guess: trio });
+    inteiro.push({ seq: ++seq, type: "pass", seat: 1 });
+    inteiro.push({ seq: ++seq, type: "pass", seat: 2 });
+    inteiro.push({ seq: ++seq, type: "no_refute", guess: trio });
+    inteiro.push({ seq: ++seq, type: "move", seat: 0, room: L[r % 9] });
+  }
+
+  /* O registro como ele chega ao cliente: as mais novas primeiro, cortado no
+     teto. É o que `dossie_log` faz. */
+  const cortado = [...inteiro].sort((a, b) => b.seq - a.seq).slice(0, TETO);
+  const completo = [...inteiro].sort((a, b) => b.seq - a.seq);
+
+  ok(
+    inteiro.length > TETO && cortado.length === TETO,
+    `a partida do teste produz ${inteiro.length} linhas e o registro guarda ${TETO}`,
+  );
+
+  const comTudo = apura(caso, completo, [], [], JOGADORES, 0, "assistido");
+  const comCorte = apura(caso, cortado, [], [], JOGADORES, 0, "assistido");
+
+  const riscadas = (f) =>
+    Object.entries(f).reduce(
+      (n, [, cols]) => n + Object.values(cols).filter((v) => v === "x").length,
+      0,
+    );
+
+  const inteiras = riscadas(comTudo.fatos);
+  const cortadas = riscadas(comCorte.fatos);
+
+  ok(
+    inteiras > cortadas,
+    inteiras > cortadas
+      ? `e o corte CUSTA: ${inteiras} marcas com o registro inteiro, ${cortadas} com o cortado` +
+        ` — ${inteiras - cortadas} fatos que a pessoa provou e o bloco esqueceu`
+      : `o corte não mudou nada (${inteiras} contra ${cortadas}) — o teste não está medindo o teto`,
+  );
+
+  /* E O QUE SE PERDE É FATO, e não palpite: cada uma dessas marcas saiu de uma
+     linha PÚBLICA que todo mundo na mesa viu acontecer. */
+  const sumiram = [];
+  for (const [carta, cols] of Object.entries(comTudo.fatos)) {
+    for (const [col, marca] of Object.entries(cols)) {
+      if (marca === "x" && comCorte.fatos[carta]?.[col] !== "x") sumiram.push(`${carta}/${col}`);
+    }
+  }
+  ok(
+    sumiram.length === inteiras - cortadas,
+    `e some justamente o mais antigo (${sumiram.slice(0, 3).join(", ")}${
+      sumiram.length > 3 ? ` e mais ${sumiram.length - 3}` : ""
+    })`,
+  );
+
+  /* ── E A SEMENTE DEVOLVE TUDO ────────────────────────────────────────────
+
+     `dossie_caderno` entrega o que o servidor já provou para este assento —
+     `fora` e `naoTem` —, e o cliente deriva o resto do registro fresco por
+     cima. É o mesmo desenho incremental que `dossie_deduz` usa desde sempre,
+     espelhado para quem joga.
+
+     Aqui a semente é montada a partir do registro INTEIRO, que é o que o
+     servidor teria acumulado linha a linha enquanto elas passavam. */
+  const doServidor = { fora: [], naoTem: {} };
+  for (const [carta, cols] of Object.entries(comTudo.fatos)) {
+    for (const [col, marca] of Object.entries(cols)) {
+      if (marca !== "x") continue;
+      if (col === ENVELOPE) doServidor.fora.push(carta);
+      else (doServidor.naoTem[col] ??= []).push(carta);
+    }
+  }
+
+  const semeado = apura(caso, cortado, [], [], JOGADORES, 0, "assistido", [], doServidor);
+  ok(
+    riscadas(semeado.fatos) === inteiras,
+    riscadas(semeado.fatos) === inteiras
+      ? `e com a semente do servidor o bloco volta a ter as ${inteiras} — o teto do registro deixa de custar`
+      : `a semente não devolveu tudo: ${riscadas(semeado.fatos)} de ${inteiras}`,
+  );
+
+  /* E ELA NÃO INVENTA NADA. Semear é lembrar, não adivinhar: sem registro
+     nenhum, o bloco tem exatamente o que a semente trouxe, e nem uma marca a
+     mais. */
+  const soSemente = apura(caso, [], [], [], JOGADORES, 0, "assistido", [], doServidor);
+  ok(
+    riscadas(soSemente.fatos) === inteiras,
+    `e sem registro nenhum ela sozinha dá as mesmas ${riscadas(soSemente.fatos)} — semear é lembrar, não adivinhar`,
+  );
+}
 
 console.log(falhas === 0 ? "\nTudo passou." : `\n${falhas} falha(s).`);
 process.exit(falhas === 0 ? 0 : 1);

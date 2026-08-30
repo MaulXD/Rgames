@@ -41,6 +41,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
+import { comRede } from "./rede.mjs";
 import {
   arquivosDeCss,
   compoe,
@@ -62,7 +63,7 @@ const ok = (c, m) => {
 
 const conn = new URL(process.env.POSTGRES_URL_NON_POOLING);
 conn.searchParams.set("uselibpqcompat", "true");
-const db = new pg.Pool({ connectionString: conn.toString(), max: 2, keepAlive: true });
+const db = comRede(new pg.Pool({ connectionString: conn.toString(), max: 2, keepAlive: true }));
 
 /**
  * Monta um componente e confere que ele desenhou o que devia.

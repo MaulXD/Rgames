@@ -479,6 +479,28 @@ Só entra em "Regras da casa → Modo Avançado".
 > `dossie_deduz` no servidor leem os mesmos avisos e o mesmo `interroga_nada` — sem isso, quem
 > joga com o bloco assistido ficaria abaixo da máquina, riscando à mão o que ela risca sozinha.
 >
+> **E O CADERNO NÃO PODE ESQUECER** — migração 0121. `dossie_log` guarda as sessenta linhas mais
+> novas, e o teto tem um bom motivo: o registro viaja inteiro pelo Realtime a cada jogada. Só que
+> `apura`, o bloco assistido de quem joga, deriva do registro DO ZERO a cada renderização — e uma
+> partida deste banco chegou a `seq` **281** com sessenta linhas guardadas. Duzentas e vinte e uma
+> caíram, e com elas todo *"fulano não tem nenhuma das três"* que elas provavam.
+>
+> Medido em `npm run smoke:bloco`, numa partida de cem linhas: **54 marcas com o registro inteiro,
+> 9 com o cortado.** Quarenta e cinco fatos que a pessoa viu acontecer, provou, e o bloco esqueceu.
+>
+> **E a máquina não esquece nenhum.** `dossie_deduz` é incremental desde sempre: guarda `dedu` no
+> estado privado e lê só as linhas depois do último `visto`. Quer dizer que numa partida longa a
+> máquina segue com o caderno cheio e a pessoa volta a ter um caderno quase vazio — a assimetria
+> que este PRD diz não querer, acontecendo ao contrário do que o texto imagina: não por o bloco ser
+> fraco, mas por ele ser AMNÉSICO.
+>
+> O conserto é dar à pessoa o mesmo caderno, e não um segundo motor. `dossie_caderno` devolve o que
+> o servidor já provou para o assento de quem chama — e para mais ninguém: ele não recebe assento,
+> lê de `auth.uid()`, porque caderno alheio é literalmente a mão dos outros deduzida. **O cliente
+> continua derivando:** substituir `apura` custaria uma ida e volta por linha do registro, e o bloco
+> se atualizar depois do resto da tela seria pior que ele esquecer. O que chega do servidor é
+> SEMENTE — o passado que não cabe mais no registro.
+>
 > **E O ÁLIBI MENTE, ENTÃO O CADERNO NÃO PODE ACREDITAR** — migração 0117. A carta existe para uma
 > coisa só: não refutar TENDO a carta. O servidor registra o álibi e, logo depois, um `pass`
 > normal — e o `pass` diz "não tenho nenhuma das três", que naquele caso é falso. Acreditar nele

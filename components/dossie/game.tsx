@@ -850,11 +850,11 @@ export function DossieGame({
       {/* ── minha mão ─────────────────────────────────────────────────── */}
       <div className="panel dossie-mao">
         <p className="eyebrow">Sua mão · {priv.hand.length} cartas</p>
-        <div className="mao">
+        <div className="mao-caso">
           {priv.hand.map((c, i) => (
             <span
               key={c}
-              className="carta"
+              className="carta-caso"
               style={{ ["--gir" as string]: `${(i - (priv.hand.length - 1) / 2) * 3.2}deg` }}
             >
               {nomeDaCarta(caso, c)}
@@ -864,9 +864,9 @@ export function DossieGame({
         {priv.seen.length > 0 && (
           <>
             <p className="eyebrow mt-4">Mostraram para você</p>
-            <div className="mao">
+            <div className="mao-caso">
               {priv.seen.map((s, i) => (
-                <span key={`${s.card}-${i}`} className="carta carta-vista">
+                <span key={`${s.card}-${i}`} className="carta-caso carta-vista">
                   {nomeDaCarta(caso, s.card)}
                   <em>
                     {s.from === null

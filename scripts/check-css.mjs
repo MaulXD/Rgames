@@ -38,6 +38,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { partesDoSeletor } from "./cores.mjs";
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -339,6 +340,66 @@ if (fracos.length === 0) {
   );
 }
 
+/* ── e duas folhas pintam a mesma classe? ────────────────────────────────────
+
+   AS SEIS FOLHAS DE ESTILO SÃO GLOBAIS. `app/layout.tsx` importa todas as seis
+   na raiz, então `.carta` do Domínio pinta a carta do Dossiê, e quem carrega
+   depois ganha — sem erro, sem aviso, sem nada na tela dizendo por quê. A ordem
+   do `import` decide o desenho de um jogo que nem foi aberto.
+
+   ISSO NÃO É TEORIA. Quatro classes colidiam quando esta varredura foi escrita,
+   e o estrago era visível em todas:
+
+     .mapa   o `min-width: 680px` do mapa do Domínio caía na planta baixa do
+             Dossiê — rolagem lateral em TODO celular, num projeto que é
+             mobile-first por decisão
+     .carta  a carta do Domínio tem 7,2rem de largura fixa; a do Dossiê é um
+             leque de cartas inclinadas. O leque virava uma fila de cartões
+     .peao   o peão da Metrópole é um disco de 13px; o do Dossiê é um avatar de
+             28px. O avatar era espremido no disco
+     .mao    a mão do Domínio tem recheio de painel; a do Dossiê não devia ter
+
+   Nenhuma delas apareceria numa auditoria de contraste, de nome acessível ou de
+   alvo de toque, e nenhuma apareceria no `typecheck`. Elas só aparecem olhando,
+   ou perguntando isto.
+
+   O que a pergunta cobra: uma classe pode ser pintada SOLTA — sem exigir um
+   ancestral — em um arquivo só. Refinar em contexto (`.acao-botoes .btn`) é
+   como o projeto compartilha `.btn`, `.dim` e `.eyebrow` de propósito, e
+   continua liberado: quem escreve `.leilao .eyebrow` está dizendo em que
+   pedaço da tela aquilo vale. */
+
+const soltaEm = new Map();
+for (const f of arquivosCss) {
+  const texto = readFileSync(join(cssDir, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+  for (const m of texto.matchAll(/([^{}]+)\{[^{}]*\}/g)) {
+    const cabeca = m[1].trim().replace(/\s+/g, " ");
+    if (cabeca.startsWith("@") || !cabeca) continue;
+    for (const um of cabeca.split(",")) {
+      const partes = partesDoSeletor(um);
+      if (!partes || partes.length !== 1) continue;
+      for (const c of partes[0].parte.classes) {
+        if (!soltaEm.has(c)) soltaEm.set(c, new Set());
+        soltaEm.get(c).add(f);
+      }
+    }
+  }
+}
+
+const disputadas = [...soltaEm].filter(([, arquivos]) => arquivos.size > 1);
+console.log(`  ${soltaEm.size} classe(s) pintadas sem exigir contexto, nas ${arquivosCss.length} folhas`);
+if (disputadas.length === 0) {
+  console.log("  ok      e cada uma é pintada solta por uma folha só — nenhum jogo desenha o outro\n");
+} else {
+  for (const [c, arquivos] of disputadas) {
+    console.error(`  FALHA   .${c} é pintada solta em ${[...arquivos].join(" e ")}`);
+  }
+  console.error(
+    `\n  ${disputadas.length} classe(s) disputadas. As seis folhas são globais: quem carrega` +
+      " depois ganha, e o jogo que perde nem sabe.\n",
+  );
+}
+
 /* ── e o dedo alcança? ───────────────────────────────────────────────────────
 
    Este projeto é MOBILE-FIRST por decisão, e alvo pequeno é o defeito de
@@ -573,6 +634,7 @@ if (gruposColididos.length === 0) {
 }
 
 process.exit(
+  disputadas.length === 0 &&
   orfas.length === 0 &&
   anonimos.length === 0 &&
   fracos.length === 0 &&

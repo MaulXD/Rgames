@@ -239,15 +239,20 @@ function Quadro({
           {peoes.map((p) => (
             <span
               key={p.seat}
-              className="peao"
+              className="peao-quadro"
               /* `?? "grafite"` como em todo outro lugar que lê cor de peão.
                  Esta linha era a única sem a rede, e a diferença é grande: um
                  peão sem cor é um peão cinza em qualquer outra tela e era o
                  TABULEIRO INTEIRO quebrado nesta. Cor é aparência; aparência
                  faltando não derruba tela. */
+              /* E A TINTA VEM DA MESMA COR. O `.peao` pintava o número de
+                 branco, e branco não passa em esmalte nenhum da paleta — no
+                 turquesa dá 1,79:1. Cada cor já traz o seu `ink` para isto, e
+                 a borda logo abaixo já usava. */
               style={{
                 background: COLORS[p.cor ?? "grafite"].enamel,
                 borderColor: COLORS[p.cor ?? "grafite"].ink,
+                color: COLORS[p.cor ?? "grafite"].ink,
               }}
               data-preso={p.preso}
               title={p.nome}

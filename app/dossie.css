@@ -203,7 +203,7 @@
 
 /* ── planta baixa ──────────────────────────────────────────────────────── */
 
-.mapa {
+.planta {
   position: relative;
   padding: clamp(0.6rem, 2.4vw, 1rem);
   border: 3px solid var(--ink);
@@ -212,18 +212,18 @@
   box-shadow: 0 6px 0 #0a1e2c, var(--shadow-rest);
 }
 
-.mapa-grade {
+.planta-grade {
   display: grid;
   gap: clamp(0.3rem, 1.4vw, 0.55rem);
   aspect-ratio: 1;
 }
 
-.mapa-passagens {
+.planta-passagens {
   position: absolute;
   inset: clamp(0.6rem, 2.4vw, 1rem);
   pointer-events: none;
 }
-.mapa-passagens line {
+.planta-passagens line {
   stroke: #d8a24a;
   stroke-width: 3;
   stroke-dasharray: 7 9;
@@ -287,10 +287,10 @@
 }
 
 /* o palpite está acontecendo aqui: spot nele, sombra no resto */
-.mapa[data-focando="true"] .lugar {
+.planta[data-focando="true"] .lugar {
   opacity: 0.42;
 }
-.mapa[data-focando="true"] .lugar[data-foco="true"] {
+.planta[data-focando="true"] .lugar[data-foco="true"] {
   opacity: 1;
   background: radial-gradient(120% 90% at 50% 0%, #6b4a1c, #2a3a52 72%);
   box-shadow:
@@ -416,11 +416,11 @@
 .desfecho-nota { margin-top: 1rem; font-style: italic; font-size: 0.92rem; color: var(--fg-dim); }
 
 /* mão em leque */
-.mao { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.7rem; }
-.carta { --gir: 0deg; display: inline-flex; flex-direction: column; gap: 0.15rem; padding: 0.5rem 0.8rem; border: 3px solid var(--ink); border-radius: 10px; background: #f6efdb; color: var(--ink); font-family: var(--font-archivo), sans-serif; font-size: 0.8rem; font-weight: 700; box-shadow: 0 4px 0 #b9a983; transform: rotate(var(--gir)); transition: transform var(--dur-fast) var(--ease-pop); }
-.carta:hover { transform: rotate(0deg) translateY(-4px); }
+.mao-caso { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.7rem; }
+.carta-caso { --gir: 0deg; display: inline-flex; flex-direction: column; gap: 0.15rem; padding: 0.5rem 0.8rem; border: 3px solid var(--ink); border-radius: 10px; background: #f6efdb; color: var(--ink); font-family: var(--font-archivo), sans-serif; font-size: 0.8rem; font-weight: 700; box-shadow: 0 4px 0 #b9a983; transform: rotate(var(--gir)); transition: transform var(--dur-fast) var(--ease-pop); }
+.carta-caso:hover { transform: rotate(0deg) translateY(-4px); }
 .carta-vista { background: #cfe0ee; box-shadow: 0 4px 0 #8ea7ba; }
-.carta em { font-style: normal; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.6; }
+.carta-caso em { font-style: normal; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.6; }
 
 /* log */
 .dossie-log ol { list-style: none; margin: 0.7rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; max-height: 15rem; overflow-y: auto; }
@@ -433,7 +433,7 @@
 .escolha { padding: 0.55rem 0.9rem; border: 3px solid var(--line); border-radius: 999px; background: rgb(7 28 26 / 0.5); color: var(--fg-mid); font-family: var(--font-archivo), sans-serif; font-size: 0.84rem; font-weight: 700; cursor: pointer; transition: transform var(--dur-fast) var(--ease-pop), border-color var(--dur-fast) var(--ease-out); }
 .escolha[data-on="true"] { border-color: var(--vivo-amarelo); background: var(--vivo-amarelo); color: var(--ink); transform: translateY(-2px); }
 
-@media (prefers-reduced-motion: reduce) { .carta { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .carta-caso { transition: none; } }
 
 /* ── Cartas de Pista ───────────────────────────────────────────────────────
    Nem carta de baralho nem botão: uma FICHA, com o efeito escrito por extenso.

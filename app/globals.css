@@ -37,6 +37,11 @@
   --vivo-azul: #2e8cff;
   --vivo-roxo: #b25cff;
   --vivo-rosa: #ff6fa5;
+  /* A MESMA ROSA, CLAREADA PARA SER TINTA. A paleta viva foi escolhida para
+     PREENCHER, e preencher e escrever pedem coisas diferentes: sobre o feltro
+     claro dos painéis a rosa de preenchimento dá 4,02:1, logo abaixo do piso
+     da WCAG. Esta dá 4,64:1 e é a mesma cor. */
+  --vivo-rosa-tinta: #ff86b3;
 
   /* sombras sólidas de cada viva (o "por baixo" do botão de brinquedo) */
   --sob-amarelo: #c58f00;
@@ -53,7 +58,11 @@
   --fg: #fdf7e8;
   --fg-mid: #e2dcc8;
   --fg-dim: #a8c4b6;
-  --fg-faint: #7ba392;
+  /* CLAREADA de #7ba392 quando a auditoria da árvore mediu onde ela de fato
+     cai: sobre o feltro escuro dava 4,71:1 e passava, mas quase todo uso dela
+     está DENTRO de um painel, que é mais claro — e ali dava 3,74:1. A cor foi
+     escolhida contra o fundo errado. */
+  --fg-faint: #93b4a6;
   --accent: var(--vivo-amarelo);
 
   /* sombras: contato curto + ambiente longo */

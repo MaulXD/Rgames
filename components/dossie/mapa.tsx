@@ -57,9 +57,9 @@ export function Mapa({
   const rows = Math.max(...caso.rooms.map((r) => r.row)) + 1;
 
   return (
-    <div className="mapa" data-focando={!!destaque}>
+    <div className="planta" data-focando={!!destaque}>
       <div
-        className="mapa-grade"
+        className="planta-grade"
         style={{
           gridTemplateColumns: `repeat(${cols}, 1fr)`,
           gridTemplateRows: `repeat(${rows}, 1fr)`,
@@ -140,7 +140,7 @@ export function Mapa({
       </div>
 
       {/* as passagens secretas, desenhadas por cima */}
-      <svg className="mapa-passagens" viewBox={`0 0 ${cols * 100} ${rows * 100}`} aria-hidden>
+      <svg className="planta-passagens" viewBox={`0 0 ${cols * 100} ${rows * 100}`} aria-hidden>
         {caso.secretPassages.map(([a, b], i) => {
           const ra = caso.rooms.find((r) => r.id === a);
           const rb = caso.rooms.find((r) => r.id === b);

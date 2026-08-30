@@ -23,6 +23,11 @@
 
 :root {
   --met-creme: #f6efdf;
+  /* A MESMA TERRACOTA, ESCURECIDA PARA SER TINTA. Sobre o creme do tabuleiro a
+     de preenchimento dá 3,06:1, e o número do quadro tem 7,7px — o texto mais
+     apertado do projeto inteiro, e justamente onde está o preço que a pessoa
+     precisa ler antes de comprar. Esta dá 4,67:1. */
+  --met-terra-tinta: #b24b23;
   --met-papel: #efe4cc;
   --met-tinta: #23201c;
   --met-terra: #d9683c;
@@ -307,7 +312,7 @@
   font-variant-numeric: tabular-nums;
 }
 .quadro[data-dono="true"] .quadro-num {
-  color: var(--met-terra);
+  color: var(--met-terra-tinta);
 }
 
 .quadro-obras {
@@ -396,21 +401,27 @@
   max-width: 70%;
   justify-content: flex-end;
 }
-.peao {
+.peao-quadro {
   display: grid;
   place-items: center;
   width: 13px;
   height: 13px;
   border: 1.5px solid;
   border-radius: 50%;
-  color: #fff;
+  /* A COR VEM DE QUEM É O PEÃO, pelo `style=`, e não daqui.
+
+     Aqui era `#fff`, e branco não passa em nenhum dos dez esmaltes da paleta —
+     no turquesa dava 1,79:1, que é número de texto invisível. Cada cor da
+     paleta já carrega o seu `ink`, um quase-preto do próprio matiz feito para
+     escrever em cima dela; a borda do peão já usava, o número não. */
+  color: var(--ink);
   font-family: var(--font-archivo), sans-serif;
   font-size: 0.46rem;
   font-weight: 800;
   line-height: 1;
   box-shadow: 0 1px 0 rgb(0 0 0 / 0.3);
 }
-.peao[data-preso="true"] {
+.peao-quadro[data-preso="true"] {
   opacity: 0.55;
   filter: grayscale(0.5);
 }
@@ -646,7 +657,7 @@
   color: var(--vivo-limao);
 }
 .fluxo-menos {
-  color: var(--vivo-rosa);
+  color: var(--vivo-rosa-tinta);
 }
 .fluxo-saldo {
   margin-top: 0.35rem;
@@ -1140,7 +1151,7 @@
   color: var(--vivo-limao);
 }
 .proposta-quer {
-  color: var(--vivo-rosa);
+  color: var(--vivo-rosa-tinta);
 }
 .proposta-acoes {
   display: flex;
@@ -1818,14 +1829,14 @@
 
 /* o peão em movimento: uma transição curta entre casas dá continuidade ao
    passo sem borrar a leitura de onde ele está */
-.peao {
+.peao-quadro {
   transition: transform 90ms var(--ease-out);
 }
 .quadro-peoes {
   transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .peao {
+  .peao-quadro {
     transition: none;
   }
 }

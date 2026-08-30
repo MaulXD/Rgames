@@ -41,6 +41,13 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
+import {
+  arquivosDeCss,
+  declaradas,
+  razao,
+  regrasDeCor,
+  tokensDeCss,
+} from "./cores.mjs";
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
 config({ path: join(raiz, ".env.local"), quiet: true });
@@ -661,19 +668,76 @@ ok(
 
 console.log("\n  ── e o HTML que saiu ──\n");
 
-/** Percorre as tags de um HTML, em ordem, com a profundidade de cada uma. */
+/** Percorre as tags de um HTML, em ordem, dizendo onde cada uma começa e acaba. */
 function* tags(html) {
   for (const m of html.matchAll(/<(\/?)([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/g)) {
-    yield { fecha: !!m[1], nome: m[2].toLowerCase(), attrs: m[3], vazia: !!m[4], bruto: m[0] };
+    yield {
+      fecha: !!m[1],
+      nome: m[2].toLowerCase(),
+      attrs: m[3],
+      vazia: !!m[4],
+      bruto: m[0],
+      inicio: m.index,
+      fim: m.index + m[0].length,
+    };
   }
 }
 
+/* ── O QUE UM LEITOR DE TELA LERIA DENTRO DE UM CONTROLE ─────────────────────
+
+   Não é "o texto entre as tags". `aria-hidden` existe justamente para tirar
+   coisa da árvore de acessibilidade, e este projeto usa: os três pontinhos de
+   "pensando", os ícones decorativos. Um botão cujo único conteúdo é
+   `aria-hidden` tem texto na tela e NENHUM nome — que é o pior caso, porque
+   quem enxerga jura que está tudo certo.
+
+   Então a leitura pula esses pedaços, e recolhe o `alt` das imagens que
+   sobraram. É a mesma conta que o navegador faz, na parte dela que dá para
+   fazer sem navegador. */
+function textoVisivel(frag) {
+  let saida = "";
+  let posicao = 0;
+  let escondido = 0;
+  const pilha = [];
+
+  for (const t of tags(frag)) {
+    if (!escondido) saida += frag.slice(posicao, t.inicio);
+    posicao = t.fim;
+
+    if (t.fecha) {
+      const i = pilha.findLastIndex((x) => x.nome === t.nome);
+      if (i >= 0) {
+        for (const x of pilha.slice(i)) if (x.escondia) escondido--;
+        pilha.length = i;
+      }
+      continue;
+    }
+
+    const esconde = /aria-hidden="true"/.test(t.attrs);
+    if (!esconde && !escondido) {
+      const alt = /(?:^|\s)alt="([^"]*)"/.exec(t.attrs)?.[1];
+      if (alt) saida += " " + alt;
+    }
+    if (t.vazia || VAZIAS.has(t.nome)) continue;
+    if (esconde) escondido++;
+    pilha.push({ nome: t.nome, escondia: esconde });
+  }
+
+  if (!escondido) saida += frag.slice(posicao);
+  return saida.replace(/&[a-z]+;|&#\d+;/gi, " ").replace(/\s+/g, " ").trim();
+}
+
 const INTERATIVAS = new Set(["button", "a", "input", "select", "textarea"]);
+/* Os dois que tiram o nome do que têm DENTRO. `input`, `select` e `textarea`
+   são nomeados de fora, por `<label>` — e isso já é conferido logo abaixo e em
+   `npm run css`. */
+const NOMEAVEIS = new Set(["button", "a"]);
 const VAZIAS = new Set(["input", "img", "br", "hr", "path", "circle", "rect", "line", "polyline", "use", "stop"]);
 
 const aninhadas = [];
 const semNome = [];
 const idsRepetidos = [];
+const botoesMudos = [];
 
 for (const { nome: tela, html } of TUDO_QUE_FOI_DESENHADO) {
   const pilha = [];
@@ -696,13 +760,23 @@ for (const { nome: tela, html } of TUDO_QUE_FOI_DESENHADO) {
       if (i >= 0) {
         const fechada = pilha[i];
         pilha.length = i;
-        /* ── controle sem nome ────────────────────────────────────────────
+        /* ── BOTÃO MUDO ───────────────────────────────────────────────────
            Um botão só de ícone, sem `aria-label`, é um botão que o leitor de
-           tela anuncia como "botão" e mais nada. Aqui dá para conferir o texto
-           REAL que ele recebeu — inclusive o que veio de um dado. */
-        if (INTERATIVAS.has(fechada.nome) && !fechada.temNome) {
-          const dentro = html.slice(fechada.fim, t.inicio ?? html.length);
-          void dentro;
+           tela anuncia como "botão" e mais nada.
+
+           ESTE GUARDA ESTAVA ESCRITO E NÃO LIGADO. O comentário prometia a
+           conferência, o código recortava o miolo e jogava fora com um `void`,
+           e a linha de saída da auditoria falava só dos campos de digitação —
+           então nada acusava. É exatamente o defeito que esta suíte existe para
+           pegar, na própria suíte.
+
+           Agora o miolo é lido de verdade, e lido como um leitor de tela leria:
+           `aria-hidden` não conta. */
+        if (NOMEAVEIS.has(fechada.nome) && !fechada.temNome) {
+          const dentro = html.slice(fechada.fim, t.inicio);
+          if (textoVisivel(dentro) === "") {
+            botoesMudos.push(`${tela}: <${fechada.nome}> sem nome nenhum`);
+          }
         }
       }
       continue;
@@ -725,7 +799,7 @@ for (const { nome: tela, html } of TUDO_QUE_FOI_DESENHADO) {
       if (pai) aninhadas.push(`${tela}: <${t.nome}> dentro de <${pai.nome}>`);
     }
 
-    if (!t.vazia && !VAZIAS.has(t.nome)) pilha.push({ nome: t.nome, temNome });
+    if (!t.vazia && !VAZIAS.has(t.nome)) pilha.push({ nome: t.nome, temNome, fim: t.fim });
     else if (t.nome === "input" && !temNome && !id) {
       /* O `<label>` em volta também dá nome, e é a forma mais comum aqui —
          "dinheiro", "cartas de saída". `npm run css` já sabia disso; esta
@@ -759,6 +833,169 @@ ok(
   semNome.length === 0
     ? "e todo campo de digitação que saiu no HTML tem nome"
     : `CAMPO SEM NOME NO HTML: ${semNome.slice(0, 4).join(" · ")}`,
+);
+
+ok(
+  botoesMudos.length === 0,
+  botoesMudos.length === 0
+    ? "e todo botão e todo link que saiu no HTML tem nome — nenhum é só ícone"
+    : `BOTÃO MUDO: ${botoesMudos.slice(0, 5).join(" · ")}`,
+);
+
+/* ── E O GUARDA CONSEGUE REPROVAR ──────────────────────────────────────────
+
+   A linha acima passou na primeira vez que foi ligada, e isso por si só não
+   prova nada: ela também "passava" antes, quando o código recortava o miolo do
+   botão e jogava fora com um `void`. Um guarda que nunca viu um caso ruim é
+   indistinguível de um guarda quebrado.
+
+   Então ele lê quatro pedaços de HTML escritos à mão, dois que têm nome e dois
+   que não têm, e a suíte cobra as quatro respostas. Se alguém quebrar
+   `textoVisivel` amanhã, reprova aqui — e não daqui a seis meses, calada. */
+const PROVAS = [
+  ["<span>Comprar</span>", "Comprar", true],
+  ['<span aria-hidden="true">x</span>', "", false],
+  ['<span aria-hidden="true">x</span> Fechar', "Fechar", true],
+  ['<img alt="mapa de Vantara" />', "mapa de Vantara", true],
+];
+const erradas = PROVAS.filter(([frag, esperado]) => textoVisivel(frag) !== esperado);
+ok(
+  erradas.length === 0,
+  erradas.length === 0
+    ? "e o guarda sabe reprovar: dos quatro miolos de prova, os dois mudos são vistos como mudos"
+    : `O GUARDA DO BOTÃO MUDO ESTÁ CEGO: ${erradas
+        .map(([f, e]) => `"${f}" devia dar "${e}" e deu "${textoVisivel(f)}"`)
+        .join(" · ")}`,
+);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   E A COR QUE VEM DO PAI
+
+   `npm run css` audita contraste no CÓDIGO-FONTE, e diz, na própria saída, o
+   que não alcança: "cor herdada de um pai". Não é detalhe — é o caso mais
+   comum de todos. Numa folha de estilo de verdade quase nenhum elemento pinta
+   texto e fundo ao mesmo tempo: o painel pinta o fundo, a etiqueta lá dentro
+   pinta o texto, e o par que a pessoa enxerga NÃO EXISTE EM REGRA NENHUMA. Ele
+   nasce da árvore.
+
+   Agora a árvore existe. Estas telas são HTML de verdade, com as classes de
+   verdade, montadas com o conteúdo publicado — então dá para fazer o que o
+   navegador faz: para cada pedaço de texto, achar de quem ele herdou a cor e
+   sobre qual fundo ele caiu, subindo pelos pais até encontrar quem pintou.
+
+   O piso é o mesmo da WCAG AA: 4.5:1, ou 3:1 quando a regra que pintou aquele
+   texto também o declarou grande.
+
+   O QUE ELA CONTINUA NÃO VENDO, e a contagem sai junto: fundo com alfa,
+   gradiente ou imagem, seletor com pseudo-classe, e o texto que só aparece
+   depois de um clique. Cobertura sem número ao lado é propaganda.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const cssDir = join(raiz, "app");
+const arquivosCss = arquivosDeCss(cssDir);
+const tokensCss = tokensDeCss(cssDir, arquivosCss);
+const regrasCor = regrasDeCor(cssDir, arquivosCss);
+
+/* O CHÃO. Os componentes são montados soltos, sem a página em volta, então a
+   raiz da árvore é sintética: um `body` com as classes que o layout do projeto
+   põe nele. Sem isso, todo primeiro elemento ficaria sem fundo e a auditoria
+   pularia a tela inteira. */
+const CHAO = { tag: "body", classes: new Set(), id: null, attrs: {} };
+
+const SEM_TEXTO = new Set(["script", "style", "svg", "title", "head", "path", "defs"]);
+
+const fracos = [];
+let lidos = 0;
+let semFundo = 0;
+
+for (const { nome: tela, html } of TUDO_QUE_FOI_DESENHADO) {
+  const pilha = [CHAO];
+  const efetivo = [{ cor: null, fundo: null, piso: 4.5 }];
+  let posicao = 0;
+  let mudo = 0;
+  let fechado = 0;
+
+  const olhaTexto = (bruto) => {
+    if (mudo || fechado) return;
+    const texto = bruto.replace(/&[a-z]+;|&#\d+;/gi, " ").replace(/\s+/g, " ").trim();
+    if (!texto) return;
+    const at = efetivo[efetivo.length - 1];
+    if (!at.cor || !at.fundo) {
+      semFundo++;
+      return;
+    }
+    lidos++;
+    const r = razao(at.cor, at.fundo);
+    if (r < at.piso) {
+      const el = pilha[pilha.length - 1];
+      const onde = [el.tag, ...el.classes].join(".");
+      fracos.push(`${tela} · ${onde}: "${texto.slice(0, 24)}" ${r.toFixed(2)}:1 (piso ${at.piso})`);
+    }
+  };
+
+  for (const t of tags(html)) {
+    olhaTexto(html.slice(posicao, t.inicio));
+    posicao = t.fim;
+
+    if (t.fecha) {
+      const i = pilha.findLastIndex((x) => x.tag === t.nome);
+      if (i >= 1) {
+        for (const x of pilha.slice(i)) {
+          if (x.mudo) mudo--;
+          if (x.fechado) fechado--;
+        }
+        pilha.length = i;
+        efetivo.length = i;
+      }
+      continue;
+    }
+
+    const classes = new Set(
+      (/(?:^|\s)class="([^"]*)"/.exec(t.attrs)?.[1] ?? "").split(/\s+/).filter(Boolean),
+    );
+    const attrs = {};
+    for (const a of t.attrs.matchAll(/([\w-]+)="([^"]*)"/g)) attrs[a[1]] = a[2];
+    const el = {
+      tag: t.nome,
+      classes,
+      id: attrs.id ?? null,
+      attrs,
+      mudo: attrs["aria-hidden"] === "true",
+      fechado: SEM_TEXTO.has(t.nome),
+    };
+
+    if (t.vazia || VAZIAS.has(t.nome)) continue;
+    pilha.push(el);
+    if (el.mudo) mudo++;
+    if (el.fechado) fechado++;
+
+    const pai = efetivo[efetivo.length - 1];
+    const d = declaradas(regrasCor, pilha, tokensCss);
+    /* HERDA A COR; O FUNDO NÃO SE HERDA — ELE SE ATRAVESSA. Um elemento sem
+       fundo é transparente, e o que aparece atrás dele é o fundo do pai. Dá na
+       mesma conta, e a diferença de nome importa: fundo com alfa não é
+       transparente, é uma mistura que este módulo se recusa a chutar, e por
+       isso ele vira `null` e a tela some da contagem em vez de virar um número
+       inventado. */
+    const cor = d.cor ? d.cor.rgb : pai.cor;
+    const fundo = d.fundo ? d.fundo.rgb : pai.fundo;
+    const px = d.cor?.regra?.px ?? null;
+    const negrito = d.cor?.regra?.negrito ?? false;
+    const grande = px !== null && (px >= 24 || (px >= 18.66 && negrito));
+    efetivo.push({ cor, fundo, piso: grande ? 3 : 4.5 });
+  }
+  olhaTexto(html.slice(posicao));
+}
+
+console.log(
+  `  ${lidos} pedaço(s) de texto com cor E fundo resolvidos pela árvore` +
+    ` (${semFundo} sobre fundo que não dá para resolver)`,
+);
+ok(
+  fracos.length === 0,
+  fracos.length === 0
+    ? "e todo texto que saiu no HTML passa no piso da WCAG AA, com a cor que ele HERDOU"
+    : `TEXTO FRACO NA ÁRVORE: ${fracos.slice(0, 6).join(" | ")}`,
 );
 
 /* ── NADA ANIMA SÓ POR TER APARECIDO ────────────────────────────────────────

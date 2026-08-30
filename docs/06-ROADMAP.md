@@ -129,6 +129,7 @@ todas têm resposta calculável a partir do código:
 | | o que prova | o que achou |
 |---|---|---|
 | classe sem CSS | todo `className` do projeto tem estilo | 2, um deles no botão de ENTRAR NUMA SALA |
+| classe disputada | nenhuma classe é pintada solta por duas folhas | 4 — um jogo desenhando o outro |
 | campo sem nome | todo `<input>` tem nome acessível | 5 campos de cláusula da Metrópole |
 | contraste | toda regra que pinta texto e fundo passa no piso da WCAG AA | 6 pares |
 | alvo de toque | nenhum botão abaixo de 44px | 6 botões, de 36px a 42px |
@@ -181,6 +182,10 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | E o HTML que SAIU, auditado | ✅ três coisas que só o resultado revela: controle dentro de controle, `id` repetido, campo sem nome. Achou o `id` do avatar, que saía de um hash do bichinho — dois jogadores com o mesmo bicho colidiam |
 | A hachura das facções e dos grupos ganhou guarda | ✅ a ligação mora no CSS e a paleta no TypeScript, e nada obrigava as duas a andarem juntas. Uma cor nova sem trama volta a ser só cor, e nada acusa |
 | `npm run verifica` | ✅ as doze etapas num comando, com relatório. As cinco suítes em paralelo: **29,6 min → 12 a 19 min** (a variação é latência de rede, e ela é grande: a mesma suíte do Dossiê mediu 354s e 776s em rodadas seguidas) |
+| A cor que vem do PAI, medida | ✅ `npm run css` dizia, na própria saída, que não via cor herdada — e herança é o caso mais comum de todos: o painel pinta o fundo, a etiqueta pinta o texto, e o par que a pessoa enxerga não existe em regra nenhuma. Agora a árvore existe, e 960 pedaços de texto foram medidos como o navegador mede |
+| E ela achou cinco | ✅ o número do peão da Metrópole em BRANCO sobre o esmalte do jogador: 1,79:1 no turquesa. Mais o preço do quadro comprado (3,06:1, em 7,7px), duas contagens em `--fg-faint` escolhido contra o fundo errado, e o saldo negativo do fluxo de caixa |
+| **Quatro classes em que um jogo desenhava o outro** | ✅ as seis folhas de estilo são GLOBAIS, e quem carrega depois ganha. O `min-width: 680px` do mapa do Domínio caía na planta baixa do Dossiê — **rolagem lateral em todo celular**, num projeto mobile-first. Mais `.carta`, `.peao` e `.mao`. Nenhuma apareceria no typecheck, no lint ou em qualquer auditoria anterior |
+| O guarda do botão só de ícone estava escrito e não ligado | ✅ o comentário prometia a conferência, o código recortava o miolo do botão e jogava fora com um `void`, e a linha de saída falava só dos campos de digitação. Agora ele lê como um leitor de tela lê — `aria-hidden` não conta — e prova que sabe reprovar |
 | A mentira do Modo Assassino (§6.9 do PRD) | ✅ a metade social da variante: refutar com uma carta que não se tem, ou passar podendo. Armada de propósito, uma por partida, e INDISTINGUÍVEL — a suíte compara a linha honesta e a mentirosa campo a campo |
 | E o defeito que ela destravou | ✅ **zero candidatos não é conhecimento, é contradição**. A carta do envelope nunca entrava em `fora` numa partida honesta, então a máquina lia o elemento 1 de um vetor vazio e ninguém tinha motivo para desconfiar. A mentira alcança: mostrar a carta do envelope derruba a categoria inteira |
 | A Metrópole sozinha caiu de 9m46s para 5m17s | ✅ 300 sorteios de evento eram 300 idas e voltas ao Supabase para uma função PURA — 113 dos 586 segundos, e nenhum deles trabalho. `generate_series` faz o laço dentro do banco |

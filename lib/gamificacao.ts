@@ -11,6 +11,15 @@ export type Stats = {
   partidas?: number;
   vitorias?: number;
   palavras?: number;
+  /**
+   * Desafios diários fechados.
+   *
+   * `letreiro_diario_fechar` incrementava este contador desde que o desafio
+   * existe, e nenhuma tela o mostrava — número guardado que ninguém vê é peso
+   * morto com cara de funcionalidade. É a contagem de "eu joguei todo dia", que
+   * é justamente a coisa que o desafio diário existe para produzir.
+   */
+  diarios?: number;
   melhor?: { w: string; pts: number };
   /**
    * A palavra mais rara já achada, e o posto dela na lista de frequência de
@@ -174,6 +183,7 @@ export function parseStats(raw: unknown): Stats {
     partidas: Number(s.partidas ?? 0),
     vitorias: Number(s.vitorias ?? 0),
     palavras: Number(s.palavras ?? 0),
+    diarios: Number(s.diarios ?? 0),
     melhor: s.melhor,
     rara: s.rara,
     aproveita: s.aproveita,

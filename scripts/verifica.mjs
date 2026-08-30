@@ -32,7 +32,12 @@ import { spawn } from "node:child_process";
    falam com o Supabase e rodam em paralelo. */
 const RAPIDAS = [
   { nome: "typecheck", cmd: "typecheck", nota: "os tipos fecham" },
-  { nome: "lint", cmd: "lint", nota: "o estilo e as regras do React" },
+  /* `--max-warnings 0` no `package.json`: o lint reprovava só em ERRO, e um
+     aviso que nunca reprova é um aviso que ninguém conserta. Um import morto
+     atravessou dezessete verificações completas assim. Hoje o projeto está em
+     zero avisos, que é o único momento em que dá para fechar essa porta sem
+     antes limpar uma pilha. */
+  { nome: "lint", cmd: "lint", nota: "o estilo e as regras do React, aviso incluído" },
   { nome: "css", cmd: "css", nota: "classe com estilo, campo com nome, contraste, alvo de toque" },
   { nome: "pacotes", cmd: "smoke:pacotes", nota: "cliente e servidor têm o mesmo conteúdo" },
   { nome: "telas", cmd: "smoke:render", nota: "as telas montam com o conteúdo publicado" },

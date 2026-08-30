@@ -7,7 +7,6 @@ import { Bloco } from "@/components/dossie/bloco";
 import { Escolher } from "@/components/dossie/escolher";
 import { Pistas } from "@/components/dossie/pistas";
 import {
-  nomeDaPista,
   TIPOS,
   tipoDaCarta,
   type Aviso,

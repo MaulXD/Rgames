@@ -75,6 +75,18 @@ export function Conquistas() {
             <dt>Casos fechados</dt>
             <dd>{s.vitorias ?? 0}</dd>
           </div>
+          {/* OS DESAFIOS DIÁRIOS.
+
+              O contador existe desde que o desafio existe e nenhuma tela o
+              mostrava. Aparece só depois do primeiro, como o nêmesis: um zero
+              ao lado de "Partidas" e "Palavras achadas" faria a pessoa que
+              ainda não conhece o desafio achar que falhou nele. */}
+          {(s.diarios ?? 0) > 0 && (
+            <div className="numero">
+              <dt>Desafios diários</dt>
+              <dd>{s.diarios}</dd>
+            </div>
+          )}
           <div className="numero">
             <dt>Palavras achadas</dt>
             <dd>{s.palavras ?? 0}</dd>

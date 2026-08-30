@@ -24,7 +24,22 @@ type Ctx = {
   save: (name: string, avatar: AvatarSpec) => Promise<void>;
 };
 
-const SessionContext = createContext<Ctx | null>(null);
+/**
+ * EXPORTADO PARA UM CONSUMIDOR SÓ: `npm run smoke:render`.
+ *
+ * As telas de jogo têm um ramo inteiro que só existe QUANDO É A SUA VEZ — os
+ * botões de reforçar, atacar, comprar, construir, palpitar. É a metade da tela
+ * que as pessoas de fato apertam, e ela era invisível para a auditoria do HTML:
+ * a montagem não tem sessão, `minhaVez` é sempre falso, e o ramo nunca é
+ * desenhado.
+ *
+ * A suíte serve uma sessão fingida para o assento da vez e passa a ver essa
+ * metade. `SessionProvider` continua sendo o único caminho de produção — o que
+ * está exposto aqui é o contexto, não uma porta nova para dentro dele.
+ */
+export const SessionContext = createContext<Ctx | null>(null);
+
+export type SessionCtx = Ctx;
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<Status>("loading");

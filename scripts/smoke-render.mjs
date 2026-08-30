@@ -114,6 +114,7 @@ console.log("\nTELAS — elas montam com o conteúdo que está publicado?\n");
    DOSSIÊ — os quatro casos, e cada um nas três telas que leem o pacote
    ══════════════════════════════════════════════════════════════════════════ */
 
+const { SessionContext } = await import("@/components/session");
 const { Abertura } = await import("@/components/dossie/abertura");
 const { Mapa } = await import("@/components/dossie/mapa");
 const { Bloco } = await import("@/components/dossie/bloco");
@@ -542,7 +543,6 @@ for (const qual of ["vantara", "relampago"]) {
    cobertas como folhas, que é onde o conteúdo dele realmente entra.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const { SessionProvider } = await import("@/components/session");
 const { DominioGame } = await import("@/components/dominio/game");
 const { MetropoleGame } = await import("@/components/metropole/game");
 const { LetreiroGame } = await import("@/components/letreiro/game");
@@ -579,6 +579,9 @@ const AS_TELAS = [
     /* O registro da partida: prova que o ramo de fase chegou até o fim da tela,
        e não parou num estado vazio no meio. */
     contem: "turno",
+    /* As três do turno e o fim. Cada uma acende um painel de ações diferente, e
+       é ali que moram os botões que nenhuma folha desenha. */
+    fases: ["reforco", "ataque", "remanejo", "fim"],
   },
   {
     jogo: "metropole",
@@ -586,6 +589,10 @@ const AS_TELAS = [
     propNome: "assentos",
     extra: { onSair: nada },
     contem: "quadro",
+    /* `leilao` fica de fora: ela quer um `st.leilao` inteiro para desenhar, e
+       sintetizá-lo aqui seria inventar uma partida. O painel do leilão é
+       montado sozinho, com os dados dele, mais acima. */
+    fases: ["rolar", "acao", "fim"],
   },
   {
     jogo: "letreiro",
@@ -608,27 +615,93 @@ const AS_TELAS = [
        e não `.letreiro`; na rodada, quem está na tela é a lista das palavras
        de quem joga. Cada fase tem a sua prova. */
     contem: (st) => (st.phase === "reveal" ? "Conferência" : "Suas palavras"),
+    /* As duas do jogo, e são telas completamente diferentes: na revelação o
+       LetreiroGame delega para o Reveal, cuja raiz nem é `.letreiro`. */
+    fases: ["round", "reveal"],
   },
 ];
 
+/* ── E CADA TELA EM TODAS AS FASES QUE ELA TEM ──────────────────────────────
+
+   A partida encontrada no banco está numa fase, e é a fase em que a última
+   suíte deixou o jogo — quer dizer que o que esta montagem cobre depende de
+   qual linha o banco tinha naquela hora. Foi assim que a auditoria de contraste
+   achou o relógio do Letreiro numa rodada e a manchete da Metrópole na
+   seguinte: ela estava EXPLORANDO, uma tela por vez, e passando verde no meio.
+
+   Teste que depende do estado do banco não mede o código: mede a sorte — é o
+   mesmo defeito que fez o marcador do Letreiro ser um texto fixo, e a resposta
+   é a mesma. A fase é sobrescrita, uma montagem por fase, e o que sai é o mesmo
+   conjunto de telas em toda rodada.
+
+   AS FASES SÃO AS QUE NÃO PRECISAM DE ESTADO NOVO. `leilao` da Metrópole quer
+   um `st.leilao` inteiro para desenhar, e sintetizá-lo aqui seria inventar uma
+   partida — o painel do leilão já é montado sozinho, com os dados dele, mais
+   acima. Aqui o que se cobra é o RAMO POR FASE do contêiner, que é o pedaço que
+   nenhuma folha alcança. */
 for (const t of AS_TELAS) {
   const dados = await partidaDe(t.jogo, t.ondeMais ?? "m.status = 'running'");
   if (!dados) {
     ok(true, `${t.jogo}/tela inteira: nenhuma partida rodando no banco — nada a montar`);
     continue;
   }
-  monta(
-    `${t.jogo}/tela inteira (fase ${dados.match.public_state.phase ?? "—"})`,
-    SessionProvider,
-    {
-      children: createElement(t.componente, {
-        match: dados.match,
-        [t.propNome]: dados.assentos,
-        ...t.extra,
-      }),
-    },
-    typeof t.contem === "function" ? t.contem(dados.match.public_state) : t.contem,
-  );
+
+  const original = dados.match.public_state.phase ?? "—";
+  const fases = [...new Set([original, ...(t.fases ?? [])])];
+
+  /* ── É A SUA VEZ ────────────────────────────────────────────────────────
+     Metade de cada tela de jogo só existe quando é a sua vez: reforçar,
+     atacar, comprar, construir, palpitar, encerrar. É a metade que as pessoas
+     de fato APERTAM — e ela era invisível para as auditorias do HTML, porque a
+     montagem não tinha sessão e `minhaVez` era sempre falso.
+
+     A sessão fingida é do assento da vez. Não é trapaça: é a única maneira de
+     um teste sem navegador ver o botão que o navegador desenha. Nada aqui
+     chama rede — `renderToStaticMarkup` não roda efeito. */
+  const daVez = dados.assentos[dados.match.public_state.turnSeat ?? 0] ?? dados.assentos[0];
+  const sessao = {
+    status: "ready",
+    user: { id: daVez?.user_id ?? "00000000-0000-0000-0000-000000000000" },
+    profile: { display_name: daVez?.display_name ?? "Você", avatar: daVez?.avatar ?? null },
+    error: null,
+    save: async () => {},
+  };
+
+  for (const fase of fases) {
+    const estado = { ...dados.match.public_state, phase: fase };
+    /* O STATUS ANDA COM A FASE, senão a montagem forçada é incoerente e não
+       desenha nada. `acabou` é `phase === "fim" || status === "finished"`, e a
+       partida achada no banco quase sempre está encerrada — foi por isso que a
+       rodada do Letreiro saía byte a byte igual à revelação: com o status
+       encerrado, o contêiner delega para o Reveal em qualquer fase. */
+    const encerrada = fase === "fim" || fase === "reveal" || fase === "over";
+    const partida = {
+      ...dados.match,
+      status: encerrada ? "finished" : "running",
+      public_state: estado,
+    };
+    monta(
+      `${t.jogo}/tela inteira (fase ${fase}, é a sua vez)`,
+      SessionContext.Provider,
+      {
+        value: sessao,
+        children: createElement(t.componente, {
+          match: partida,
+          [t.propNome]: dados.assentos,
+          ...t.extra,
+        }),
+      },
+      /* O marcador é da fase ORIGINAL: as outras são montagens forçadas, e
+         cobrar delas o texto de uma partida de verdade seria cobrar de um
+         estado que ninguém montou. O que se quer delas é que MONTEM — e que o
+         que elas desenham passe nas auditorias do HTML. */
+      fase === original
+        ? typeof t.contem === "function"
+          ? t.contem(estado)
+          : t.contem
+        : [],
+    );
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

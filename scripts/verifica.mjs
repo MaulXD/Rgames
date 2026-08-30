@@ -43,6 +43,11 @@ const RAPIDAS = [
   { nome: "telas", cmd: "smoke:render", nota: "as telas montam com o conteúdo publicado" },
   { nome: "bloco", cmd: "smoke:bloco", nota: "o caderno de dedução do Dossiê" },
   { nome: "build", cmd: "build", nota: "o Next compila" },
+  /* DEPOIS DO BUILD, porque ele lê o que o build produziu. Num celular
+     brasileiro no 4G o peso da abertura é o que decide se a pessoa espera ou
+     fecha a aba, e nenhuma das outras doze etapas media isso: dava para dobrar
+     o payload sem nada acusar. */
+  { nome: "peso", cmd: "peso", nota: "quanto pesa abrir, num celular" },
 ];
 
 const LENTAS = [

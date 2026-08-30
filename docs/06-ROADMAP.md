@@ -57,7 +57,8 @@ o caderno do Dossiê).
 | Auditoria de `seat` ambíguo, porque a regra foi quebrada três vezes | ✅ |
 | `npm run css`: toda classe do projeto usada num componente tem estilo | ✅ |
 | Auth com Google, Discord e magic link | ⬜ só convidado e senha, por enquanto |
-| `axe-core`, `size-limit` e regressão visual no CI | ⬜ |
+| `size-limit` no CI | ✅ pela intenção, sem a dependência: `npm run peso` mede o que a rota pede, com brotli para texto e cru para woff2 |
+| `axe-core` e regressão visual no CI | ⬜ a parte de `axe-core` que é aritmética já roda: controle dentro de controle, `id` repetido, campo sem nome, botão mudo e contraste na árvore renderizada |
 
 ### Os quatro jogos
 
@@ -181,7 +182,8 @@ quatro bandejas temáticas do Letreiro, e a animação de construção da Metró
 | As telas INTEIRAS do Domínio, da Metrópole e do Letreiro | ✅ 44 KB, 21 KB e 6 KB de HTML com uma partida de verdade. As folhas não têm o que o contêiner tem: o ramo por FASE |
 | E o HTML que SAIU, auditado | ✅ três coisas que só o resultado revela: controle dentro de controle, `id` repetido, campo sem nome. Achou o `id` do avatar, que saía de um hash do bichinho — dois jogadores com o mesmo bicho colidiam |
 | A hachura das facções e dos grupos ganhou guarda | ✅ a ligação mora no CSS e a paleta no TypeScript, e nada obrigava as duas a andarem juntas. Uma cor nova sem trama volta a ser só cor, e nada acusa |
-| `npm run verifica` | ✅ as doze etapas num comando, com relatório. As cinco suítes em paralelo: **29,6 min → 12 a 19 min** (a variação é latência de rede, e ela é grande: a mesma suíte do Dossiê mediu 354s e 776s em rodadas seguidas) |
+| `npm run verifica` | ✅ as treze etapas num comando, com relatório. As cinco suítes em paralelo: **29,6 min → 12 a 19 min** (a variação é latência de rede, e ela é grande: a mesma suíte do Dossiê mediu 354s e 776s em rodadas seguidas) |
+| `npm run peso` — quanto pesa abrir, num celular | ✅ o PRD 06 pedia `size-limit` no CI e ele nunca entrou, com um bom motivo: seria dependência nova para uma conta que o `zlib` do Node já faz. As rotas pré-renderizadas dizem, por nome, o que o navegador vai buscar, então não é estimativa — é a soma do que a página pede. **215 KB de js, 22 KB de css e 289 KB de fontes**: as quatro famílias variáveis são METADE da abertura, e isso é escolha do PRD 01, não gordura. O teto existe para que uma quinta precise ser decidida em vez de acontecer |
 | Alfa sobre fundo conhecido deixa de ser "não sei" | ✅ `a·frente + (1−a)·fundo` é conta exata, e este projeto empilha tintas translúcidas. A cobertura foi de 960 para 1.036 pedaços de texto, e achou mais quatro: **as cores de texto foram escolhidas contra a primeira camada e usadas na terceira** — cada tinta translúcida clareia o que está embaixo, e `--fg-faint` media 4,71:1 no feltro, 3,74:1 no painel e 3,96:1 no botão da mesa |
 | E a conta da cor passou a morar num lugar só | ✅ `resolveVar`, `paraRgb`, `luminancia` e `razao` estavam escritas duas vezes. Duas cópias de uma fórmula é o defeito que este projeto mais persegue dentro dos jogos; não fazia sentido deixá-lo em pé na ferramenta que persegue |
 | A cor que vem do PAI, medida | ✅ `npm run css` dizia, na própria saída, que não via cor herdada — e herança é o caso mais comum de todos: o painel pinta o fundo, a etiqueta pinta o texto, e o par que a pessoa enxerga não existe em regra nenhuma. Agora a árvore existe, e 960 pedaços de texto foram medidos como o navegador mede |

@@ -428,7 +428,7 @@
 
 /* mão em leque */
 .mao-caso { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.7rem; }
-.carta-caso { --gir: 0deg; display: inline-flex; flex-direction: column; gap: 0.15rem; padding: 0.5rem 0.8rem; border: 3px solid var(--ink); border-radius: 10px; background: #f6efdb; color: var(--ink); font-family: var(--font-archivo), sans-serif; font-size: 0.8rem; font-weight: 700; box-shadow: 0 4px 0 #b9a983; transform: rotate(var(--gir)); transition: transform var(--dur-fast) var(--ease-pop); }
+.carta-caso { --gir: 0deg; flex: none; display: inline-flex; flex-direction: column; gap: 0.15rem; padding: 0.5rem 0.8rem; border: 3px solid var(--ink); border-radius: 10px; background: #f6efdb; color: var(--ink); font-family: var(--font-archivo), sans-serif; font-size: 0.8rem; font-weight: 700; box-shadow: 0 4px 0 #b9a983; transform: rotate(var(--gir)); transition: transform var(--dur-fast) var(--ease-pop); }
 .carta-caso:hover { transform: rotate(0deg) translateY(-4px); }
 .carta-vista { background: #cfe0ee; box-shadow: 0 4px 0 #8ea7ba; }
 .carta-caso em { font-style: normal; font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.6; }

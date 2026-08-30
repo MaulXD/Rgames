@@ -500,12 +500,37 @@ Variante um-contra-todos, e a que a mesa mais vai pedir depois de conhecer.
 
 Um jogador é sorteado assassino e **recebe a solução**. Joga normalmente, mas:
 - Pode **mentir uma vez** por partida: refutar mostrando uma carta que não tem, ou dizer que não
-  pode refutar quando podia
-- Vence se ninguém fechar o caso corretamente em **12 rodadas**
-- Se alguém acertar, o assassino perde e todos os detetives ganham
+  pode refutar quando podia — *ainda não construído*
+- Vence se ninguém fechar o caso corretamente em **12 rodadas** ✅
+- Se alguém acertar, o assassino perde e todos os detetives ganham ✅
 
 Os detetives não sabem quem é. Transforma o jogo em dedução social. Combina especialmente bem com
 **Meridiano-9** — a IA suspeita que também distribui as pistas é o melhor assassino possível.
+
+> **CONSTRUÍDO** — migração 0116, menos a mentira.
+>
+> **O ASSASSINO NÃO FECHA O CASO, e essa é a primeira regra.** Ele sabe a resposta: sem a
+> proibição, o modo inteiro dura um turno — ele acusa, acerta, e ganha como detetive. Não é caso
+> extremo, é a jogada ÓBVIA e a primeira que qualquer pessoa tentaria. `ASSASSINO_NAO_ACUSA` no
+> servidor, e não escondendo o botão: quem descobrisse a chamada ganharia a partida.
+>
+> **O assassino é GENTE, sempre que houver gente.** Duas razões, e a segunda decide. De jogo: a
+> máquina não usaria a informação — ela deduz porque não tem outro jeito, e dar-lhe o envelope sem
+> ensiná-la a mentir produz um assassino que joga igual a um detetive. De confiança: a suíte
+> confere, partida a partida, que NENHUMA máquina risca carta do envelope, e essa frase vale
+> porque é absoluta. Uma exceção — "menos quando ela é o assassino" — é o tipo de furo que se abre
+> uma vez e some dentro de um `if` para sempre.
+>
+> **O MODO é público; a PESSOA não.** Todo mundo sabe que há um assassino na mesa — é isso que faz
+> a mesa olhar de lado para todo mundo — e o assento dele não está no estado público. Mora no
+> privado de quem é, protegido pela mesma RLS que protege a mão de cada um.
+>
+> **O relógio fica à vista desde a primeira rodada.** Um limite que só aparece quando estoura é
+> armadilha, não regra — e a tensão do modo é justamente ver o número subir.
+>
+> **Falta a mentira**, que é a metade social da variante: refutar com uma carta que não se tem, ou
+> passar podendo refutar. Uma vez por partida, e catchável — é o que dá à mesa alguma coisa para
+> desconfiar além de comportamento.
 
 ---
 

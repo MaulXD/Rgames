@@ -46,6 +46,15 @@ export type DossieState = {
   pending: Pendencia | null;
   /** o baralho do Modo Avançado, ou nulo quando a mesa jogou sem ele */
   pistas?: { tirou: number } | null;
+  /* ── MODO ASSASSINO ──────────────────────────────────────────────────
+     O MODO é público e a PESSOA não. Todo mundo sabe que há um assassino na
+     mesa — é isso que faz olhar de lado para todo mundo — e o assento dele não
+     está aqui: mora no estado privado de quem é. */
+  assassino?: boolean;
+  /** a última rodada, quando há assassino: passou dela, ele venceu */
+  rodadaFinal?: number | null;
+  /** o relógio estourou antes de alguém fechar o caso */
+  assassinoVenceu?: boolean;
   /** o assento que joga a próxima vez com uma ação só */
   tempoCurto?: number | null;
   seq: number;
@@ -82,6 +91,9 @@ type Privado = {
   pad?: Pad;
   /** a mão de Cartas de Pista e o que elas já contaram */
   pistas?: { mao?: string[]; avisos?: Aviso[] };
+  /** você é o assassino — e o envelope veio junto */
+  assassino?: boolean;
+  envelope?: { suspect: string; weapon: string; room: string };
 };
 
 export function DossieGame({
@@ -276,6 +288,8 @@ export function DossieGame({
           seen: d.seen ?? [],
           pad: d.pad?.marks ? d.pad : { marks: {}, assist: d.pad?.assist ?? "assistido" },
           pistas: d.pistas ?? { mao: [], avisos: [] },
+          assassino: d.assassino,
+          envelope: d.envelope,
         });
       }
     }
@@ -400,9 +414,11 @@ export function DossieGame({
           </p>
           <h1 className="dossie-titulo">
             {st.phase === "over"
-              ? st.winner === null
-                ? "Ninguém fechou o caso"
-                : "Caso encerrado"
+              ? st.assassinoVenceu
+                ? "O assassino escapou"
+                : st.winner === null
+                  ? "Ninguém fechou o caso"
+                  : "Caso encerrado"
               : devoRefutar
                 ? "Você precisa responder"
                 : minhaVez
@@ -412,6 +428,15 @@ export function DossieGame({
           {st.phase === "turn" && minhaVez && (
             <p className="dossie-acoes">
               {st.actionsLeft} {st.actionsLeft === 1 ? "ação" : "ações"} nesta rodada
+            </p>
+          )}
+          {/* O RELÓGIO DO ASSASSINO, à vista desde a primeira rodada.
+
+              Um limite que só aparece quando estoura é armadilha, não regra —
+              e a tensão do modo é justamente ver o número subir. */}
+          {st.assassino && st.phase !== "over" && (
+            <p className="dossie-acoes dossie-relogio">
+              rodada {st.round ?? 1} de {st.rodadaFinal ?? 12}
             </p>
           )}
           {(maquinaNaVez || maquinaRefutando || maquinaRespondendo) &&
@@ -461,7 +486,7 @@ export function DossieGame({
       {/* ── desfecho ──────────────────────────────────────────────────── */}
       {st.phase === "over" && st.solution && (
         <div className="panel dossie-desfecho">
-          <p className="eyebrow">Era</p>
+          <p className="eyebrow">{st.assassinoVenceu ? "O relógio acabou. Era" : "Era"}</p>
           <p className="desfecho-linha">{nomeDaCarta(caso, st.solution.suspect)}</p>
           <p className="desfecho-com">com {nomeDaCarta(caso, st.solution.weapon)}</p>
           <p className="desfecho-onde">na {nomeDaCarta(caso, st.solution.room)}</p>
@@ -540,6 +565,29 @@ export function DossieGame({
           void supabaseBrowser().rpc("dossie_pad", { p_match: match.id, p_pad: novo });
         }}
       />
+
+      {/* ── VOCÊ É O ASSASSINO ─────────────────────────────────────────────
+           O envelope fica à vista o tempo todo, e não escondido atrás de um
+           toque: quem é o assassino precisa dele em cada decisão — para onde
+           andar, o que palpitar, o que deixar a mesa acreditar.
+
+           A frase que importa é a última. "Vença deixando o relógio acabar" é a
+           regra inteira do lado dele, e é o oposto do que o resto da mesa está
+           tentando fazer. */}
+      {priv.assassino && priv.envelope && st.phase !== "over" && (
+        <div className="panel dossie-assassino">
+          <p className="eyebrow">Foi você</p>
+          <p className="assassino-linha">{nomeDaCarta(caso, priv.envelope.suspect)}</p>
+          <p className="assassino-com">
+            com {nomeDaCarta(caso, priv.envelope.weapon)} · na{" "}
+            {nomeDaCarta(caso, priv.envelope.room)}
+          </p>
+          <p className="mt-3 text-sm dim">
+            Ninguém sabe que é você. Você não pode fechar o caso — vence deixando as{" "}
+            {st.rodadaFinal ?? 12} rodadas acabarem sem que ninguém acerte.
+          </p>
+        </div>
+      )}
 
       {/* ── responder ao interrogatório ───────────────────────────────────
            Fica ACIMA da refutação porque as duas nunca acontecem juntas — as

@@ -369,6 +369,31 @@
 .dossie-acoes { margin-top: 0.5rem; font-family: var(--font-archivo), sans-serif; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--vivo-amarelo); }
 
 .dossie-refuta, .dossie-acoes-painel, .dossie-fantasma, .dossie-mao, .dossie-log, .dossie-desfecho { padding: 1rem 1.1rem; }
+
+/* ── o painel do assassino ──────────────────────────────────────────────────
+   O envelope fica à vista o tempo todo, e não escondido atrás de um toque:
+   quem é o assassino precisa dele em cada decisão. A cor é a do laquê — a
+   mesma da acusação errada — porque é o único painel do jogo que pertence a
+   uma pessoa só, e ele tem de parecer isso. */
+.dossie-assassino {
+  padding: 1rem 1.1rem;
+  border-color: var(--vivo-vermelho);
+  background: rgb(255 77 94 / 0.1);
+}
+.assassino-linha {
+  margin-top: 0.4rem;
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 20, "WONK" 1, "opsz" 144;
+  font-weight: 700;
+  font-size: clamp(1.5rem, 6vw, 2.2rem);
+  line-height: 1;
+  color: var(--vivo-vermelho);
+}
+.assassino-com { margin-top: 0.3rem; font-size: 1rem; color: var(--fg-mid); }
+
+/* O relógio do modo: à vista desde a primeira rodada, porque a tensão é ver o
+   número subir. Um limite que só aparece quando estoura é armadilha. */
+.dossie-relogio { color: var(--vivo-vermelho); }
 .refuta-palpite { margin-top: 0.4rem; font-family: var(--font-fraunces), Georgia, serif; font-variation-settings: "SOFT" 30, "WONK" 1, "opsz" 48; font-size: 1.25rem; color: var(--fg); }
 
 .dossie-desfecho { text-align: center; }

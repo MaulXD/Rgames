@@ -774,9 +774,24 @@ async function dossieSolo({ token, niveis, tetoPassos, avancado = false }) {
       const fora = priv?.dedu?.fora ?? [];
       const vazou = fora.filter((c) => envelope.includes(c));
       if (vazou.length) {
+        /* AS PROVAS VÃO JUNTO, e não só a acusação.
+
+           Esta checagem falhou uma vez em vinte verificações completas e não
+           reproduziu em duas tentativas de meia hora. Sem o estado no momento
+           do erro, cada aparição custa uma tarde para chegar onde a próxima
+           linha chega de graça.
+
+           O que decide a questão é a tripla: a MÃO dela (o que ela sabe de
+           primeira), as RESTRIÇÕES abertas (o que ela inferiu), e o `naoTem`
+           (a premissa de cada inferência). Uma carta do envelope em `fora` só
+           sai de um `naoTem` que afirma o que não é verdade. */
         problemas.push(
           `${b.display_name} riscou ${vazou.join(", ")}, que está NO ENVELOPE` +
-            ` — ela espiou ou a dedução está errada`,
+            ` — ela espiou ou a dedução está errada\n         envelope: ${envelope.join(", ")}\n         mão dela: ${(priv?.hand ?? []).join(", ")}\n         vistas:   ${JSON.stringify(priv?.seen ?? [])}\n         abertos:  ${JSON.stringify(priv?.dedu?.abertos ?? [])}\n         naoTem:   ${JSON.stringify(priv?.dedu?.naoTem ?? {})}\n         registro: ${JSON.stringify(
+              (
+                await db.query("select public_state -> 'log' l from matches where id = $1", [idP.id])
+              ).rows[0].l?.slice(0, 20) ?? [],
+            )}`,
         );
         return false;
       }
@@ -3161,6 +3176,162 @@ if (!palco.erro) {
         : `gastou ação: ${depoisChaveAv.actionsLeft}`,
     );
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MODO ASSASSINO (PRD 03 §6.9)
+
+   Um jogador é sorteado assassino e RECEBE a solução. Vence se ninguém fechar o
+   caso em doze rodadas.
+
+   Quatro coisas, em ordem de importância:
+
+     1. o assassino NÃO fecha o caso — sem isso o modo dura um turno
+     2. só ele recebe o envelope, e ninguém mais o lê
+     3. a máquina nunca é sorteada, tendo gente na mesa
+     4. doze rodadas passam e ele vence
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\nDOSSIÊ: o Modo Assassino\n");
+
+const salaAss = (await rpc(P[0].token, "create_room", { p_game: "dossie" })).body;
+for (const p of P.slice(1, 3)) await rpc(p.token, "join_room", { p_code: salaAss.code });
+
+const cfgAss = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaAss.id,
+  p_settings: { assassino: true, tema: "solar-das-acacias" },
+});
+ok(
+  cfgAss.status === 200 && cfgAss.body?.settings?.assassino === true,
+  cfgAss.status === 200
+    ? "a chave 'assassino' é aceita nas Regras da Casa"
+    : `recusada: ${JSON.stringify(cfgAss.body)}`,
+);
+
+const iniAss = await rpc(P[0].token, "dossie_start", { p_room: salaAss.id });
+ok(iniAss.status === 200, `a partida com assassino começou${iniAss.status === 200 ? "" : ": " + JSON.stringify(iniAss.body)}`);
+
+if (iniAss.status === 200) {
+  const mAss = (
+    await db.query(
+      "select id, solution, public_state st from matches where room_id = $1 order by started_at desc limit 1",
+      [salaAss.id],
+    )
+  ).rows[0];
+
+  /* O MODO É PÚBLICO, A PESSOA NÃO. Todo mundo sabe que há um assassino — é
+     isso que faz a mesa olhar de lado para todo mundo. */
+  ok(
+    mAss.st.assassino === true && mAss.st.rodadaFinal === 12,
+    `o estado público diz que há assassino e que o relógio é de ${mAss.st.rodadaFinal} rodadas`,
+  );
+  ok(
+    !JSON.stringify(mAss.st).match(/assassinoSeat|culpado/),
+    "e não diz QUEM é — o estado público não guarda o assento dele",
+  );
+
+  const privados = (
+    await db.query(
+      `select mp.seat, mps.user_id, mps.data, p.is_bot
+         from match_private_state mps
+         join match_players mp on mp.match_id = mps.match_id and mp.user_id = mps.user_id
+         join profiles p on p.id = mps.user_id
+        where mps.match_id = $1 order by mp.seat`,
+      [mAss.id],
+    )
+  ).rows;
+  const comEnvelope = privados.filter((x) => x.data?.assassino === true);
+  ok(
+    comEnvelope.length === 1,
+    comEnvelope.length === 1
+      ? `exatamente uma pessoa recebeu o envelope (assento ${comEnvelope[0].seat})`
+      : `${comEnvelope.length} pessoas receberam o envelope`,
+  );
+  ok(
+    comEnvelope.length === 1 &&
+      comEnvelope[0].data.envelope?.suspect === mAss.solution.suspect &&
+      comEnvelope[0].data.envelope?.weapon === mAss.solution.weapon &&
+      comEnvelope[0].data.envelope?.room === mAss.solution.room,
+    "e o envelope que ele recebeu é o envelope de verdade",
+  );
+
+  /* A MÁQUINA NUNCA É O ASSASSINO tendo gente na mesa. Ela não usaria a
+     informação — e a suíte confere, partida a partida, que nenhuma máquina
+     risca carta do envelope. Uma exceção a essa frase é um furo que some dentro
+     de um `if` para sempre. */
+  ok(
+    comEnvelope.length === 1 && comEnvelope[0].is_bot === false,
+    "e é GENTE — a máquina nunca é sorteada quando há gente na mesa",
+  );
+
+  /* NINGUÉM MAIS LÊ O ENVELOPE. É a RLS do estado privado, e é a mesma que
+     protege a mão de cada um; aqui ela está protegendo a partida inteira. */
+  const outroAss = privados.find((x) => x.seat !== comEnvelope[0]?.seat);
+  const tokenAss = (uid) => P.find((x) => x.id === uid)?.token;
+  if (outroAss && tokenAss(outroAss.user_id)) {
+    const espiada = await get(
+      tokenAss(outroAss.user_id),
+      `match_private_state?select=data&match_id=eq.${mAss.id}`,
+    );
+    const viu = JSON.stringify(espiada.body ?? []).includes("envelope");
+    ok(!viu, viu ? "O ENVELOPE VAZOU para outro jogador" : "e ninguém mais alcança o envelope dele");
+  }
+
+  /* ── O ASSASSINO NÃO FECHA O CASO ────────────────────────────────────────
+     A jogada óbvia, e a primeira que qualquer pessoa tentaria: ele sabe a
+     resposta, então acusa e ganha como detetive. Sem esta recusa o modo dura
+     um turno. */
+  const assassinoUid = comEnvelope[0]?.user_id;
+  const tokAssassino = tokenAss(assassinoUid);
+  if (tokAssassino) {
+    await db.query(
+      `update matches set public_state = public_state
+          || jsonb_build_object('turnSeat', $2::int, 'phase', 'turn', 'actionsLeft', 2)
+        where id = $1`,
+      [mAss.id, comEnvelope[0].seat],
+    );
+    const tentou = await rpc(tokAssassino, "dossie_accuse", {
+      p_match: mAss.id,
+      p_suspect: mAss.solution.suspect,
+      p_weapon: mAss.solution.weapon,
+      p_room: mAss.solution.room,
+    });
+    ok(
+      tentou.status >= 400 && JSON.stringify(tentou.body).includes("ASSASSINO_NAO_ACUSA"),
+      tentou.status >= 400
+        ? "o assassino NÃO fecha o caso, nem sabendo a resposta — a recusa é do servidor"
+        : `O ASSASSINO GANHOU ACUSANDO: ${JSON.stringify(tentou.body).slice(0, 120)}`,
+    );
+    const aindaRola = (
+      await db.query("select status from matches where id = $1", [mAss.id])
+    ).rows[0].status;
+    ok(aindaRola === "running", `e a partida continua de pé (${aindaRola})`);
+  }
+
+  /* ── DOZE RODADAS, E ELE VENCE ───────────────────────────────────────────
+     O relógio é empurrado até a última rodada e a vez é passada: a virada é o
+     que fecha a partida, e é onde a regra mora. */
+  await db.query(
+    `update matches set public_state = public_state
+        || jsonb_build_object('round', 12, 'turnSeat', $2::int, 'phase', 'turn',
+                              'actionsLeft', 1, 'pending', null)
+      where id = $1`,
+    [mAss.id, Math.max(...privados.map((x) => Number(x.seat)))],
+  );
+  await db.query("select public.dossie_advance($1::uuid)", [mAss.id]);
+  const fim = (
+    await db.query("select status, public_state st from matches where id = $1", [mAss.id])
+  ).rows[0];
+  ok(
+    fim.status === "finished" && fim.st.assassinoVenceu === true,
+    fim.status === "finished" && fim.st.assassinoVenceu
+      ? `passadas as ${fim.st.rodadaFinal} rodadas, o assassino vence (rodada ${fim.st.round})`
+      : `a partida não acabou no relógio: status ${fim.status}, rodada ${fim.st.round}`,
+  );
+  ok(
+    fim.st.winner === null && fim.st.solution?.suspect === mAss.solution.suspect,
+    "e o envelope é aberto para a mesa ver o que passou debaixo do nariz de todo mundo",
+  );
 }
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });

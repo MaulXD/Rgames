@@ -295,6 +295,10 @@ function RegrasDossie({
      de Pista são uma sétima coisa para aprender numa mesa que já tem seis
      suspeitos, nove lugares, um caderno de dedução e uma regra própria. */
   const avancado = (room.settings?.avancado as boolean | undefined) ?? false;
+  /* Desligado por padrão pelo mesmo motivo do Avançado, e por um mais forte:
+     ele muda o que o jogo É. O Dossiê normal é dedução sobre CARTAS; com
+     assassino, é dedução sobre GENTE. */
+  const assassino = (room.settings?.assassino as boolean | undefined) ?? false;
 
   useEffect(() => {
     let vivo = true;
@@ -342,7 +346,8 @@ function RegrasDossie({
      vai jogar com um baralho a mais. */
   const resumo =
     (escolhido ? `${escolhido.name} · ${escolhido.era}` : "Caso surpresa") +
-    (avancado ? " · com Cartas de Pista" : "");
+    (avancado ? " · com Cartas de Pista" : "") +
+    (assassino ? " · com assassino na mesa" : "");
 
   return (
     <div className="panel mt-4 p-5 sm:p-6">
@@ -448,6 +453,35 @@ function RegrasDossie({
                 nota="Investigar um lugar vazio compra uma carta: chave-mestra, álibi, interrogatório, impressão digital, recado anônimo e tempo é curto. Cada uma custa exposição — a mesa vê o que você jogou."
                 previa={<span className="regra-tempo">24 cartas</span>}
                 onClick={() => void salvar({ avancado: true })}
+              />
+            </div>
+          </fieldset>
+
+          {/* O MODO ASSASSINO.
+
+              A nota diz o que ele FAZ com a mesa, e não o que ele liga. "Um de
+              vocês recebe a solução" é a frase que faz a pessoa entender por
+              que vale a pena — e a segunda, que ninguém sabe quem, é a que
+              explica por que o jogo vira outro.
+
+              Fica depois das Cartas de Pista porque é a mudança maior: quem
+              está montando a primeira mesa lê as duas em ordem crescente de
+              estranheza. */}
+          <fieldset disabled={!isHost || busy} style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="eyebrow mb-3">Quem matou</legend>
+            <div className="flex flex-col gap-2">
+              <Opcao
+                ativo={!assassino}
+                nome="Ninguém na mesa"
+                nota="O envelope é sorteado e ninguém sabe o que tem dentro. É o Dossiê como ele é."
+                onClick={() => void salvar({ assassino: false })}
+              />
+              <Opcao
+                ativo={assassino}
+                nome="Um de vocês"
+                nota="Uma pessoa recebe a solução e joga do outro lado. Ela não pode fechar o caso: vence se ninguém acertar em doze rodadas. E ninguém sabe quem é."
+                previa={<span className="regra-tempo">12 rodadas</span>}
+                onClick={() => void salvar({ assassino: true })}
               />
             </div>
           </fieldset>

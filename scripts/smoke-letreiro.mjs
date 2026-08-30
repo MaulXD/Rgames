@@ -1086,6 +1086,176 @@ ok(
     " comparado por multiplicação cruzada e nunca por divisão",
 );
 
+/* ── O NÊMESIS ─────────────────────────────────────────────────────────────
+
+   A quarta estatística do PRD 02 §6.9, e a única que ficou fora até a migração
+   0114 — porque contagem por PAR de jogadores não cabe num jsonb do perfil, e
+   guardar id de terceiro no registro de alguém pede uma tabela com política
+   própria.
+
+   O que este bloco mede, em ordem de importância:
+
+     1. que a contagem existe e é do PAR, não de quem quer que seja
+     2. que ninguém lê a de ninguém — é a razão de a tabela existir
+     3. que a máquina fica de fora
+     4. que a regra gananciosa não conta, porque nela nada é anulado
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\n  ── o nêmesis ──");
+
+/* A trombada é montada à mão: `letreiro_score_bruto` conta a partir de `_sub`,
+   que é o que cada um mandou. Duas pessoas mandando a MESMA palavra válida é a
+   definição de choque, e é o que uma partida de verdade produz o tempo todo. */
+const salaNem = (await rpc(A.token, "create_room", { p_game: "letreiro" })).body;
+await rpc(B.token, "join_room", { p_code: salaNem.code });
+await rpc(A.token, "set_room_settings", {
+  p_room: salaNem.id,
+  p_settings: { anulacao: "classica" },
+});
+await rpc(A.token, "set_ready", { p_room: salaNem.id, p_ready: true });
+await rpc(B.token, "set_ready", { p_room: salaNem.id, p_ready: true });
+const iniNem = await rpc(A.token, "letreiro_start", { p_room: salaNem.id });
+ok(iniNem.status === 200, `a mesa do nêmesis começou${iniNem.status === 200 ? "" : ": " + JSON.stringify(iniNem.body)}`);
+
+if (iniNem.status === 200) {
+  const mNem = iniNem.body;
+  /* `board_id` não vem na resposta — e é certo que não venha: o gabarito é a
+     coisa que o cliente não pode ter. Aqui se chega nele pela conexão de
+     serviço, como o resto desta suíte. */
+  const gabNem = (
+    await db.query(
+      `select b.solution, b.grid from letreiro_boards b
+         join matches m on m.board_id = b.id where m.id = $1`,
+      [mNem.id],
+    )
+  ).rows[0];
+  /* Três palavras que as duas pessoas "acharam" — a mesma palavra na mesma
+     grade, com o mesmo caminho, que é o que o servidor revalida. */
+  const trombadas = Object.entries(gabNem.solution).slice(0, 3);
+
+  for (const quem of [A, B]) {
+    await db.query(
+      `update match_private_state set data = jsonb_build_object('words', $3::jsonb)
+        where match_id = $1 and user_id = $2`,
+      [
+        mNem.id,
+        quem.id,
+        JSON.stringify(trombadas.map(([w, cam]) => ({ w, p: cam }))),
+      ],
+    );
+  }
+
+  const antesNem = Number(
+    (
+      await db.query("select coalesce(vezes, 0) v from letreiro_nemesis where eu = $1 and outro = $2", [
+        A.id,
+        B.id,
+      ])
+    ).rows[0]?.v ?? 0,
+  );
+  await db.query("select public.letreiro_score($1::uuid)", [mNem.id]);
+
+  const par = (
+    await db.query("select eu, outro, vezes from letreiro_nemesis where eu = any($1)", [
+      [A.id, B.id],
+    ])
+  ).rows;
+  const deAparaB = par.find((r) => r.eu === A.id && r.outro === B.id);
+  const deBparaA = par.find((r) => r.eu === B.id && r.outro === A.id);
+  ok(
+    Number(deAparaB?.vezes ?? 0) === antesNem + trombadas.length,
+    deAparaB
+      ? `as ${trombadas.length} palavras trombadas foram contadas (${antesNem} → ${deAparaB.vezes})`
+      : "a trombada não foi contada",
+  );
+  ok(
+    Number(deBparaA?.vezes ?? 0) === Number(deAparaB?.vezes ?? -1),
+    "e há uma linha para cada lado, com a mesma contagem — cada um lê a sua",
+  );
+
+  /* ── E NINGUÉM LÊ O DE NINGUÉM ──────────────────────────────────────────
+     É a razão de a tabela existir em vez de um campo no perfil. Duas frentes:
+     a política da tabela, e a função que a mesa usa. */
+  const espiada = await get(B.token, `letreiro_nemesis?select=*&eu=eq.${A.id}`);
+  ok(
+    espiada.status >= 400 || (Array.isArray(espiada.body) && espiada.body.length === 0),
+    espiada.status >= 400 || espiada.body?.length === 0
+      ? "e ninguém lê a linha de outra pessoa pela tabela"
+      : `VAZOU o nêmesis de A para B: ${JSON.stringify(espiada.body).slice(0, 100)}`,
+  );
+
+  const meuNem = await rpc(A.token, "letreiro_nemesis_meu", {});
+  ok(
+    meuNem.status === 200 && meuNem.body?.nome && meuNem.body?.vezes > 0,
+    meuNem.status === 200 && meuNem.body?.nome
+      ? `e a função devolve o NOME e a contagem (${meuNem.body.nome} · ${meuNem.body.vezes})`
+      : `a função não devolveu o nêmesis: ${JSON.stringify(meuNem.body)}`,
+  );
+  ok(
+    !JSON.stringify(meuNem.body ?? {}).includes(B.id),
+    !JSON.stringify(meuNem.body ?? {}).includes(B.id)
+      ? "e o id do outro NÃO atravessa a rede — o que não atravessa não vaza"
+      : "o id de terceiro veio na resposta",
+  );
+
+  /* MÁQUINA NÃO É NÊMESIS. Numa partida solo quem mais tromba com você é o
+     Nestor, porque ele joga todas as rodadas — o número seria verdadeiro e a
+     frase seria vazia. */
+  const comBot = Number(
+    (
+      await db.query(
+        `select count(*)::int n from letreiro_nemesis n
+           join profiles p on p.id = n.outro where p.is_bot`,
+      )
+    ).rows[0].n,
+  );
+  ok(comBot === 0, comBot === 0 ? "e nenhuma máquina virou nêmesis de ninguém" : `${comBot} linha(s) com máquina`);
+}
+
+/* E A REGRA GANANCIOSA NÃO CONTA: nela as duas pessoas ficam com os pontos, e
+   "anular" não aconteceu. A estatística conta o que CUSTA. */
+const salaGan = (await rpc(A.token, "create_room", { p_game: "letreiro" })).body;
+await rpc(B.token, "join_room", { p_code: salaGan.code });
+await rpc(A.token, "set_room_settings", {
+  p_room: salaGan.id,
+  p_settings: { anulacao: "gananciosa" },
+});
+await rpc(A.token, "set_ready", { p_room: salaGan.id, p_ready: true });
+await rpc(B.token, "set_ready", { p_room: salaGan.id, p_ready: true });
+const iniGan = await rpc(A.token, "letreiro_start", { p_room: salaGan.id });
+if (iniGan.status === 200) {
+  const gabGan = (
+    await db.query(
+      `select b.solution from letreiro_boards b
+         join matches m on m.board_id = b.id where m.id = $1`,
+      [iniGan.body.id],
+    )
+  ).rows[0];
+  const doisIguais = Object.entries(gabGan.solution).slice(0, 2);
+  for (const quem of [A, B]) {
+    await db.query(
+      `update match_private_state set data = jsonb_build_object('words', $3::jsonb)
+        where match_id = $1 and user_id = $2`,
+      [iniGan.body.id, quem.id, JSON.stringify(doisIguais.map(([w, cam]) => ({ w, p: cam })))],
+    );
+  }
+  const antesGan = Number(
+    (await db.query("select coalesce(vezes,0) v from letreiro_nemesis where eu=$1 and outro=$2", [A.id, B.id]))
+      .rows[0]?.v ?? 0,
+  );
+  await db.query("select public.letreiro_score($1::uuid)", [iniGan.body.id]);
+  const depoisGan = Number(
+    (await db.query("select coalesce(vezes,0) v from letreiro_nemesis where eu=$1 and outro=$2", [A.id, B.id]))
+      .rows[0]?.v ?? 0,
+  );
+  ok(
+    depoisGan === antesGan,
+    depoisGan === antesGan
+      ? "na regra gananciosa a trombada não conta — ninguém anulou nada"
+      : `a gananciosa contou ${depoisGan - antesGan} trombada(s) que não custaram nada a ninguém`,
+  );
+}
+
 /* ── o nível significa alguma coisa? ──────────────────────────────────────
    Na MESMA grade, difícil tem de pontuar mais que médio, e médio mais que
    fácil. Sem isso, o nível é rótulo. */

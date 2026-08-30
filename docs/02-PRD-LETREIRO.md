@@ -365,9 +365,9 @@ Não "partidas jogadas". Coisas que a pessoa quer contar para os amigos:
 - **Melhor palavra da vida** (mais pontos numa única palavra) ✅
 - **Palavra mais rara já encontrada** (índice de raridade do corpus) ✅
 - **Aproveitamento**: seus pontos ÷ pontuação máxima da grade ✅
-- **Nêmesis**: contra quem você mais anula palavra — *adiada, ver abaixo*
+- **Nêmesis**: contra quem você mais anula palavra ✅
 
-> **CONSTRUÍDO** — migrações 0094–0097. Três das quatro.
+> **CONSTRUÍDO** — migrações 0094–0097 e 0114. As quatro.
 >
 > **A RARIDADE É ENTRE AS PALAVRAS QUE O CORPUS CONHECE.** `dict_pt.freq` é um POSTO e é nulo
 > para a maior parte do dicionário: a lista de frequência de fala cobre uma fração das 248.632
@@ -388,12 +388,26 @@ Não "partidas jogadas". Coisas que a pessoa quer contar para os amigos:
 > inteira; quem divide é a tela, uma vez. Recordes são comparados por multiplicação cruzada —
 > recorde decidido por arredondamento é recorde que muda sozinho.
 >
-> **POR QUE O NÊMESIS NÃO ENTROU.** "Contra quem você mais anula palavra" precisa de contagem
-> POR PAR de jogadores. Isso não cabe em `profiles.stats`: seria um objeto que cresce sem teto
-> com o id de todo mundo com quem você já jogou, dentro de um jsonb lido inteiro a cada
-> carregamento de perfil — e guardar id de terceiro no registro de alguém é uma decisão de
-> privacidade que merece uma tabela e uma política de RLS, não um campo que apareceu de lado.
-> Meia estatística com o dado no lugar errado é pior que nenhuma, porque ela fica.
+> **O NÊMESIS TEM A TABELA QUE PEDIA** — migração 0114. A objeção continua valendo e foi ela que
+> desenhou a solução: contagem por PAR de jogadores não cabe em `profiles.stats`, porque seria um
+> objeto que cresce sem teto com o id de todo mundo com quem você já jogou, lido inteiro a cada
+> carregamento de perfil. E guardar id de terceiro no registro de alguém é decisão de privacidade,
+> não campo que aparece de lado.
+>
+> **Duas linhas por choque, uma para cada lado**, e é a política de leitura que pede isso: guardar
+> `(menor, maior)` uma vez só obrigaria a política a deixar cada um ler linhas em que aparece como
+> `maior` — e a mesma política deixaria o outro ler a sua. Duas linhas, cada uma legível por uma
+> pessoa só, é o que faz "só o seu" ser verdade no banco e não na consulta.
+>
+> **O que atravessa a rede é o NOME.** `letreiro_nemesis_meu` devolve nome e contagem; o id do
+> outro não precisa sair do banco para a frase "você e o Tonho se anulam há 14 palavras" existir,
+> e o que não atravessa não vaza.
+>
+> **Máquina não é nêmesis.** Numa partida solo quem mais tromba com você é o Nestor, porque ele
+> joga todas as rodadas: o número seria verdadeiro e a frase seria vazia.
+>
+> **E a regra gananciosa não conta.** Nela as duas pessoas ficam com os pontos, e "anular" não
+> aconteceu — a estatística conta o que CUSTA.
 
 ---
 

@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Medalha } from "@/components/medalha";
 import { useSession } from "@/components/session";
+import { supabaseBrowser } from "@/lib/supabase/client";
 import { CONQUISTAS, parseStats, patente, pct, progresso } from "@/lib/gamificacao";
 
 /**
@@ -10,8 +12,32 @@ import { CONQUISTAS, parseStats, patente, pct, progresso } from "@/lib/gamificac
  * As medalhas que faltam aparecem em cinza, com o "como se ganha" à vista — o
  * buraco na coleção é metade da graça, e esconder o critério só irrita.
  */
+type Nemesis = { nome: string; vezes: number } | null;
+
 export function Conquistas() {
   const { profile, status } = useSession();
+
+  /* O NÊMESIS VEM DE FORA DE `stats`, e é de propósito.
+
+     Contagem por PAR de jogadores não cabe num jsonb do perfil: seria um objeto
+     que cresce sem teto com o id de todo mundo com quem você já jogou, lido
+     inteiro a cada carregamento. E guardar id de terceiro no registro de alguém
+     é decisão de privacidade, não campo que aparece de lado — por isso mora
+     numa tabela com política própria (migração 0114), e o que atravessa a rede
+     é o NOME, nunca o id. */
+  const [nemesis, setNemesis] = useState<Nemesis>(null);
+  useEffect(() => {
+    if (status !== "ready") return;
+    let vivo = true;
+    void (async () => {
+      const { data } = await supabaseBrowser().rpc("letreiro_nemesis_meu");
+      if (vivo && data) setNemesis(data as Nemesis);
+    })();
+    return () => {
+      vivo = false;
+    };
+  }, [status]);
+
   if (status !== "ready" || !profile) return null;
 
   const s = parseStats(profile.stats);
@@ -82,6 +108,28 @@ export function Conquistas() {
               </small>
             </dd>
           </div>
+
+          {/* O NÊMESIS.
+
+              Aparece só quando existe. Uma pessoa que só jogou sozinha não tem
+              nêmesis, e um card com travessão diria "você não tem amigos" —
+              a lacuna é mais honesta calada.
+
+              O número grande é a CONTAGEM e não o nome, ao contrário da
+              palavra mais rara: aqui o nome já está na linha de baixo, e o que
+              cresce com o tempo é quantas vezes. */}
+          {nemesis && (
+            <div className="numero">
+              <dt>Nêmesis</dt>
+              <dd>
+                {nemesis.vezes}
+                <small>
+                  palavra{nemesis.vezes === 1 ? "" : "s"} anulada
+                  {nemesis.vezes === 1 ? "" : "s"} com {nemesis.nome}
+                </small>
+              </dd>
+            </div>
+          )}
 
           {/* O APROVEITAMENTO.
 

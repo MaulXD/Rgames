@@ -228,6 +228,19 @@ ok((await gone.json()).length === 0, "sala vazia foi apagada");
    sentidos. Função nova exposta por acidente quebra o teste. Função do
    cliente trancada por acidente também. */
 
+/* AS AUXILIARES DA RLS, numa lista própria e não num comentário dentro da outra.
+
+   A expressão de uma policy roda com o privilégio de quem CONSULTA, então estas
+   três precisam do grant — revogá-las mata o lobby inteiro. E elas nunca
+   aparecem num `.rpc()`: quem as chama é o Postgres, avaliando a policy.
+
+   Elas viviam no fim da allowlist com um comentário explicando a diferença, e
+   um comentário não é uma lista: a varredura de "RPC liberada sem chamador"
+   apontou as três, e apontou certo — pela lista que existia, elas eram
+   chamáveis pelo cliente e ninguém as chamava. Duas listas nomeadas dizem a
+   mesma coisa de um jeito que a máquina entende. */
+const DA_RLS = ["is_match_member", "is_room_member", "shares_room_with"];
+
 const PERMITIDAS = [
   // plataforma
   "create_room", "join_room", "leave_room", "set_color", "set_profile",
@@ -256,11 +269,8 @@ const PERMITIDAS = [
   "met_unmortgage", "met_offer", "met_offer_reply", "met_offer_cancel", "met_exercer",
   "met_aposta",
   "met_tocar",
-  // auxiliares que a RLS PRECISA executar: a expressão de uma policy roda com
-  // o privilégio de quem consulta, então revogar estas mata o lobby inteiro
-  "is_match_member", "is_room_member", "shares_room_with",
+  ...DA_RLS,
 ];
-
 /* POR QUE POOL E NÃO CLIENT.
 
    Um `pg.Client` é UMA conexão, aberta no começo e mantida até o fim. Quando
@@ -510,6 +520,29 @@ for (const arq of suitesComSql) {
   }
 }
 
+/** Todo `.mjs` de uma pasta — as suítes, que também contam como leitoras. */
+function lerPastaMjs(dir) {
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith(".mjs"))
+    .map((e) => readFileSync(join(dir, e.name), "utf8"))
+    .join("\n");
+}
+
+/** Todo `.ts`/`.tsx` de uma pasta, concatenado — o "código do cliente". */
+function lerPastaTsx(dir) {
+  const out = [];
+  const anda = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true })) {
+      if (e.name === "node_modules" || e.name === ".next" || e.name === ".git") continue;
+      const caminho = join(d, e.name);
+      if (e.isDirectory()) anda(caminho);
+      else if (/\.tsx?$/.test(e.name)) out.push(readFileSync(caminho, "utf8"));
+    }
+  };
+  anda(dir);
+  return out.join("\n");
+}
+
 /* ── toda regra da casa tem onde ser ligada ──────────────────────────
 
    O MESMO DEFEITO DA CARTA DECORATIVA, um andar acima.
@@ -672,28 +705,15 @@ for (const arq of suitesComSql) {
   }
 
   const juntaSql = defs.map((d) => d.corpo).join("\n");
-  const lerPasta = (dir, exts) => {
-    const out = [];
-    const anda = (d) => {
-      for (const e of readdirSync(d, { withFileTypes: true })) {
-        if (e.name === "node_modules" || e.name === ".next" || e.name === ".git") continue;
-        const caminho = join(d, e.name);
-        if (e.isDirectory()) anda(caminho);
-        else if (exts.some((x) => e.name.endsWith(x))) out.push(readFileSync(caminho, "utf8"));
-      }
-    };
-    anda(dir);
-    return out.join("\n");
-  };
   const cliente =
-    lerPasta(join(raiz, "components"), [".tsx", ".ts"]) +
-    lerPasta(join(raiz, "lib"), [".ts"]) +
-    lerPasta(join(raiz, "app"), [".tsx", ".ts"]) +
+    lerPastaTsx(join(raiz, "components")) +
+    lerPastaTsx(join(raiz, "lib")) +
+    lerPastaTsx(join(raiz, "app")) +
     /* AS SUÍTES CONTAM COMO LEITOR. Um campo que só um teste lê é diagnóstico
        — `mostrei.tinha` existe para o teste poder perguntar, depois, se a
        máquina TINHA escolha na hora de refutar. Não é funcionalidade morta: é
        instrumento, e instrumento sem uso na tela continua sendo instrumento. */
-    lerPasta(join(raiz, "scripts"), [".mjs"]);
+    lerPastaMjs(join(raiz, "scripts"));
 
   /* Nomes curtos demais para a busca dizer alguma coisa: `id`, `w`, `n`
      aparecem em qualquer arquivo por acidente. Eles ficam de fora da varredura
@@ -723,6 +743,108 @@ for (const arq of suitesComSql) {
     orfas.length === 0
       ? "e toda chave com quatro letras ou mais tem quem a leia — nenhuma finge ser funcionalidade"
       : `CHAVE SEM LEITOR: ${orfas.map((k) => `${k} (${[...escritas.get(k)].slice(0, 2).join(", ")})`).join(" · ")}`,
+  );
+}
+
+/* ── TODA LINHA DO REGISTRO TEM FRASE NA TELA ────────────────────────
+
+   O registro é o que a mesa LÊ. Uma linha que o servidor escreve e a tela não
+   sabe narrar aparece como espaço em branco — ou pior, some, e a pessoa que
+   perdeu dinheiro numa jogada não encontra a jogada.
+
+   Aconteceu com o assalto do Domínio, que foi a primeira linha nova em muito
+   tempo: sem a frase, ela teria entrado no registro invisível. A frase foi
+   escrita junto, mas ninguém obrigava.
+
+   A varredura casa o tipo emitido com o nome da função — `dominio_*` narra em
+   `components/dominio`, `met_*` em `components/metropole` — porque os quatro
+   jogos usam a mesma chave (`k` no Domínio e na Metrópole, `type` no Dossiê) e
+   comparar todos contra todos daria falso positivo em cima de falso positivo. */
+
+{
+  const defs = (
+    await db.query(
+      `select p.proname, pg_get_functiondef(p.oid) d from pg_proc p
+         join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'`,
+    )
+  ).rows;
+
+  const PASTA = {
+    dominio: "dominio",
+    met: "metropole",
+    dossie: "dossie",
+    letreiro: "letreiro",
+  };
+  const emitidos = { dominio: new Set(), met: new Set(), dossie: new Set(), letreiro: new Set() };
+  for (const { proname, d } of defs) {
+    const jogo = Object.keys(PASTA).find((j) => proname.startsWith(j + "_"));
+    if (!jogo) continue;
+    const corpo = d.replace(/\r\n/g, "\n");
+    for (const m of corpo.matchAll(/'k',\s*'([a-z-]+)'/g)) emitidos[jogo].add(m[1]);
+    for (const m of corpo.matchAll(/'type',\s*'([a-z_]+)'/g)) emitidos[jogo].add(m[1]);
+  }
+
+  const mudos = [];
+  let total = 0;
+  for (const [jogo, tipos] of Object.entries(emitidos)) {
+    if (!tipos.size) continue;
+    total += tipos.size;
+    const tela = lerPastaTsx(join(raiz, "components", PASTA[jogo]));
+    for (const t of tipos) {
+      if (!tela.includes(`"${t}"`) && !tela.includes(`'${t}'`)) mudos.push(`${jogo}/${t}`);
+    }
+  }
+  ok(
+    mudos.length === 0,
+    mudos.length === 0
+      ? `as ${total} linhas de registro que o servidor escreve têm frase na tela`
+      : `LINHA MUDA NO REGISTRO: ${mudos.sort().join(" · ")}`,
+  );
+}
+
+/* ── E TODA RPC LIBERADA TEM QUEM A CHAME ────────────────────────────
+
+   O espelho da auditoria das regras da casa. Uma função com `grant execute to
+   authenticated` que nenhum código do cliente chama é uma de duas coisas, e as
+   duas merecem atenção: uma funcionalidade que ficou inalcançável, ou uma porta
+   aberta sem porteiro.
+
+   A allowlist acima diz o que PODE ser chamado. Esta diz o que É. */
+
+{
+  const liberadas = (
+    await db.query(
+      `select p.proname
+         from pg_proc p
+         join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public'
+          and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+        group by p.proname`,
+    )
+  ).rows.map((r) => r.proname);
+
+  const codigo =
+    lerPastaTsx(join(raiz, "components")) +
+    lerPastaTsx(join(raiz, "app")) +
+    lerPastaTsx(join(raiz, "lib"));
+
+  /* Só as que o CLIENTE pode chamar. As auxiliares da RLS têm o grant e nunca
+     aparecem num `.rpc()` — quem as chama é o Postgres, avaliando a policy. */
+  const semChamador = liberadas
+    .filter((f) => PERMITIDAS.includes(f) && !DA_RLS.includes(f))
+    .filter((f) => !codigo.includes(`"${f}"`) && !codigo.includes(`'${f}'`))
+    .sort();
+
+  ok(
+    liberadas.length > 20,
+    `${liberadas.length} funções são executáveis por quem está autenticado`,
+  );
+  ok(
+    semChamador.length === 0,
+    semChamador.length === 0
+      ? "e toda RPC da allowlist tem quem a chame no cliente — nenhuma porta sem porteiro"
+      : `RPC LIBERADA E SEM CHAMADOR: ${semChamador.join(", ")}`,
   );
 }
 

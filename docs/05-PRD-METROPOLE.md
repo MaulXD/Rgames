@@ -360,6 +360,21 @@ coloridos:
 com `spring.heavy`, a fachada preenche, e as janelas acendem uma a uma. Som de obra, curto. Este é o
 momento de recompensa do jogo — ninguém pula.
 
+> **O que existe hoje é a versão 2D disso, e ela é curta: 480ms.** A casinha cai de cima com um
+> exagero na aterrissagem, e a última — a que acabou de ser paga — chega 60ms depois das outras,
+> porque é nela que o olho para. Não há terreno se abrindo nem janela acendendo: o tabuleiro é uma
+> grade de onze por onze e cada obra tem quatro pixels de lado.
+>
+> **O que importa aqui não é a duração, é O QUE dispara.** A marca `data-subindo` sai só no quadro
+> que CRESCEU desde a renderização anterior — nunca por ter aparecido. Sem essa distinção,
+> recarregar a página no meio de uma partida faria trinta casas construídas pipocarem de uma vez, e
+> a animação de "alguém acabou de construir" viraria ruído de carregamento. Há um guarda em
+> `scripts/smoke-render.mjs` que confere isso no HTML de todas as telas montadas.
+>
+> Antes disto a casinha simplesmente aparecia. Construir é uma das duas ou três decisões grandes do
+> jogo, e quem não estivesse olhando exatamente para aquele quadro não via acontecer nada — com o
+> dinheiro tendo acabado de sair da mão de alguém.
+
 **O peão** é uma peça de latão fundido (bonde, avião, chinelo, café, garrafa, chapéu) que **anda casa
 a casa**, com um passo por casa, acelerando: 140ms por casa nas primeiras, 60ms depois da quarta.
 Andar 12 casas leva ~1s e você **sente** a distância. Teleportar o peão mata metade da sensação do jogo.

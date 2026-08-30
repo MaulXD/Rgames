@@ -761,6 +761,24 @@ ok(
     : `CAMPO SEM NOME NO HTML: ${semNome.slice(0, 4).join(" · ")}`,
 );
 
+/* ── NADA ANIMA SÓ POR TER APARECIDO ────────────────────────────────────────
+
+   `data-subindo` marca a obra da Metrópole que CRESCEU desde a renderização
+   anterior, e é o que faz a casinha subir. Numa tela recém-montada não houve
+   renderização anterior — se a marca saísse aqui, recarregar a página faria
+   trinta casas construídas pipocarem de uma vez.
+
+   É a diferença entre "animar o que mudou" e "animar o que existe", e ela só
+   aparece no HTML da primeira renderização. Por isso o guarda mora aqui, junto
+   com as outras leituras do que de fato saiu. */
+const pipocando = TUDO_QUE_FOI_DESENHADO.filter(({ html }) => html.includes("data-subindo"));
+ok(
+  pipocando.length === 0,
+  pipocando.length === 0
+    ? "e nenhuma tela recém-montada anuncia obra subindo — a animação é do que MUDOU"
+    : `ANIMA NA MONTAGEM: ${pipocando.map((x) => x.nome).slice(0, 3).join(" · ")}`,
+);
+
 await db.end();
 console.log(falhas === 0 ? "\nTudo passou." : `\n${falhas} falha(s).`);
 process.exit(falhas === 0 ? 0 : 1);

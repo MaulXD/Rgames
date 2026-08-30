@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { COLORS, type ColorKey } from "@/lib/avatar";
 import {
   CASAS,
@@ -52,6 +53,46 @@ export function Tabuleiro({
   destaque?: string | null;
   onEscolher?: (prop: string) => void;
 }) {
+  /* ── O QUE ACABOU DE SER CONSTRUÍDO ────────────────────────────────────
+     Construir é uma das duas ou três decisões grandes da Metrópole, e a
+     casinha aparecia sem nenhum peso: um quadradinho verde surgia no canto e
+     pronto. Quem não estava olhando para aquele quadro não via nada
+     acontecer.
+
+     A comparação é feita DURANTE a renderização, contra o estado anterior
+     guardado em estado — o padrão que o React recomenda para "ajustar estado
+     quando a prop muda". Um efeito aqui encadearia uma renderização a mais a
+     cada mensagem do servidor.
+
+     E é a COMPARAÇÃO que importa, não a montagem: animar tudo o que aparece
+     faria o tabuleiro inteiro pipocar a cada recarga de página, com trinta
+     casas construídas piscando por nada. */
+  const [obrasVistas, setObrasVistas] = useState<Record<string, number>>(() =>
+    Object.fromEntries(Object.entries(props).map(([id, e]) => [id, e.hotel ? 5 : e.casas])),
+  );
+  const [subindo, setSubindo] = useState<string[]>([]);
+  const agora = Object.fromEntries(
+    Object.entries(props).map(([id, e]) => [id, e.hotel ? 5 : e.casas]),
+  );
+  if (
+    Object.keys(agora).some((id) => agora[id] !== obrasVistas[id]) ||
+    Object.keys(obrasVistas).length !== Object.keys(agora).length
+  ) {
+    const cresceu = Object.keys(agora).filter(
+      (id) => obrasVistas[id] !== undefined && agora[id] > obrasVistas[id],
+    );
+    setObrasVistas(agora);
+    if (cresceu.length > 0) setSubindo(cresceu);
+  }
+
+  /* A limpeza depende de tempo passar, então ela mora num efeito — e o
+     `setState` fica dentro do temporizador, que é onde ele é legítimo. */
+  useEffect(() => {
+    if (subindo.length === 0) return;
+    const id = setTimeout(() => setSubindo([]), 600);
+    return () => clearTimeout(id);
+  }, [subindo]);
+
   return (
     <div className="tab-rolo">
       <div className="tab">
@@ -65,6 +106,7 @@ export function Tabuleiro({
             meuAssento={meuAssento}
             evento={evento}
             apagada={!!destaque && casa.id !== destaque}
+            subindo={!!casa.id && subindo.includes(casa.id)}
             aceso={!!casa.id && casa.id === destaque}
             onEscolher={onEscolher}
           />
@@ -89,6 +131,7 @@ function Quadro({
   evento,
   apagada,
   aceso,
+  subindo,
   onEscolher,
 }: {
   casa: Casa;
@@ -99,6 +142,8 @@ function Quadro({
   evento?: Evento | null;
   apagada: boolean;
   aceso: boolean;
+  /** a obra desta casa acabou de subir — a construção ganha um instante */
+  subindo: boolean;
   onEscolher?: (prop: string) => void;
 }) {
   const { col, row } = naGrade(casa.pos);
@@ -174,7 +219,7 @@ function Quadro({
 
       {/* construção: quatro casinhas e um hotel, desenhados */}
       {est && (est.casas > 0 || est.hotel) && (
-        <span className="quadro-obras" aria-hidden>
+        <span className="quadro-obras" data-subindo={subindo || undefined} aria-hidden>
           {est.hotel ? (
             <span className="obra-hotel" />
           ) : (

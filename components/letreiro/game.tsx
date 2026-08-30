@@ -14,6 +14,7 @@ import { Avatar } from "@/components/avatar";
 import { useSession } from "@/components/session";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { parseAvatar } from "@/lib/avatar";
+import { useMenosMovimento } from "@/lib/movimento";
 import * as sfx from "@/lib/sfx";
 import { Confete } from "@/components/confete";
 import {
@@ -108,6 +109,10 @@ export function LetreiroGame({
   const mudo = useSyncExternalStore(sfx.subscribe, sfx.getSnapshot, sfx.getServerSnapshot);
 
   const revealing = match.public_state.phase === "reveal" || match.status === "finished";
+  /* A revelação é uma sequência cronometrada, e relógio não é CSS: a folha de
+     estilo tira o desenho do caminho e não encurta os 2,2 segundos por palavra
+     que escapou. */
+  const calmo = useMenosMovimento();
 
   /* ── relógio do servidor ────────────────────────────────────────────────
      O cliente não conta o tempo sozinho: mede o desvio do próprio relógio
@@ -331,6 +336,7 @@ export function LetreiroGame({
   if (revealing) {
     return (
       <Reveal
+        calmo={calmo}
         match={match}
         seats={seats}
         meId={user?.id ?? ""}

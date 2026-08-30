@@ -17,11 +17,23 @@ import type { Caso } from "@/lib/dossie";
 export function Abertura({
   caso,
   reviravolta,
+  calmo,
   onFim,
 }: {
   caso: Caso;
   /** true quando a regra própria do caso está valendo nesta partida */
   reviravolta?: boolean;
+  /* QUEM PEDIU MENOS MOVIMENTO NO SISTEMA — decidido pelo contêiner.
+
+     A abertura é uma sequência cronometrada: 3,2 segundos no cartaz e 4,2 por
+     tempo da narração. Com os seis tempos que o validador cobra, são quase
+     trinta segundos, e a folha de estilo não encurta nenhum deles.
+
+     Aqui a sequência não roda: o cartaz e OS SEIS TEMPOS aparecem juntos, e
+     quem entra na partida é a pessoa. Ler no próprio ritmo é melhor do que ser
+     lido em voz alta — e a narração é a única parte do caso que não se
+     recupera depois. */
+  calmo: boolean;
   onFim: () => void;
 }) {
   const beats = caso.narracao ?? [caso.tagline];
@@ -44,6 +56,8 @@ export function Abertura({
   }, [caso.clima]);
 
   useEffect(() => {
+    /* Para quem pediu menos movimento não há relógio: está tudo na tela. */
+    if (calmo) return;
     const espera = ato < 0 ? 3200 : 4200;
     const id = setTimeout(() => {
       if (ato + 1 >= beats.length) encerra();
@@ -53,13 +67,13 @@ export function Abertura({
       }
     }, espera);
     return () => clearTimeout(id);
-  }, [ato, beats.length, encerra]);
+  }, [ato, beats.length, encerra, calmo]);
 
   return (
     <div className="abertura" onClick={encerra} role="presentation">
       <div className="abertura-chuva" aria-hidden />
 
-      {ato < 0 ? (
+      {calmo || ato < 0 ? (
         <div className="abertura-cartaz">
           <p className="abertura-era">{caso.era}</p>
           <h1 className="abertura-nome">{caso.name}</h1>
@@ -84,6 +98,18 @@ export function Abertura({
               <span>{caso.twist.rule}</span>
             </p>
           )}
+
+          {/* A NARRAÇÃO INTEIRA, EMBAIXO DO CARTAZ. Ela é a única parte do caso
+              que não se recupera depois — o mapa, as cartas e o registro ficam
+              a partida toda; a história é contada uma vez. Cortá-la para quem
+              pediu menos movimento seria cobrar a preferência com o enredo. */}
+          {calmo && (
+            <div className="abertura-narracao">
+              {beats.map((b, i) => (
+                <p key={i}>{b}</p>
+              ))}
+            </div>
+          )}
         </div>
       ) : (
         <p className="abertura-beat" key={ato}>
@@ -99,14 +125,18 @@ export function Abertura({
           encerra();
         }}
       >
-        Pular
+        {calmo ? "Começar" : "Pular"}
       </button>
 
-      <div className="abertura-pontos" aria-hidden>
-        {beats.map((_, i) => (
-          <span key={i} data-on={i <= ato} />
-        ))}
-      </div>
+      {/* Os pontinhos contam a sequência, e sem sequência eles não contam
+          nada — seis marcas acesas de uma vez é enfeite que finge progresso. */}
+      {!calmo && (
+        <div className="abertura-pontos" aria-hidden>
+          {beats.map((_, i) => (
+            <span key={i} data-on={i <= ato} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

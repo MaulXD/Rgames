@@ -18,13 +18,24 @@ import type { MatchRow, Seat } from "@/components/letreiro/game";
  * ISSO aí" é o que faz alguém apertar Revanche.
  */
 export function Reveal({
+  calmo,
   match,
   seats,
   meId,
   onDone,
   onRematch,
 }: {
-  match: MatchRow;
+/* QUEM PEDIU MENOS MOVIMENTO NO SISTEMA — decidido pelo contêiner.
+
+     A revelação é uma sequência cronometrada: cinco segundos de conferência, e
+     depois 2,2 segundos POR PALAVRA que escapou. Numa grade rica isso passa de
+     quarenta segundos, e a folha de estilo não encurta nenhum deles — ela só
+     tira o desenho do caminho.
+
+     Aqui a sequência não roda: os atos passam no botão, e o que escapou aparece
+     TUDO DE UMA VEZ, em lista. Nada se perde e ninguém espera. */
+  calmo: boolean;
+    match: MatchRow;
   seats: Seat[];
   meId: string;
   onDone: () => void;
@@ -41,6 +52,8 @@ export function Reveal({
 
   // ato 1 → 2 → 3, com passo automático e possibilidade de pular
   useEffect(() => {
+    /* Para quem pediu menos movimento, quem passa de ato é a pessoa. */
+    if (calmo) return;
     if (ato === 1) {
       const id = setTimeout(() => setAto(missed.length ? 2 : 3), 5200);
       return () => clearTimeout(id);
@@ -54,7 +67,7 @@ export function Reveal({
       const id = setTimeout(() => setQual((q) => q + 1), 2200);
       return () => clearTimeout(id);
     }
-  }, [ato, qual, missed.length]);
+  }, [ato, qual, missed.length, calmo]);
 
   const ranking = [...seats]
     .map((s) => ({ ...s, pts: scores[s.user_id] ?? 0, achadas: found[s.user_id] ?? [] }))
@@ -102,9 +115,18 @@ export function Reveal({
         <p className="eyebrow">
           {ato === 1 ? "Conferência" : ato === 2 ? "O que escapou" : "Placar"}
         </p>
+        {/* SEM O RELÓGIO, PRECISA DE UM CAMINHO PARA A FRENTE. "Pular" sempre
+            foi um atalho para o placar, e com os atos parados ele deixaria o
+            segundo ato inalcançável — quem pediu menos movimento perderia
+            justamente a lista do que escapou. */}
+        {calmo && ato === 1 && missed.length > 0 && (
+          <button className="btn btn-brass reveal-skip" onClick={() => setAto(2)}>
+            O que escapou
+          </button>
+        )}
         {ato !== 3 && (
           <button className="btn btn-ghost reveal-skip" onClick={() => setAto(3)}>
-            Pular
+            {calmo && ato === 2 ? "Placar" : "Pular"}
           </button>
         )}
       </div>
@@ -141,7 +163,35 @@ export function Reveal({
       )}
 
       {/* ── ato 2 · o que ninguém achou ───────────────────────────────── */}
-      {ato === 2 && atual && (
+      {/* ── ato 2, sem sequência ─────────────────────────────────────────
+          A grade UMA vez, parada, e a lista inteira do lado. O caminho traçado
+          é o que se perde, e é o único pedaço que era movimento; as palavras e
+          o que elas valiam — que é o que dói e faz apertar Revanche — ficam
+          todas na tela, ao mesmo tempo, sem relógio nenhum. */}
+      {calmo && ato === 2 && missed.length > 0 && (
+        <div className="reveal-missed">
+          <Board
+            grid={grid}
+            path={[]}
+            state="idle"
+            onPathChange={() => {}}
+            onCommit={() => {}}
+            disabled
+          />
+          <ul className="reveal-escaparam">
+            {missed.map((w) => (
+              <li key={w.w}>
+                <span className="reveal-escaparam-w">{w.w}</span>
+                <span className="mono reveal-escaparam-pts">
+                  {w.pts} {w.pts === 1 ? "ponto" : "pontos"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {!calmo && ato === 2 && atual && (
         <div className="reveal-missed">
           <Board
             grid={grid}

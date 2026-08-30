@@ -138,11 +138,20 @@ for (const caso of casos) {
   const posicoes = Object.fromEntries(peoes.map((p, i) => [String(p.seat), caso.rooms[i].id]));
   const objetos = Object.fromEntries(caso.weapons.map((w, i) => [w.id, caso.rooms[i % 9].id]));
 
-  monta(`dossie/${caso.id} · abertura`, Abertura, {
-    caso,
-    reviravolta: !!caso.twist,
-    onFim: nada,
-  }, caso.victim.name);
+  /* AS DUAS FORMAS. A abertura normal é uma sequência de quase trinta
+     segundos, um tempo da narração por vez; para quem pediu menos movimento os
+     seis aparecem juntos, embaixo do cartaz. */
+  for (const calmo of [false, true]) {
+    monta(
+      `dossie/${caso.id} · abertura${calmo ? " · inteira (menos movimento)" : ""}`,
+      Abertura,
+      { caso, reviravolta: !!caso.twist, calmo, onFim: nada },
+      /* Na forma calma a narração está toda na tela desde o primeiro quadro, e
+         é isso que se cobra: o último tempo, que a sequência só mostraria aos
+         vinte e oito segundos. */
+      calmo ? [caso.victim.name, String(caso.narracao.at(-1) ?? "").slice(0, 24)] : caso.victim.name,
+    );
+  }
 
   monta(`dossie/${caso.id} · mapa`, Mapa, {
     caso,
@@ -362,13 +371,21 @@ if (encerrada) {
       [encerrada.id],
     )
   ).rows;
-  monta("letreiro/revelação", Reveal, {
-    match: encerrada,
-    seats: assentos,
-    meId: assentos[0]?.user_id ?? "",
-    onDone: nada,
-    onRematch: nada,
-  }, assentos[0]?.display_name ?? "");
+  /* AS DUAS FORMAS. A revelação normal é uma sequência de 2,2 segundos por
+     palavra que escapou; para quem pediu menos movimento no sistema ela vira
+     lista, sem relógio. As duas são tela, com tipografia e botões próprios, e
+     nenhuma das cinco auditorias do HTML veria a segunda se ela existisse só
+     atrás de uma preferência do sistema. */
+  for (const calmo of [false, true]) {
+    monta(`letreiro/revelação${calmo ? " · sem sequência (menos movimento)" : ""}`, Reveal, {
+      calmo,
+      match: encerrada,
+      seats: assentos,
+      meId: assentos[0]?.user_id ?? "",
+      onDone: nada,
+      onRematch: nada,
+    }, assentos[0]?.display_name ?? "");
+  }
 } else {
   ok(true, "letreiro/revelação: nenhuma partida em revelação no banco — nada a montar");
 }

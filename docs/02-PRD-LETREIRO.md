@@ -686,5 +686,12 @@ conferência.
 **Sensação**
 - [ ] Do toque na letra ao feedback visual: < 100ms
 - [ ] 60fps durante a queda dos dados em Galaxy A54
-- [ ] Com `prefers-reduced-motion`, os dados aparecem já parados e o jogo é idêntico
+- [x] Com `prefers-reduced-motion`, os dados aparecem já parados e o jogo é idêntico — a queda
+      dos dados é CSS, e o desligamento universal do `globals.css` a resolve (`npm run css`
+      passou a cobrar que esse bloco continue de pé). **A REVELAÇÃO não era CSS**, e essa
+      metade faltava: o segundo ato é uma sequência de 2,2 segundos POR PALAVRA que escapou,
+      e numa grade rica isso passa de quarenta segundos que a folha de estilo não encurta.
+      Agora os atos passam no botão e o que escapou aparece tudo de uma vez, em lista — o
+      caminho traçado é a única coisa que se perde, e ele era o único pedaço que era
+      movimento
 - [ ] Jogável de uma mão em 375px de largura

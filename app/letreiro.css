@@ -555,6 +555,49 @@
     transform: none;
   }
 }
+/* ── AS QUE ESCAPARAM, TODAS DE UMA VEZ ──────────────────────────────────
+   Para quem pediu menos movimento. O segundo ato normal é uma sequência de
+   2,2 segundos por palavra, e numa grade rica isso passa de quarenta segundos;
+   aqui a grade aparece uma vez, parada, e a lista inteira do lado.
+
+   Duas colunas com a palavra à esquerda e o valor à direita, alinhado por
+   `tabular-nums`: é uma tabela de números que se compara de cima a baixo, e é
+   para isso que a coluna existe. */
+.reveal-escaparam {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  width: 100%;
+  max-width: 25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.reveal-escaparam li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.3rem 0.7rem;
+  border: 2.5px solid var(--line-strong);
+  border-radius: var(--r-sm);
+}
+.reveal-escaparam-w {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 60, "WONK" 1, "opsz" 96;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--vivo-amarelo);
+}
+.reveal-escaparam-pts {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--fg-dim);
+  font-variant-numeric: tabular-nums;
+}
+
 .reveal-word-pts {
   font-size: 0.84rem;
   font-weight: 600;

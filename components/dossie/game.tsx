@@ -18,6 +18,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSession } from "@/components/session";
 import { carregaCaso, nomeDaCarta, type Caso } from "@/lib/dossie";
 import type { LinhaLog } from "@/lib/dossie-bloco";
+import { useMenosMovimento } from "@/lib/movimento";
 import * as sfx from "@/lib/sfx";
 
 /**
@@ -143,6 +144,9 @@ export function DossieGame({
      `dossie_pode_mentir` exige no servidor, menos a de estar armada — que aqui
      é o próprio interruptor. A tela não decide nada: ela só evita oferecer o
      que seria recusado. */
+  /* A abertura é uma sequência cronometrada de quase trinta segundos, e
+     relógio não é CSS: a folha de estilo não encurta nenhum deles. */
+  const calmo = useMenosMovimento();
   const podeMentir = !!priv.assassino && !priv.mentiu && st.phase !== "over";
   const mentiraArmada = podeMentir && !!priv.mentiraArmada;
   const interrogatorio = st.pending?.kind === "interroga" ? st.pending : null;
@@ -399,7 +403,12 @@ export function DossieGame({
 
   if (!abriu && st.phase !== "over") {
     return (
-      <Abertura caso={caso} reviravolta={!!st.twist} onFim={() => setAbriu(true)} />
+      <Abertura
+        caso={caso}
+        reviravolta={!!st.twist}
+        calmo={calmo}
+        onFim={() => setAbriu(true)}
+      />
     );
   }
 

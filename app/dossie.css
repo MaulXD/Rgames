@@ -149,6 +149,34 @@
   color: #cbbfa8;
 }
 
+/* ── A NARRAÇÃO INTEIRA, PARA QUEM PEDIU MENOS MOVIMENTO ──────────────────
+   A sequência normal é um tempo por vez, 4,2 segundos cada; aqui os seis ficam
+   embaixo do cartaz e a pessoa lê no ritmo dela.
+
+   Menor que o `.abertura-beat` de propósito: um tempo sozinho no meio da tela
+   pode ser grande, seis empilhados precisam caber. E a coluna continua estreita
+   — texto de leitura corrida em linha longa cansa, e esta é a única parte do
+   caso que se lê uma vez só. */
+.abertura-narracao {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  max-width: 42ch;
+  margin-top: 1.4rem;
+  text-align: left;
+  max-height: 44vh;
+  overflow-y: auto;
+}
+.abertura-narracao p {
+  font-family: var(--font-fraunces), Georgia, serif;
+  font-variation-settings: "SOFT" 30, "WONK" 0, "opsz" 40;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #f0e8d8;
+  text-shadow: 0 2px 18px rgb(0 0 0 / 0.9);
+}
+
 .abertura-beat {
   position: relative;
   max-width: 34ch;

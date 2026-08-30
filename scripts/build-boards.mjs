@@ -240,28 +240,54 @@ function avaliar(grid, size, achadas) {
   // pelo menos 40% das células precisam entrar numa palavra comum longa
   if (participam.size < Math.ceil(size * size * 0.4)) return null;
 
-  const dif = nComuns < r.comuns * 1.5 ? 1 : nComuns < r.comuns * 2.5 ? 2 : nComuns < r.comuns * 4 ? 3 : 4;
-  return { total, maxScore, maxComum, comuns, difficulty: dif };
+  /* Aqui havia um balde de dificuldade em quatro degraus, e ele saiu em 0111.
+     Era um resumo de `comuns.length` com as bordas presas a múltiplos do piso —
+     um número derivado, congelado no momento da geração, com nome invertido
+     (mais palavras comuns é mais FÁCIL) e sem nenhum leitor no projeto.
+
+     Quem precisar ordenar grades por dificuldade ordena por `comuns`, que é o
+     número de verdade e nunca fica velho. */
+  return { total, maxScore, maxComum, comuns };
 }
 
 // ── geração ────────────────────────────────────────────────────────────────
-/* AS GRADES QUE NINGUEM MAIS USA SAEM, e "usar" tem duas formas.
+const tamanhos = SO_TAMANHO ? [SO_TAMANHO] : [4, 5];
+
+/* AS GRADES QUE NINGUÉM MAIS USA SAEM, e "usar" tem duas formas.
 
    Uma partida referencia a grade dela — isso o script sempre soube. O DESAFIO
-   DIARIO tambem referencia, e nao e uma partida: ele vive em `letreiro_dia`, e
+   DIÁRIO também referencia, e não é uma partida: ele vive em `letreiro_dia`, e
    a grade daquele dia tem de continuar existindo enquanto o placar do dia
-   existir.
+   existir. A chave estrangeira de 0110 recusaria o apagamento com um erro;
+   excluir aqui evita o erro em vez de tratar.
 
-   A chave estrangeira de 0110 recusaria o apagamento com um erro; excluir aqui
-   evita o erro em vez de tratar. Sao as duas metades da mesma regra, e as duas
-   valem a pena: o banco garante, e o script nao tropeca. */
-await client.query(`
-  delete from public.letreiro_boards b
-   where not exists (select 1 from public.matches m where m.board_id = b.id)
-     and not exists (select 1 from public.letreiro_dia d where d.board_id = b.id)
-`);
+   E A FAXINA SÓ ALCANÇA OS TAMANHOS QUE ESTA RODADA VAI REPOR.
 
-const tamanhos = SO_TAMANHO ? [SO_TAMANHO] : [4, 5];
+   O `delete` não olhava para `SO_TAMANHO`. `npm run boards -- 800 5` — o uso
+   que o cabeçalho deste arquivo documenta — apagava o pool INTEIRO e repunha só
+   o 5×5, deixando o 4×4 com as poucas grades que alguma partida referenciava.
+   Aconteceu: mil e duzentas grades viraram oitenta e sete, e nada avisou.
+
+   Apagar é sempre a metade barata; repor é a cara. O `where` que faltava é o
+   que amarra as duas. */
+
+/* E A FAXINA SÓ ALCANÇA OS TAMANHOS QUE ESTA RODADA VAI REPOR.
+
+   O `delete` não olhava para `SO_TAMANHO`. `npm run boards -- 800 5` — o uso
+   que o cabeçalho deste arquivo documenta — apagava o pool INTEIRO e repunha
+   só o 5×5, deixando o 4×4 com as poucas grades que alguma partida
+   referenciava. Aconteceu: mil e duzentas grades viraram oitenta e sete,
+   e nada avisou.
+
+   Apagar é sempre a metade barata; repor é a cara. O `where` que faltava é o
+   que amarra as duas. */
+await client.query(
+  `delete from public.letreiro_boards b
+    where b.size = any($1::int[])
+      and not exists (select 1 from public.matches m where m.board_id = b.id)
+      and not exists (select 1 from public.letreiro_dia d where d.board_id = b.id)`,
+  [tamanhos],
+);
 
 for (const size of tamanhos) {
   const vizinhos = vizinhosDe(size);
@@ -291,7 +317,6 @@ for (const size of tamanhos) {
     aceitas.push({
       size,
       grid,
-      difficulty: nota.difficulty,
       word_count: nota.total,
       max_score: nota.maxScore,
       max_score_comum: nota.maxComum,
@@ -316,14 +341,14 @@ for (const size of tamanhos) {
     const fatia = aceitas.slice(i, i + LOTE);
     await client.query(
       `insert into public.letreiro_boards
-         (size, grid, difficulty, word_count, max_score, max_score_comum, comuns, solution)
+         (size, grid, word_count, max_score, max_score_comum, comuns, solution)
        select t.size,
               array(select jsonb_array_elements_text(t.grid)),
-              t.difficulty, t.word_count, t.max_score, t.max_score_comum,
+              t.word_count, t.max_score, t.max_score_comum,
               array(select jsonb_array_elements_text(t.comuns)),
               t.solution
          from jsonb_to_recordset($1::jsonb)
-           as t(size int, grid jsonb, difficulty int, word_count int,
+           as t(size int, grid jsonb, word_count int,
                 max_score int, max_score_comum int, comuns jsonb, solution jsonb)`,
       [JSON.stringify(fatia)],
     );

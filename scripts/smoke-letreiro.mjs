@@ -1132,6 +1132,47 @@ ok(repetivel === true, "e o cérebro é determinístico: mesma semente, mesmas p
    ficção.
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* PERGUNTAR NÃO É ABRIR.
+
+   `letreiro_grade_do_dia` guarda a decisão do dia, e por uma versão ela também
+   a ESCREVIA — a pergunta virava um ato. Este próprio bloco pergunta por
+   sessenta dias seguidos para conferir que o sorteio não repete, e deixava
+   sessenta dias fixados em que ninguém jogou, cada um segurando uma grade viva
+   para sempre porque a chave estrangeira impede apagá-la.
+
+   A suíte encontrou o defeito sendo a suíte. Agora são duas funções: a
+   pergunta é `stable` e a decisão mora em `letreiro_fixa_o_dia`, que só
+   `letreiro_diario_abrir` chama. */
+const diaLonge = "2031-07-04";
+const perguntou = (
+  await db.query("select (public.letreiro_grade_do_dia($1::date)).id id", [diaLonge])
+).rows[0].id;
+const fixouAoPerguntar = Number(
+  (await db.query("select count(*)::int n from letreiro_dia where dia = $1", [diaLonge]))
+    .rows[0].n,
+);
+ok(
+  perguntou != null && fixouAoPerguntar === 0,
+  fixouAoPerguntar === 0
+    ? `perguntar a grade de ${diaLonge} responde (${perguntou}) e não fixa nada`
+    : "a pergunta fixou o dia — ela virou um ato",
+);
+
+const fixou = (
+  await db.query("select (public.letreiro_fixa_o_dia($1::date)).id id", [diaLonge])
+).rows[0].id;
+const agoraFixado = Number(
+  (await db.query("select count(*)::int n from letreiro_dia where dia = $1", [diaLonge]))
+    .rows[0].n,
+);
+ok(
+  agoraFixado === 1 && String(fixou) === String(perguntou),
+  agoraFixado === 1 && String(fixou) === String(perguntou)
+    ? "e abrir fixa a MESMA grade que a pergunta respondia — a decisão não muda a resposta"
+    : `fixou ${fixou} depois de responder ${perguntou} (linhas: ${agoraFixado})`,
+);
+await db.query("delete from letreiro_dia where dia = $1", [diaLonge]);
+
 // a grade do dia é a mesma toda vez que se pergunta, e diferente entre dias
 const g1 = (await db.query("select (public.letreiro_grade_do_dia('2026-03-15')).id")).rows[0].id;
 const g2 = (await db.query("select (public.letreiro_grade_do_dia('2026-03-15')).id")).rows[0].id;
@@ -1523,6 +1564,42 @@ const pool = (
       group by size order by size`,
   )
 ).rows;
+
+/* ── A MESMA CONTA, NOS DOIS IDIOMAS ────────────────────────────────────────
+
+   `max_score` e `max_score_comum` são gravados por `build-boards.mjs`, que
+   soma os pontos em JavaScript. O servidor soma os mesmos pontos em
+   `letreiro_pontos_palavra`, que é SQL. Duas implementações da mesma regra, em
+   duas linguagens, e nada as obrigava a concordar.
+
+   O dia em que a tabela de pontos mudar num lado e não no outro, o placar da
+   partida e o "aproveitamento" da pessoa passam a discordar sobre o mesmo
+   tabuleiro — e a conta que está errada é a que ninguém vê, porque `max_score`
+   só aparece dividindo.
+
+   Recalcular quatrocentas grades pelo caminho do SQL e comparar com o que o JS
+   gravou custa uma consulta. */
+const contas = (
+  await db.query(
+    `select count(*)::int total,
+            count(*) filter (where max_score <> recalc)::int divergem,
+            count(*) filter (where max_score_comum <> recalc_comum)::int divergem_comum
+       from (
+         select max_score, max_score_comum,
+                coalesce((select sum(public.letreiro_pontos_palavra(k))::int
+                            from jsonb_object_keys(solution) k), 0) recalc,
+                coalesce((select sum(public.letreiro_pontos_palavra(c))::int
+                            from unnest(comuns) c), 0) recalc_comum
+           from public.letreiro_boards limit 400
+       ) x`,
+  )
+).rows[0];
+ok(
+  contas.divergem === 0 && contas.divergem_comum === 0,
+  contas.divergem === 0 && contas.divergem_comum === 0
+    ? `em ${contas.total} grades, o total que o gerador somou em JS bate com o que o SQL soma`
+    : `AS DUAS CONTAS DISCORDAM: ${contas.divergem} grades no total e ${contas.divergem_comum} nas comuns`,
+);
 
 for (const b of pool) {
   ok(

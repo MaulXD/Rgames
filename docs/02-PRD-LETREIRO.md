@@ -345,6 +345,18 @@ Este é o mecanismo de retenção mais barato do projeto inteiro.
 > O sorteio continua igual — ele só deixou de ser a FONTE da resposta para virar o jeito de
 > produzi-la na primeira vez. E a chave estrangeira impede que a grade do dia seja apagada por
 > baixo, o que `build-boards` faria sem saber.
+>
+> **E PERGUNTAR NÃO É ABRIR** — migração 0112. A primeira versão escrevia dentro da própria
+> `letreiro_grade_do_dia`, e a pergunta virava um ato: a suíte pergunta a grade de sessenta dias
+> seguidos para conferir que o sorteio não repete, e deixou sessenta dias fixados em que ninguém
+> jogou, cada um segurando uma grade viva para sempre. A suíte encontrou o defeito sendo a suíte.
+> São duas funções: a pergunta é `stable`, a decisão mora em `letreiro_fixa_o_dia` e só quem abre
+> o desafio a chama.
+>
+> **E a faxina de `build-boards` só alcança os tamanhos que ela vai repor.** O `delete` não olhava
+> para o argumento de tamanho, então `npm run boards -- 800 5` — o uso que o próprio cabeçalho do
+> script documenta — apagava o pool inteiro e repunha só o 5×5. Mil e duzentas grades 4×4 viraram
+> oitenta e sete, e nada avisou.
 
 ### 6.9 Estatísticas que valem alguma coisa [v1]
 

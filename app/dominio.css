@@ -286,7 +286,11 @@
   flex: none;
   padding: 0.12rem 0.5rem;
   border-radius: 999px;
-  background: rgb(0 0 0 / 0.2);
+  /* O VÉU ERA DE 20% e a etiqueta dava 3,41:1 em cima da menta viva. Ela diz em
+     que assalto a briga está — é o número que orienta quem está olhando o dado
+     cair, e ficava mais fraco que o resto do painel justamente por ser o único
+     com fundo próprio. Com 40% dá 5,6:1, e o véu continua sendo véu. */
+  background: rgb(0 0 0 / 0.4);
   color: #eafff6;
   font-size: 0.68rem;
   font-weight: 700;
@@ -403,6 +407,60 @@
   font-size: 0.9rem;
   font-weight: 700;
   opacity: 0.72;
+}
+
+/* ── A MESMA BRIGA, SEM ENCENAÇÃO ────────────────────────────────────────
+   Para quem pediu menos movimento no sistema. A folha já tira o giro do dado;
+   o que ela não tira é o TEMPO, e vinte e um segundos de dados parados é pior
+   que a animação que a pessoa não queria.
+
+   Aqui os assaltos aparecem TODOS, um por linha, e quem fecha é ela. Fundo
+   claro e tinta escura porque a bandeja da rolagem é menta viva, e é a mesma
+   conta de contraste do resto: a tinta passa em todos os dez tons, o branco
+   não passa em nenhum. */
+.rolagem-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.rolagem-lista li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  border: 2.5px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: #eafaf3;
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+.rolagem-lista-n {
+  min-width: 1.4rem;
+  font-weight: 800;
+  opacity: 0.6;
+}
+.rolagem-lista-dados {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.rolagem-lista-vs {
+  opacity: 0.6;
+  letter-spacing: 0;
+}
+.rolagem-lista-baixa {
+  font-family: var(--font-archivo), sans-serif;
+  font-size: 0.76rem;
+  font-weight: 700;
 }
 
 /* ── painel de ação ───────────────────────────────────────────────────── */

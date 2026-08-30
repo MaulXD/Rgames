@@ -365,6 +365,83 @@ if (disputadas.length === 0) {
   );
 }
 
+/* ── e quem pediu menos movimento é ouvido? ──────────────────────────────────
+
+   O PRD 01 promete `prefers-reduced-motion` em toda tela, e este projeto anima
+   muito: dado que rola, peão que anda, casa que sobe, confete, o pulinho do
+   relógio, o lustro da bandeja. Quarenta e oito regras declaram `animation`.
+
+   A promessa NÃO é cumprida regra a regra, e é aqui que uma auditoria ingênua
+   erra: o `globals.css` tem um desligamento UNIVERSAL — `*`, `*::before` e
+   `*::after` com `animation-duration` de 0,01ms, uma iteração só e transição
+   instantânea, tudo `!important`. Uma varredura que cobrasse um bloco de
+   `reduce` por regra animada acusaria doze falsos positivos e ensinaria a
+   ignorar a saída vermelha.
+
+   A pergunta certa é sobre O DESLIGAMENTO, porque ele é a coisa que carrega a
+   promessa inteira e cabe num bloco só. Apagar esse bloco, ou estreitá-lo para
+   um punhado de classes, devolve as quarenta e oito animações a quem pediu que
+   não houvesse nenhuma — e nada acusaria, porque a tela continua funcionando
+   perfeitamente para quem não ligou a preferência.
+
+   O QUE ELE NÃO ALCANÇA, e por isso não é a história toda: TEMPO não é CSS. A
+   rolagem do Domínio é encenada por `setTimeout`, e a folha de estilo não
+   encurta um único milissegundo dela — tirava o giro do dado e deixava a pessoa
+   olhando vinte e um segundos de dados parados. Isso se conserta em código, com
+   `useMenosMovimento`, e é conferido em `npm run smoke:render`, que monta as
+   duas formas da rolagem. */
+
+const UNIVERSAL = [
+  ["animation-duration", /animation-duration\s*:\s*0?\.?\d+m?s\s*!important/],
+  ["animation-iteration-count", /animation-iteration-count\s*:\s*1\s*!important/],
+  ["transition-duration", /transition-duration\s*:\s*0?\.?\d+m?s\s*!important/],
+];
+
+const blocosCalmos = [];
+for (const f of arquivosCss) {
+  const texto = readFileSync(join(cssDir, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, " ");
+  for (const m of texto.matchAll(/@media[^{]*prefers-reduced-motion[^{]*\{([\s\S]*?)\n\}/g)) {
+    blocosCalmos.push({ arquivo: f, corpo: m[1] });
+  }
+}
+
+/* O bloco que vale é o que casa TUDO — `*` mais os dois pseudo-elementos. */
+const oCuringa = blocosCalmos.find(
+  (b) =>
+    /(^|[,{\s])\*\s*,/.test(b.corpo) &&
+    /\*::before/.test(b.corpo) &&
+    /\*::after/.test(b.corpo),
+);
+
+const faltando = oCuringa
+  ? UNIVERSAL.filter(([, re]) => !re.test(oCuringa.corpo)).map(([nome]) => nome)
+  : UNIVERSAL.map(([nome]) => nome);
+
+console.log(
+  `  ${blocosCalmos.length} bloco(s) de prefers-reduced-motion, em ${
+    new Set(blocosCalmos.map((b) => b.arquivo)).size
+  } folha(s)`,
+);
+
+const semCalma = [];
+if (!oCuringa) {
+  semCalma.push("não existe bloco que case `*`, `*::before` e `*::after`");
+} else if (faltando.length) {
+  semCalma.push(`o bloco universal não declara ${faltando.join(", ")} com !important`);
+}
+
+if (semCalma.length === 0) {
+  console.log(
+    "  ok      e o desligamento universal está de pé — nenhuma animação sobrevive a quem pediu que não houvesse\n",
+  );
+} else {
+  for (const x of semCalma) console.error(`  FALHA   ${x}`);
+  console.error(
+    "\n  Sem esse bloco, as animações do projeto inteiro voltam para quem pediu que não houvesse" +
+      " — e a tela continua perfeita para quem não ligou a preferência, então nada mais acusa.\n",
+  );
+}
+
 /* ── e o dedo alcança? ───────────────────────────────────────────────────────
 
    Este projeto é MOBILE-FIRST por decisão, e alvo pequeno é o defeito de
@@ -599,6 +676,7 @@ if (gruposColididos.length === 0) {
 }
 
 process.exit(
+  semCalma.length === 0 &&
   disputadas.length === 0 &&
   orfas.length === 0 &&
   anonimos.length === 0 &&

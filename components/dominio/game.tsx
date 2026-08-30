@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { LegendaContinentes, MapaVantara } from "@/components/dominio/mapa";
 import { Rolagem, type Assalto } from "@/components/dominio/dados";
+import { useMenosMovimento } from "@/lib/movimento";
 import { Mao, Objetivo, type Carta } from "@/components/dominio/cartas";
 import { Avatar } from "@/components/avatar";
 import { Confete } from "@/components/confete";
@@ -202,6 +203,9 @@ export function DominioGame({
     assentos.find((a) => a.user_id === donoDaVez?.userId)?.is_bot === true;
   const minhaVez = meuAssento !== null && st.turnSeat === meuAssento && st.phase !== "fim";
   const acabou = st.phase === "fim" || match.status === "finished" || st.vencedor !== null;
+  /* A folha de estilo já tira o giro do dado; o que ela não tira é o TEMPO da
+     encenação, e é aqui que ele é decidido. */
+  const calmo = useMenosMovimento();
   // papel picado não precisa de estado: é uma leitura do resultado
   const festa = acabou && st.vencedor === meuAssento;
 
@@ -766,6 +770,7 @@ export function DominioGame({
              primeira e começaria do passo errado */
           key={`${briga.de}-${briga.para}-${briga.assaltos.length}`}
           assaltos={briga.assaltos}
+          calmo={calmo}
           nomeAtac={mapa.porId[briga.de]?.nome ?? briga.de}
           nomeDefe={mapa.porId[briga.para]?.nome ?? briga.para}
           onFim={() => setBriga(null)}

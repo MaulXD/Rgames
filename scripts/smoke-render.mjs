@@ -515,6 +515,45 @@ for (const qual of ["vantara", "relampago"]) {
   }, mapa.territorios[0].nome);
 }
 
+/* ── DOMÍNIO — a rolagem, nas duas formas ───────────────────────────────────
+
+   A briga inteira vem resolvida do servidor, e o cliente ENCENA: um assalto por
+   vez, 620ms para o dado cair e 1150ms para ler. Doze assaltos são vinte e um
+   segundos.
+
+   Para quem pediu menos movimento no sistema, a encenação não roda — a folha de
+   estilo já tirava o giro, mas não tirava o tempo, e dados PARADOS por vinte e
+   um segundos são pior que a animação que a pessoa não queria. No lugar dela, o
+   painel mostra os assaltos TODOS DE UMA VEZ, que é mais informação do que a
+   encenação chega a mostrar (ela sempre mostra um), e quem fecha é a pessoa.
+
+   As duas formas são montadas porque as duas são tela: a lista tem tipografia,
+   cor e um botão próprios, e nenhuma das cinco auditorias do HTML a veria se
+   ela existisse só atrás de uma preferência do sistema. */
+const { Rolagem } = await import("@/components/dominio/dados");
+
+const A_BRIGA = [
+  { dAtac: [6, 5, 2], dDefe: [4, 3], perdeAtac: 0, perdeDefe: 2, atac: 9, defe: 4 },
+  { dAtac: [3, 3, 1], dDefe: [5, 2], perdeAtac: 1, perdeDefe: 1, atac: 8, defe: 3 },
+  { dAtac: [6, 6, 4], dDefe: [6, 1], perdeAtac: 1, perdeDefe: 1, atac: 7, defe: 2 },
+  { dAtac: [2, 2, 1], dDefe: [5, 4], perdeAtac: 2, perdeDefe: 0, atac: 5, defe: 2 },
+];
+
+monta(
+  "dominio/rolagem · encenada",
+  Rolagem,
+  { assaltos: A_BRIGA, nomeAtac: "Creuza", nomeDefe: "Nestor", calmo: false, onFim: nada },
+  ["Creuza", "Nestor"],
+);
+
+monta(
+  "dominio/rolagem · sem encenação (menos movimento)",
+  Rolagem,
+  { assaltos: A_BRIGA, nomeAtac: "Creuza", nomeDefe: "Nestor", calmo: true, onFim: nada },
+  /* Os quatro assaltos de uma vez, e a saída que a pessoa controla. */
+  ["Creuza", "4 assaltos", "Continuar"],
+);
+
 /* ══════════════════════════════════════════════════════════════════════════
    AS TELAS INTEIRAS, com uma partida de verdade
 

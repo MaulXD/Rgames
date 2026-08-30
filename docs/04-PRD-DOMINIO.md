@@ -552,9 +552,13 @@ som de papel rasgando quando é quebrada.
 - [x] `−2` por rodada passiva é aplicado
 - [x] Objetivo secreto cumprido vale +20 e encerra na hora; o placar acumula entre rodadas e
       os contadores de rodada (`tomou`, `atacou`) zeram a cada virada
-- [ ] Placar bate com o recálculo independente a partir do `match_events` — bloqueado pela
-      ausência da tabela (acima). Hoje o placar é
-      verificado contra a regra escrita, não contra um recálculo a partir de eventos
+- [ ] Placar bate com o recálculo independente a partir do `match_events` — a tabela nunca foi
+      construída (o registro vive em `public_state.log`), então o critério não vale como está
+      escrito. **O que ele quer continua valendo:** o placar tem de bater com um recálculo
+      feito a partir do REGISTRO, e não só com a regra escrita — é a diferença entre conferir
+      a conta e conferir se a conta descreve o que aconteceu. O registro tem teto de 80 linhas
+      por partida, e é isso que falta resolver antes: uma partida de Campanha longa perde as
+      primeiras, e o recálculo ficaria incompleto sem avisar
 
 **Objetivos**
 - [x] Nenhum objetivo depende de um jogador específico por cor
@@ -569,9 +573,24 @@ som de papel rasgando quando é quebrada.
       cliente encenar dado por dado sem inventar resultado. O mapa fica congelado no estado
       anterior enquanto o dado rola — senão o dado contaria uma história cujo fim já está na tela
 - [ ] 60fps no mapa completo em Galaxy A54
-- [ ] Cena ≤ 1,5 MB de assets
+- [x] Cena ≤ 1,5 MB de assets — **não há cena 3D**, e o mapa é um SVG desenhado a partir do
+      próprio pacote. `npm run peso` mede o que a abertura pede inteira: 215 KB de js, 22 de
+      css e 289 de fontes, e todo o código de cliente publicado soma 298 KB
 - [ ] Mapa legível em 375px de largura, com pinça para zoom
 - [x] Duas facções quaisquer distinguíveis em protanopia, deuteranopia e tritanopia — oito
       texturas por cima do esmalte, porque carmim e oliva caem no mesmo tom em duas dessas
       condições e nada impede as duas na mesma partida
-- [ ] Com `prefers-reduced-motion`, o combate mostra os resultados sem física, e nada se perde
+- [x] Com `prefers-reduced-motion`, o combate mostra os resultados sem física, e nada se perde
+      — e a metade que faltava não era CSS. O desligamento universal do `globals.css` já tirava
+      o GIRO do dado, e `npm run css` passou a cobrar que ele continue de pé. Mas **tempo não
+      é CSS**: a rolagem é encenada por `setTimeout`, 620ms para o dado cair mais 1150ms para
+      ler, e doze assaltos são vinte e um segundos que a folha de estilo não encurta. Quem
+      ligou a preferência ficava olhando dados PARADOS por vinte e um segundos, o que é pior
+      que a animação que ela não queria: a tela parece travada.
+
+      Agora a encenação não roda, e nada se perde — o painel mostra os assaltos **todos de uma
+      vez**, que é mais informação do que a encenação chega a mostrar (ela sempre mostra um), e
+      quem fecha é a pessoa, no botão. A preferência diz que ela quer o controle do ritmo.
+      As duas formas são montadas em `npm run smoke:render`, e a auditoria de contraste achou
+      um defeito no painel antigo assim que ele passou a ser desenhado: o contador de assalto
+      dava 3,41:1

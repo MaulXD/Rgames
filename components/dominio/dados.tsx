@@ -95,11 +95,20 @@ export function Rolagem({
   assaltos,
   nomeAtac,
   nomeDefe,
+  calmo,
   onFim,
 }: {
   assaltos: Assalto[];
   nomeAtac: string;
   nomeDefe: string;
+  /* QUEM DECIDE É O CONTÊINER, e não este componente.
+
+     A preferência do sistema é uma leitura do mundo de fora, e componente que
+     lê o mundo por conta própria não dá para montar de outro jeito — nem numa
+     suíte, nem numa tela de configuração que queira mostrar as duas formas. Com
+     ela entrando pela porta, as duas rolagens são só duas props, e as cinco
+     auditorias do HTML enxergam as duas. */
+  calmo: boolean;
   onFim: () => void;
 }) {
   const [passo, setPasso] = useState(0);
@@ -115,6 +124,19 @@ export function Rolagem({
      E resolve outro problema de brinde: com um efeito por passo, uma aba que
      perde o foco e volta podia pular assalto. Agora a cadeia é uma só. */
   useEffect(() => {
+    /* QUEM PEDIU MENOS MOVIMENTO NÃO ESPERA A ENCENAÇÃO.
+
+       A folha de estilo já tira o giro do dado. O que ela não tira é o TEMPO:
+       620ms para o dado cair mais 1150ms para ler, por assalto, e doze assaltos
+       são vinte e um segundos de dados PARADOS. Sem o giro, a tela parece
+       travada — o que é pior que a animação que a pessoa não queria.
+
+       Então a sequência não roda, e nada se perde: o painel mostra os assaltos
+       TODOS DE UMA VEZ, que é mais informação do que a encenação jamais mostra
+       (ela sempre mostra um). Quem fecha é a pessoa, no botão — a preferência
+       diz que ela quer o controle do ritmo, e é isso que se dá a ela. */
+    if (calmo) return;
+
     let vivo = true;
     let id: ReturnType<typeof setTimeout>;
 
@@ -145,10 +167,63 @@ export function Rolagem({
       vivo = false;
       clearTimeout(id);
     };
-  }, [assaltos, onFim]);
+  }, [assaltos, onFim, calmo]);
 
   const atual = assaltos[Math.min(passo, assaltos.length - 1)];
   if (!atual) return null;
+
+  /* ── TODOS OS ASSALTOS, DE UMA VEZ ───────────────────────────────────────
+     A mesma briga sem encenação: cada linha é um assalto, com os dados como
+     números, quem levou a melhor em cada par, e o que sobrou dos dois lados.
+
+     Os dados aqui são texto e não desenho de propósito. O `Dado` desenha os
+     pontos num SVG que depende de tamanho para ser lido, e doze deles
+     empilhados viram uma parede; o número é a mesma informação numa linha. */
+  if (calmo) {
+    return (
+      <div className="rolagem" role="status" aria-live="polite">
+        <div className="rolagem-topo">
+          <span className="rolagem-quem">{nomeAtac}</span>
+          <span className="rolagem-vs mono">
+            {assaltos.length} assalto{assaltos.length === 1 ? "" : "s"}
+          </span>
+          <span className="rolagem-quem rolagem-quem-d">{nomeDefe}</span>
+        </div>
+
+        <ol className="rolagem-lista">
+          {assaltos.map((a, i) => {
+            const n = Math.min(a.dAtac.length, a.dDefe.length);
+            return (
+              <li key={i}>
+                <span className="mono rolagem-lista-n">{i + 1}</span>
+                <span className="mono rolagem-lista-dados">
+                  {a.dAtac.join(" ")}
+                  <span className="rolagem-lista-vs" aria-label="contra">
+                    {Array.from({ length: n }, (_, j) =>
+                      a.dAtac[j] > a.dDefe[j] ? "‹" : "›",
+                    ).join("")}
+                  </span>
+                  {a.dDefe.join(" ")}
+                </span>
+                <span className="rolagem-lista-baixa">
+                  {a.perdeAtac > 0 && `−${a.perdeAtac} atacante${a.perdeAtac > 1 ? "s" : ""}`}
+                  {a.perdeAtac > 0 && a.perdeDefe > 0 && ", "}
+                  {a.perdeDefe > 0 && `−${a.perdeDefe} defensor${a.perdeDefe > 1 ? "es" : ""}`}
+                </span>
+                <span className="mono rolagem-restam">
+                  {a.atac} × {a.defe}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+
+        <button type="button" className="btn btn-brass w-full" onClick={onFim}>
+          Continuar
+        </button>
+      </div>
+    );
+  }
 
   const pares = Math.min(atual.dAtac.length, atual.dDefe.length);
   // o par i é vitória do atacante quando o dado dele é MAIOR; empate é do

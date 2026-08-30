@@ -131,6 +131,9 @@ function ok(cond, msg) {
 
 const CIDADE = JSON.parse(await readFile(join(root, "lib", "metropole", "cidade.json"), "utf8"));
 const CASA = Object.fromEntries(CIDADE.casas.filter((c) => c.id).map((c) => [c.id, c]));
+/* Os eventos da cidade, por id. Sobe para cá porque a varredura do aluguel,
+   bem antes do bloco de eventos, precisa deles. */
+const EV = Object.fromEntries(CIDADE.eventos.map((e) => [e.id, e]));
 
 console.log("\nMetrópole — fumaça\n");
 /** Reais, só para as mensagens deste teste. */
@@ -219,6 +222,77 @@ ok(
   (await aluguel(est, "ipanema")) === CASA.ipanema.aluguel[5],
   `Ipanema com hotel cobra R$ ${CASA.ipanema.aluguel[5]}`,
 );
+
+/* ── A MESMA CONTA, NOS DOIS IDIOMAS ────────────────────────────────────────
+
+   `met_aluguel` cobra em SQL. `aluguelAtual`, em `lib/metropole/cidade.ts`,
+   é o número que o tabuleiro MOSTRA — a mesma regra escrita em JavaScript,
+   porque a tela não pode esperar uma ida ao servidor para desenhar quanto cada
+   quadro custa.
+
+   Duas implementações da mesma regra, em duas linguagens, e nada as obrigava a
+   concordar. O dia em que uma mudar sem a outra, a pessoa lê um número na tela
+   e paga outro no caixa — e é o pior tipo de divergência que existe num jogo de
+   dinheiro, porque parece trapaça do jogo.
+
+   Os testes acima conferem o SQL contra a tabela do pacote. Este confere os
+   DOIS contra o mesmo estado, num varredor: cada tipo de propriedade, cada
+   degrau de construção, hipoteca, grupo fechado e aberto, os três eventos que
+   mexem em aluguel, e duas somas de dado. */
+
+const { aluguelAtual } = await import("@/lib/metropole/cidade");
+
+const CENARIOS = [];
+for (const [nome, donos, extra] of [
+  ["sem dono", {}, {}],
+  ["bairro solto", { ipanema: 1 }, {}],
+  ["grupo fechado", { ipanema: 1, "lago-sul": 1, "vila-nova": 1 }, {}],
+  ["hipotecada", { ipanema: 1, "lago-sul": 1, "vila-nova": 1 }, { ipanema: { hipotecada: true } }],
+  ["1 casa", { ipanema: 1, "lago-sul": 1, "vila-nova": 1 }, { ipanema: { casas: 1 } }],
+  ["3 casas", { ipanema: 1, "lago-sul": 1, "vila-nova": 1 }, { ipanema: { casas: 3 } }],
+  ["hotel", { ipanema: 1, "lago-sul": 1, "vila-nova": 1 }, { ipanema: { hotel: true } }],
+  ["1 transporte", { congonhas: 1 }, {}],
+  ["4 transportes", { congonhas: 1, santos: 1, luz: 1, "rio-niteroi": 1 }, {}],
+  ["1 companhia", { energia: 1 }, {}],
+  ["2 companhias", { energia: 1, saneamento: 1 }, {}],
+]) {
+  for (const evId of [null, "obra-avenida", "alta-temporada", "greve-transporte"]) {
+    for (const soma of [7, 11]) {
+      const base = estadoBase(donos, extra);
+      const est = evId
+        ? { ...base, round: 5, evento: { ...EV[evId], desde: 5, ate: 7, grupo: "verde" } }
+        : base;
+      CENARIOS.push({ nome: `${nome} · ${evId ?? "sem evento"} · dado ${soma}`, est, soma });
+    }
+  }
+}
+
+const ALVOS = ["ipanema", "congonhas", "energia"];
+const divergem = [];
+for (const c of CENARIOS) {
+  for (const alvo of ALVOS) {
+    const noBanco = await aluguel(c.est, alvo, c.soma);
+    const naTela = aluguelAtual(c.est.props, alvo, c.soma, c.est.evento ?? null);
+    if (noBanco !== naTela) {
+      divergem.push(`${alvo} · ${c.nome}: banco ${noBanco} ≠ tela ${naTela}`);
+    }
+  }
+}
+ok(
+  divergem.length === 0,
+  divergem.length === 0
+    ? `em ${CENARIOS.length * ALVOS.length} combinações, o que a tela mostra é o que o caixa cobra`
+    : `A TELA MENTE SOBRE O PREÇO: ${divergem.slice(0, 4).join(" · ")}`,
+);
+
+/* E O VARREDOR TEM DENTES: se todas as combinações dessem zero, o teste acima
+   passaria sem medir nada. Pelo menos uma tem de cobrar de verdade. */
+const cobrou = await aluguel(
+  estadoBase({ ipanema: 1, "lago-sul": 1, "vila-nova": 1 }, { ipanema: { hotel: true } }),
+  "ipanema",
+  7,
+);
+ok(cobrou > 0, `e a varredura mede aluguel de verdade (hotel em Ipanema: R$ ${cobrou})`);
 
 // transporte: a tabela depende de QUANTOS o dono tem
 const TRANSP = ["congonhas", "santos", "luz", "rio-niteroi"];
@@ -1837,7 +1911,6 @@ ok(
    tela que mostra o valor de tabela é pior que evento nenhum.
    ══════════════════════════════════════════════════════════════════════════ */
 
-const EV = Object.fromEntries(CIDADE.eventos.map((e) => [e.id, e]));
 ok(Object.keys(EV).length === 6, `os 6 eventos chegaram no tabuleiro publicado`);
 
 /** Um estado com um evento em vigor. */

@@ -485,6 +485,65 @@ if (partida?.public_state) {
     "não se ataca território próprio",
   );
 
+  /* ── A MESMA REGRA, NOS DOIS IDIOMAS ─────────────────────────────────────
+
+     `dominio_conectado` decide em SQL se dá para remanejar daqui até lá — pelo
+     caminho por território PRÓPRIO, que é a regra do remanejamento. `conectados`,
+     em `lib/dominio/mapas.ts`, faz a mesma busca em JavaScript: é ela que ACENDE
+     os destinos no mapa, porque a tela não pode esperar uma ida ao servidor para
+     saber onde a pessoa pode tocar.
+
+     Duas implementações da mesma busca, em duas linguagens, e nada as obrigava a
+     concordar. O dia em que uma parar num território do adversário e a outra
+     atravessar, o mapa acende um destino que o servidor recusa — a pessoa toca,
+     não acontece nada, e o jogo parece quebrado sem erro na tela.
+
+     A comparação é feita sobre o estado REAL da partida em curso, e é
+     exaustiva: para cada território meu, o conjunto inteiro de destinos. */
+  {
+    const { conectados, mapaDe } = await import("@/lib/dominio/mapas");
+    const mapaCli = mapaDe(est.map);
+    const meusTers = Object.keys(est.donos).filter((t) => est.donos[t] === est.turnSeat);
+    const divergentes = [];
+    for (const origem of meusTers) {
+      const naTela = conectados(mapaCli, est.donos, est.turnSeat, origem);
+      const noBanco = new Set(
+        (
+          await db.query(
+            `select t.id from jsonb_object_keys(($2::jsonb) -> 'donos') t(id)
+              where public.dominio_conectado(
+                      (select data from game_themes where id = $1), $2::jsonb, $3::smallint, $4, t.id)`,
+            [est.map, JSON.stringify(est), est.turnSeat, origem],
+          )
+        ).rows.map((r) => r.id),
+      );
+      noBanco.delete(origem);
+      const so = (a, b) => [...a].filter((x) => !b.has(x));
+      if (so(naTela, noBanco).length || so(noBanco, naTela).length) {
+        divergentes.push(
+          `${origem}: tela+${so(naTela, noBanco).join(",")} banco+${so(noBanco, naTela).join(",")}`,
+        );
+      }
+    }
+    ok(
+      divergentes.length === 0,
+      divergentes.length === 0
+        ? `nos ${meusTers.length} territórios do turno, o mapa acende exatamente os destinos que o servidor aceita`
+        : `O MAPA ACENDE O QUE O SERVIDOR RECUSA: ${divergentes.slice(0, 3).join(" · ")}`,
+    );
+    /* E tem dentes: um estado em que ninguém alcança ninguém passaria no teste
+       acima com os dois lados vazios. */
+    const algumAlcanca = meusTers.some(
+      (o) => conectados(mapaCli, est.donos, est.turnSeat, o).size > 0,
+    );
+    ok(
+      algumAlcanca,
+      algumAlcanca
+        ? "e a comparação mede alcance de verdade — há território ligado a território"
+        : "nenhum território alcança outro; a comparação não mediu nada",
+    );
+  }
+
   const antesA = est.exercitos[de];
   const antesD = est.exercitos[para];
   /* O ponto do registro ANTES deste ataque: o que vier com `seq` maior é

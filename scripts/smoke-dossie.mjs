@@ -239,6 +239,59 @@ const longe = tema.rooms.map((r) => r.id).find(
   (r) => r !== aqui && !vizinhos.includes(r) &&
     !tema.secretPassages.some((p) => p.includes(aqui) && p.includes(r)),
 );
+/* ── A MESMA REGRA, NOS DOIS IDIOMAS ────────────────────────────────────────
+
+   `dossie_can_move` decide em SQL se dá para ir daqui até lá. `alcancavel`, em
+   `lib/dossie.ts`, é a mesma regra em JavaScript — é ela que ACENDE o lugar no
+   mapa, porque a tela não pode esperar uma ida ao servidor para saber onde a
+   pessoa pode tocar.
+
+   Duas implementações da mesma regra, em duas linguagens, e nada as obrigava a
+   concordar. O dia em que uma souber de uma passagem secreta que a outra não
+   sabe, o mapa acende um lugar que o servidor recusa — e a pessoa toca, não
+   acontece nada, e o jogo parece quebrado sem nenhum erro na tela.
+
+   São nove lugares: 81 pares cabem numa consulta, e a comparação é exaustiva
+   em vez de amostrada. */
+{
+  const { alcancavel } = await import("@/lib/dossie");
+  const lugares = tema.rooms.map((r) => r.id);
+  const noBanco = new Set(
+    (
+      await db.query(
+        `select a.id || '>' || b.id par
+           from jsonb_array_elements(($1::jsonb) -> 'rooms') x(v),
+                lateral (select x.v ->> 'id' id) a,
+                jsonb_array_elements(($1::jsonb) -> 'rooms') y(v),
+                lateral (select y.v ->> 'id' id) b
+          where public.dossie_can_move($1::jsonb, a.id, b.id)`,
+        [JSON.stringify(tema)],
+      )
+    ).rows.map((r) => r.par),
+  );
+  const divergem = [];
+  for (const de of lugares) {
+    for (const para of lugares) {
+      const naTela = alcancavel(tema, de, para);
+      if (naTela !== noBanco.has(`${de}>${para}`)) {
+        divergem.push(`${de}→${para}: tela ${naTela}, banco ${!naTela}`);
+      }
+    }
+  }
+  ok(
+    divergem.length === 0,
+    divergem.length === 0
+      ? `nos ${lugares.length * lugares.length} pares de lugares, o mapa acende exatamente o que o servidor deixa`
+      : `O MAPA ACENDE O QUE O SERVIDOR RECUSA: ${divergem.slice(0, 4).join(" · ")}`,
+  );
+  /* E a comparação tem dentes: se `can_move` dissesse não para tudo, o teste
+     acima passaria com o mapa apagado. */
+  ok(
+    noBanco.size >= lugares.length,
+    `e a checagem mede alcance de verdade: ${noBanco.size} pares alcançáveis`,
+  );
+}
+
 const inalcancavel = await rpc(eu.token, "dossie_move", { p_match: partida.id, p_room: longe });
 ok(inalcancavel.status >= 400 && /UNREACHABLE/.test(JSON.stringify(inalcancavel.body)),
    `lugar não adjacente (${longe}) é recusado`);

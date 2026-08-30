@@ -1005,6 +1005,39 @@ ok(
     : `TEXTO FRACO NA ÁRVORE: ${fracos.slice(0, 6).join(" | ")}`,
 );
 
+/* ── O BLOCO É EDITÁVEL O TEMPO INTEIRO ─────────────────────────────────────
+
+   Critério de aceite do PRD 03 §11, e é ele que mata o tempo morto do Detetive:
+   o bloco fica aberto DURANTE O TURNO DOS OUTROS, senão quem não está jogando
+   fica olhando.
+
+   Ele se sustenta por construção — `Bloco` não recebe prop nenhuma que fale de
+   turno, então não há por onde desabilitá-lo. Mas "por construção" é uma frase
+   sobre o código de hoje, e a prop que chega amanhã não avisa. Aqui o guarda
+   pergunta ao HTML que saiu.
+
+   A única célula desabilitada legítima é a que já é FATO: sobre o que o
+   servidor provou, ninguém rabisca. */
+const blocos = TUDO_QUE_FOI_DESENHADO.filter(({ nome }) => nome.endsWith("· bloco"));
+const celulas = blocos.map(({ nome, html }) => {
+  const todas = [...html.matchAll(/<button[^>]*class="cel"[^>]*>/g)].map((m) => m[0]);
+  return {
+    nome,
+    livres: todas.filter((t) => !t.includes("disabled")).length,
+    presas: todas.filter((t) => t.includes("disabled")).length,
+  };
+});
+
+ok(
+  celulas.length > 0 && celulas.every((c) => c.livres > 0),
+  celulas.length === 0
+    ? "não achei nenhum bloco de dedução no HTML — o guarda ficou sem o que olhar"
+    : celulas.every((c) => c.livres > 0)
+      ? `e o bloco de dedução sai editável nos ${celulas.length} casos` +
+        ` (${celulas[0].livres} células livres, ${celulas[0].presas} já são fato)`
+      : `BLOCO TRANCADO: ${celulas.filter((c) => !c.livres).map((c) => c.nome).join(" · ")}`,
+);
+
 /* ── NADA ANIMA SÓ POR TER APARECIDO ────────────────────────────────────────
 
    `data-subindo` marca a obra da Metrópole que CRESCEU desde a renderização

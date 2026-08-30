@@ -770,7 +770,12 @@ automáticos em tinta impressa; suas anotações, em tinta de caneta. A diferen�
 - [x] `dossie_pass_refute` falha se o jogador tem alguma das três cartas
 - [x] A linha de refutação no registro **não** contém a carta mostrada — o registro vive em
       `public_state.log` e não numa tabela `match_events`, que nunca foi construída
-- [ ] No modo Surpresa, o tema não aparece em nenhuma resposta antes do início da partida
+- [x] No modo Surpresa, o tema não aparece em nenhuma resposta antes do início da partida
+      — a suíte lê TUDO o que uma pessoa da sala alcança pela rede (a sala, os membros, as
+      partidas, a resposta do próprio `set_room_settings`) e procura os quatro ids, um por um.
+      Hoje a promessa se sustenta por construção, porque o caso é sorteado dentro de
+      `dossie_start` e não existe antes; o teste confere a PROMESSA e não o desenho, e é ele
+      que reprovaria a otimização óbvia de sortear no lobby para o pacote ir baixando antes
 - [x] Espectador não recebe nenhuma mão nem a solução
 
 **Temas**
@@ -783,8 +788,15 @@ automáticos em tinta impressa; suas anotações, em tinta de caneta. A diferen�
       promessa que apodrece em silêncio, porque um `if sala = 'biblioteca'` escrito às pressas
       funciona e passa em todo teste — e quebra o próximo tema
 - [ ] Trocar de caso entre revanches não recarrega a página
-- [ ] Rodízio não repete caso até esgotar
-- [ ] Cada pacote pesa ≤ 900 KB e só baixa quando a partida começa
+- [ ] Rodízio não repete caso até esgotar — **decidido não construir, por ora.** O lobby
+      oferece dois modos e não quatro: escolher um caso, ou surpresa. "Aleatório" e
+      "Surpresa" só seriam diferentes se o lobby sorteasse antes e mostrasse o resultado, o
+      que ninguém faz hoje — dois rótulos para o mesmo comportamento parecem generosidade e
+      são confusão. O rodízio precisa de memória entre revanches, que é estado novo
+- [x] Cada pacote pesa ≤ 900 KB e só baixa quando a partida começa — **3,3 a 3,5 KB**, e o
+      orçamento de 900 KB do [PRD 07 §6.1](07-SISTEMA-DE-TEMAS.md) é de ASSETS 3D, que ainda
+      não existem. O JSON é conferido por `npm run smoke:pacotes`, e `carregaCaso` roda num
+      efeito disparado por `public_state.theme` — que só existe depois de `dossie_start`
 
 **Reviravoltas** — todos verificados em `npm run smoke:dossie`
 - [x] **Apagão:** o log registra `seat: null` e o `private_state` do destinatário grava `from: null`
@@ -799,7 +811,10 @@ automáticos em tinta impressa; suas anotações, em tinta de caneta. A diferen�
 
 **Regras**
 - [x] Mover para lugar não adjacente **no grafo daquele caso** é rejeitado
-- [ ] Palpitar fora de um lugar é rejeitado
+- [x] Palpitar fora de um lugar é rejeitado — **impossível por construção, e é melhor assim.**
+      `dossie_suggest_como(assento, partida, suspeito, objeto)` não recebe lugar: o palpite
+      acontece ONDE O PEÃO ESTÁ, e ele está sempre em algum dos nove. Não há corredor neste
+      mapa. Uma regra que não pode ser quebrada é melhor que uma regra guardada por um `if`
 - [x] Palpitar encerra o turno mesmo com ação sobrando
 - [x] Palpitar move o suspeito e o objeto nomeados — menos para dentro de lugar fechado pela
       tempestade, que seria porta dos fundos
@@ -814,13 +829,28 @@ automáticos em tinta impressa; suas anotações, em tinta de caneta. A diferen�
 - [x] Manual não preenche nada; Dedutivo resolve uma cadeia de 3 inferências — uma em que
       nenhum passo isolado dá a resposta: os cinco suspeitos na mão provam o sexto no envelope,
       o envelope prova os outros fora dele, e o que sobra fecha o tipo
-- [ ] O bloco é editável durante o turno dos outros
+- [x] O bloco é editável durante o turno dos outros — `Bloco` não recebe prop nenhuma que
+      fale de turno, então não há por onde desabilitá-lo; e como "por construção" é uma frase
+      sobre o código de hoje, `npm run smoke:render` pergunta ao HTML que saiu: 65 células
+      livres e 19 já provadas pelo servidor, nos quatro casos. Sobre o que é FATO ninguém
+      rabisca, e essa é a única célula presa que existe
 
 **Fluxo**
-- [ ] Quem não refuta em 30s tem a carta escolhida pelo servidor e o jogo segue
+- [x] Quem não refuta em 30s tem a carta escolhida pelo servidor e o jogo segue — as duas
+      metades, e a segunda faltava. "O jogo segue" já era provado: a fila de refutação sempre
+      se esvazia. **A que importa para a dedução é a outra:** quando a pessoa no relógio TEM
+      uma das três, a faxina REFUTA por ela em vez de passar. Passar escreveria no registro
+      público uma frase falsa — "esta pessoa não tem nenhuma das três" —, e todo caderno da
+      mesa acredita nele. É o defeito do álibi da 0117 com outra causa, e não é caso extremo:
+      é alguém sem sinal no metrô
 - [x] Todos desconectados: a partida termina sozinha e revela o envelope — a faxina encerra, e
       desde 0071 ela pula a mesa abandonada em vez de jogá-la para uma plateia vazia
-- [ ] Reconectar restaura mão, bloco, posição e o estado da reviravolta
+- [x] Reconectar restaura mão, bloco, posição e o estado da reviravolta — não há sessão de
+      partida no servidor: quem volta é um cliente NOVO com o mesmo token, e monta a tela com
+      duas leituras. A suíte rabisca o bloco, relê as duas com o token e mais nada, e cobra as
+      quatro. **A tentação concreta é o bloco:** ele é rabiscado o tempo inteiro, gravar a cada
+      toque parece desperdício, e guardar em memória funciona perfeitamente até alguém fechar
+      a aba — e aí a pessoa perde a única coisa da partida que era trabalho dela
 
 **Sensação**
 - [ ] Alguém olhando sua tela por cima do ombro não vê a carta refutada sem você segurar

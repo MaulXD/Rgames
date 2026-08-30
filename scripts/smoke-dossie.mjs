@@ -949,6 +949,10 @@ async function dossieSolo({ token, niveis, tetoPassos, avancado = false }) {
   }
   return {
     id: idP.id,
+    /* A SALA, e não só a partida: a faxina só age em mesa com gente por perto
+       (0071), e `touch_presence` pede o id da SALA. Quem monta um palco para
+       testar a faxina precisa dos dois. */
+    salaId: salaS.id,
     envelope,
     meu,
     bots,
@@ -3348,6 +3352,203 @@ if (!palco.erro) {
     trio.every((c) => naoTemDepois.includes(c))
       ? "e o álibi vale por UMA refutação: na seguinte, a passada volta a valer"
       : "o álibi virou imunidade permanente",
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   QUEM NÃO REFUTA EM 30s TEM A CARTA ESCOLHIDA PELO SERVIDOR
+
+   Critério de aceite do PRD 03 §11, e a metade dele que não estava conferida.
+
+   A suíte já provava que a fila de refutação SEMPRE SE ESVAZIA — a partida
+   nunca fica pendurada esperando alguém que saiu. Isso é o "e o jogo segue".
+
+   Falta o outro pedaço, e ele é o que importa para a dedução: quando a pessoa
+   no relógio TEM uma das três, a faxina precisa REFUTAR por ela, e não passar.
+
+   Passar seria escrever no registro público uma frase falsa — "esta pessoa não
+   tem nenhuma das três" —, e todo caderno da mesa acredita nele. É exatamente o
+   defeito do álibi da 0117 com outra causa: informação FABRICADA, que se
+   propaga pelo laço de restrições até riscar carta do envelope.
+
+   E não é caso extremo: alguém sem sinal no metrô, alguém que largou o celular
+   na mesa. É a coisa mais comum do mundo.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\nDOSSIÊ: a faxina refuta por quem sumiu\n");
+
+const mesaF = await dossieSolo({
+  token: P[0].token,
+  niveis: ["medio", "medio"],
+  tetoPassos: 0,
+});
+ok(!mesaF.erro, `a mesa da faxina montou${mesaF.erro ? ": " + mesaF.erro : ""}`);
+
+if (!mesaF.erro) {
+  const euF = { seat: mesaF.meu };
+  const maqF = mesaF.bots[0];
+  const maoF = (
+    await db.query(
+      "select data -> 'hand' m from match_private_state where match_id = $1 and user_id = $2",
+      [mesaF.id, P[0].id],
+    )
+  ).rows[0].m;
+
+  /* O TRIO TEM UMA CARTA MINHA E MAIS NADA QUE ALGUÉM POSSA MOSTRAR — a fila
+     tem só o meu assento, então basta que a minha esteja lá. */
+  const minha = maoF[0];
+  const tipos = ["suspects", "weapons", "rooms"];
+  const ondeCabe = tipos.findIndex((k) => mesaF.tema[k].some((x) => x.id === minha));
+  const trioF = tipos.map((k, i) =>
+    i === ondeCabe ? minha : mesaF.tema[k].find((x) => !maoF.includes(x.id)).id,
+  );
+
+  await db.query(
+    `update matches set
+       public_state = public_state || jsonb_build_object(
+         'phase', 'refute', 'turnSeat', $2::int,
+         'pending', jsonb_build_object(
+           'bySeat', $2::int, 'guess', $3::jsonb, 'queue', $4::jsonb, 'at', 0)),
+       turn_deadline = now() - interval '1 second'
+     where id = $1`,
+    [mesaF.id, Number(maqF.seat), JSON.stringify(trioF), JSON.stringify([Number(euF.seat)])],
+  );
+  await rpc(P[0].token, "touch_presence", { p_room: mesaF.salaId });
+  await varre("dossie_sweep");
+
+  const depoisF = (
+    await db.query("select public_state st from matches where id = $1", [mesaF.id])
+  ).rows[0].st;
+  const linhaF = depoisF.log?.[0];
+
+  ok(
+    linhaF?.type === "refute" && Number(linhaF.seat) === Number(euF.seat),
+    linhaF?.type === "refute"
+      ? "sumido com uma das três na mão, a faxina REFUTA por ele"
+      : `a faxina escreveu ${JSON.stringify(linhaF)} — passar por quem tem a carta é mentira no registro`,
+  );
+  ok(
+    !(depoisF.log ?? []).some(
+      (l) => l.type === "pass" && Number(l.seat) === Number(euF.seat) && l.seq >= (linhaF?.seq ?? 0),
+    ),
+    "e não escreve uma passada junto — seria a mesma informação falsa do álibi da 0117",
+  );
+
+  /* E A CARTA CHEGA A QUEM PALPITOU. Refutar sem entregar a carta seria a
+     rodada jogada fora: o registro diria que alguém mostrou algo e ninguém
+     teria visto o quê. */
+  const viuF = (
+    await db.query(
+      "select data -> 'seen' v from match_private_state where match_id = $1 and user_id = $2",
+      [mesaF.id, maqF.user_id],
+    )
+  ).rows[0].v;
+  ok(
+    (viuF ?? []).some((x) => x.card === minha),
+    (viuF ?? []).some((x) => x.card === minha)
+      ? `e a carta escolhida pelo servidor (${minha}) chega a quem palpitou`
+      : `a carta não chegou: ${JSON.stringify(viuF)}`,
+  );
+
+  /* E A CARTA CONTINUA NA MÃO DE QUEM MOSTROU. Mostrar não é descartar, e uma
+     faxina que "gastasse" a carta deixaria a mão menor sem ninguém pedir. */
+  const maoDepoisF = (
+    await db.query(
+      "select data -> 'hand' m from match_private_state where match_id = $1 and user_id = $2",
+      [mesaF.id, P[0].id],
+    )
+  ).rows[0].m;
+  ok(
+    maoDepoisF.length === maoF.length && maoDepoisF.includes(minha),
+    "e a carta continua na mão dele — mostrar nunca foi descartar",
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   FECHAR A ABA NO MEIO E VOLTAR
+
+   Critério de aceite do PRD 03 §11: "reconectar restaura mão, bloco, posição e
+   o estado da reviravolta".
+
+   Não há sessão de partida no servidor — quem volta é um cliente NOVO com o
+   mesmo token, e ele monta a tela lendo duas coisas: a linha da partida e o
+   próprio estado privado. Então o critério é uma pergunta sobre onde as quatro
+   coisas MORAM, e a resposta certa é "no banco, todas".
+
+   É por isso que este teste vale, e vale contra uma tentação concreta: o bloco
+   de dedução é o candidato natural a virar estado de React. Ele é rabiscado o
+   tempo inteiro, gravar a cada toque parece desperdício, e guardar em memória
+   funciona perfeitamente até alguém fechar a aba. Aí a pessoa perde a única
+   coisa da partida que era trabalho DELA.
+
+   O teste não pergunta pela tela: pergunta pela rede. Ele lê exatamente o que
+   `DossieGame` lê ao montar, com o token e mais nada.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\nDOSSIÊ: fechar a aba no meio e voltar\n");
+
+if (!mesaF.erro) {
+  /* Um rabisco de verdade: uma marca que NÃO é fato, no lugar em que a pessoa
+     poria uma suspeita. */
+  const rabisco = {
+    marks: { [`${mesaF.tema.suspects[2].id}:${(mesaF.meu + 1) % 3}`]: "duvida" },
+    assist: "manual",
+  };
+  const gravou = await rpc(P[0].token, "dossie_pad", { p_match: mesaF.id, p_pad: rabisco });
+  ok(gravou.status === 200, `o bloco foi rabiscado${gravou.status === 200 ? "" : ": " + JSON.stringify(gravou.body)}`);
+
+  /* E AGORA UM CLIENTE NOVO: só o token, e as duas leituras que a tela faz. */
+  const linhaPartida = (
+    await get(P[0].token, `matches?select=id,status,turn_deadline,public_state&id=eq.${mesaF.id}`)
+  ).body?.[0];
+  const meuPrivado = (
+    await get(P[0].token, `match_private_state?select=data&match_id=eq.${mesaF.id}`)
+  ).body?.[0]?.data;
+
+  ok(
+    Array.isArray(meuPrivado?.hand) && meuPrivado.hand.length > 0,
+    meuPrivado?.hand?.length
+      ? `a MÃO volta inteira (${meuPrivado.hand.length} cartas)`
+      : "a mão não voltou",
+  );
+  ok(
+    meuPrivado?.pad?.marks &&
+      Object.keys(meuPrivado.pad.marks).length === Object.keys(rabisco.marks).length &&
+      meuPrivado.pad.assist === rabisco.assist,
+    meuPrivado?.pad?.marks
+      ? "o BLOCO volta com o rabisco e o nível de ajuda — ele nunca foi estado de React"
+      : `o bloco não voltou: ${JSON.stringify(meuPrivado?.pad)}`,
+  );
+  ok(
+    typeof linhaPartida?.public_state?.positions?.[String(mesaF.meu)] === "string",
+    linhaPartida?.public_state?.positions?.[String(mesaF.meu)]
+      ? `a POSIÇÃO volta (${linhaPartida.public_state.positions[String(mesaF.meu)]})`
+      : "a posição não voltou",
+  );
+
+  /* A REVIRAVOLTA É A QUARTA, e a mesa deste teste joga limpo — o Solar não
+     tem nenhuma, e `dossieSolo` não liga a regra. "Volta como estava" aqui
+     quer dizer "volta desligada", e é o que a tela precisa para não prometer
+     uma regra que a partida não tem. A mesa com reviravolta é conferida em
+     `salaT`, algumas centenas de linhas acima. */
+  const twistF = linhaPartida?.public_state?.twist ?? null;
+  ok(
+    twistF === null || (typeof twistF === "object" && "id" in twistF),
+    twistF === null
+      ? "e a REVIRAVOLTA volta como estava — esta mesa joga limpo, e continua limpa"
+      : `a reviravolta voltou com forma estranha: ${JSON.stringify(twistF)}`,
+  );
+
+  /* E O QUE NÃO É SEU CONTINUA NÃO SENDO. Voltar não é ganhar acesso: a mesma
+     leitura que restaura a sua mão não pode trazer a de mais ninguém. */
+  const tudoQueVoltou = (
+    await get(P[0].token, `match_private_state?select=data&match_id=eq.${mesaF.id}`)
+  ).body;
+  ok(
+    Array.isArray(tudoQueVoltou) && tudoQueVoltou.length === 1,
+    Array.isArray(tudoQueVoltou) && tudoQueVoltou.length === 1
+      ? "e quem volta recebe UMA linha privada, a dele — reconectar não é ganhar acesso"
+      : `a reconexão trouxe ${tudoQueVoltou?.length} estados privados`,
   );
 }
 

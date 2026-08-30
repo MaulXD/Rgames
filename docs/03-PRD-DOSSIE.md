@@ -479,6 +479,21 @@ Só entra em "Regras da casa → Modo Avançado".
 > `dossie_deduz` no servidor leem os mesmos avisos e o mesmo `interroga_nada` — sem isso, quem
 > joga com o bloco assistido ficaria abaixo da máquina, riscando à mão o que ela risca sozinha.
 >
+> **E O ÁLIBI MENTE, ENTÃO O CADERNO NÃO PODE ACREDITAR** — migração 0117. A carta existe para uma
+> coisa só: não refutar TENDO a carta. O servidor registra o álibi e, logo depois, um `pass`
+> normal — e o `pass` diz "não tenho nenhuma das três", que naquele caso é falso. Acreditar nele
+> não é perder informação: é FABRICAR informação falsa, e ela se propaga pelo laço que resolve
+> restrições até riscar uma carta que está no envelope.
+>
+> Apareceu pela suíte, uma vez em vinte verificações completas: "uma máquina riscou carta do
+> envelope". Foi preciso reler QUAL bloco tinha falhado para ver que era o do Modo Avançado, o
+> único em que a máquina joga o álibi.
+>
+> A linha `alibi` é PÚBLICA e a tela a narra, então o conserto é justo: o caderno pode saber que
+> aquele `pass` não prova nada, porque está escrito na mesa. O que a carta protege é O QUE ele tem,
+> e isso continua protegido — descobre-se que não se descobriu nada. O `no_refute` segue a mesma
+> regra: prova de todo mundo menos de quem usou a carta.
+>
 > **A máquina joga o modo inteiro** — migração 0107. Ela investiga com a primeira ação num lugar
 > que já riscou e onde não há mais ninguém, e anda com a segunda; e joga o que compra, por regras
 > que dá para conferir de olho, sem fórmula com peso. O álibi é o único difícil: ela o gasta quando

@@ -1686,6 +1686,7 @@ async function partidaSolo({ token, niveis, tetoTurnos }) {
          mede é o cérebro, e ele é o mesmo dos dois lados. */
       let feito = 0;
       const antesConquistas = conquistasBot;
+      const seqAntes = Number(st.seq ?? 0);
       try {
         feito = Number(
           (await db.query("select public.dominio_bot_turno($1::uuid) n", [idPartida])).rows[0].n,
@@ -1698,14 +1699,32 @@ async function partidaSolo({ token, niveis, tetoTurnos }) {
         problemas.push(`a máquina do assento ${st.turnSeat} não fez nada`);
         break;
       }
-      /* E NÃO FEZ DEMAIS. Desde 0068 o turno é um laço em cima de
-         `dominio_bot_passo`, e um passo que não avança o estado faria o laço rodar
-         até o teto de 40 sem dar erro nenhum — a máquina "jogaria" quarenta vezes
-         e o mapa ficaria igual. Um turno de verdade cabe em vinte. */
-      if (feito > 30) {
+      /* E O TURNO AVANÇOU O ESTADO. Desde 0068 o turno é um laço em cima de
+         `dominio_bot_passo`, e um passo que não muda nada faria o laço rodar até
+         o teto sem dar erro nenhum — a máquina "jogaria" quarenta vezes e o mapa
+         ficaria igual.
+
+         AQUI HAVIA UM TETO DE TRINTA PASSOS, e ele media a fase da partida em
+         vez do defeito. Um turno de verdade não "cabe em vinte": o reforço é
+         colocado um exército por vez, e quem tem trinta territórios e dois
+         continentes inteiros põe vinte e dois antes de atacar uma vez. A suíte
+         reprovou uma máquina que estava ganhando — 34 passos num turno, todos
+         legítimos.
+
+         O que o guarda quer pegar é o passo que NÃO AVANÇA, e isso se mede
+         direto: `seq` do registro tem de andar pelo menos um por passo. Um laço
+         preso gira com o `seq` parado, e nenhum turno legítimo faz isso. */
+      const seqDepois = Number(
+        (
+          await db.query("select (public_state ->> 'seq')::int s from matches where id = $1", [
+            idPartida,
+          ])
+        ).rows[0].s ?? 0,
+      );
+      if (seqDepois <= seqAntes) {
         problemas.push(
-          `a máquina do assento ${st.turnSeat} deu ${feito} passos num turno só` +
-            " — algum passo não está avançando o estado",
+          `a máquina do assento ${st.turnSeat} deu ${feito} passos e o registro não andou` +
+            ` (seq ${seqAntes} → ${seqDepois}) — algum passo não está avançando o estado`,
         );
         break;
       }

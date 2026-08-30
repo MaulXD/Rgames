@@ -1021,7 +1021,16 @@ if (!solo.erro) {
     `a máquina palpitou (tipos de passo: ${[...tipos].join(", ")})`,
   );
   ok(tipos.has("refuta"), "e refutou quando tinha a carta");
-  ok(tipos.has("anda"), "e andou pelo mapa em vez de ficar parada");
+  /* ANDAR ERA COBRADO AQUI, e virou relatório.
+
+     "Ela andou pelo menos uma vez" numa partida aleatória mede a sorte do
+     tabuleiro: quem começa e continua num lugar que ainda é candidato palpita
+     todo turno e nunca precisa andar — e está jogando certo. O teste reprovou
+     código correto por isso.
+
+     A decisão é montada mais abaixo, no palco do Modo Avançado: peão sozinho
+     num lugar já riscado, sem baralho na mesa, e ele TEM de andar. */
+  console.log(`         andou nesta partida: ${tipos.has("anda") ? "sim" : "não"}`);
 
   /* QUANDO ELA ACUSA, ELA ACERTA. Se a inferência tiver furo, ela acusa errado
      e vira fantasma — e uma acusação errada da máquina é a prova de que a
@@ -3145,6 +3154,36 @@ if (!palco.erro) {
         : "ela gastou a última ação investigando e ficou onde estava",
     );
 
+    /* SEM BARALHO NA MESA, ELA ANDA. Mesmo palco — sozinha, num lugar que já
+       riscou, com as duas ações — e sem `pistas` a única jogada que resta é
+       procurar um lugar que ainda importa.
+
+       É a versão montada de "ela andou pelo mapa em vez de ficar parada", que
+       era cobrado sobre uma partida aleatória e reprovava quem jogasse bem: um
+       peão que fica num lugar ainda candidato palpita todo turno, e está
+       certo. */
+    await palcoSolo(maquina.seat, riscado);
+    const pistasGuardadas = (
+      await db.query("select public_state -> 'pistas' p from matches where id = $1", [palco.id])
+    ).rows[0].p;
+    await db.query(
+      "update matches set public_state = public_state || jsonb_build_object('pistas', null) where id = $1",
+      [palco.id],
+    );
+    const passoAnda = (
+      await db.query("select public.dossie_bot_passo($1::uuid) p", [palco.id])
+    ).rows[0].p;
+    await db.query(
+      "update matches set public_state = public_state || jsonb_build_object('pistas', $2::jsonb) where id = $1",
+      [palco.id, JSON.stringify(pistasGuardadas)],
+    );
+    ok(
+      String(passoAnda).startsWith("anda("),
+      String(passoAnda).startsWith("anda(")
+        ? `sem baralho na mesa, do lugar riscado ela ANDA (${passoAnda})`
+        : `ela ficou parada: ${passoAnda}`,
+    );
+
     /* A CHAVE-MESTRA. Mesmo palco, mais uma carta na mão: ela tem de sair dali
        de graça em vez de gastar a ação andando. */
     await palcoSolo(maquina.seat, riscado);
@@ -3176,6 +3215,140 @@ if (!palco.erro) {
         : `gastou ação: ${depoisChaveAv.actionsLeft}`,
     );
   }
+}
+
+/* ── O ÁLIBI MENTE, E O CADERNO DA MÁQUINA SABE ─────────────────────────────
+
+   A carta Álibi existe para uma coisa só: deixar alguém NÃO REFUTAR TENDO A
+   CARTA. É a única mentira legítima do Dossiê.
+
+   `dossie_pass_refute_como` registra o álibi e, logo depois, um `pass` normal.
+   Um caderno que leia só o `pass` conclui "esta pessoa não tem nenhuma das
+   três" — e naquele caso é FALSO. Não é perder informação: é fabricar
+   informação falsa, e ela se propaga pelo laço que resolve restrições em cima
+   do `naoTem` até riscar carta que está no envelope.
+
+   Foi assim que a suíte pegou o defeito: uma vez em vinte verificações
+   completas, "uma máquina riscou carta do envelope" — no bloco do Modo
+   Avançado, o único em que a máquina joga o álibi. Este teste é o que impede a
+   próxima, e ele injeta o registro em vez de esperar a partida produzir a
+   situação.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+if (!palco.erro) {
+  const maq = palco.bots[0];
+  const temaAl = palco.tema;
+  const outroAl = palco.elenco.find((e) => e.seat !== maq.seat);
+
+  /* O TRIO SAI DE FORA DA MÃO DELA, e é a parte que este teste já errou.
+
+     A própria mão marca `naoTem` de todo mundo — legitimamente: se eu tenho a
+     carta, mais ninguém tem. Um trio que caísse na mão da máquina apareceria
+     riscado na coluna do outro por esse caminho, e o teste acusaria o álibi de
+     um crime que a mão cometeu. */
+  const maoDaMaq = new Set(
+    (
+      await db.query(
+        "select data -> 'hand' h from match_private_state where match_id = $1 and user_id = $2",
+        [palco.id, maq.user_id],
+      )
+    ).rows[0]?.h ?? [],
+  );
+  const foraDaMao = (lista) => lista.map((x) => x.id).find((id) => !maoDaMaq.has(id));
+  const trio = [
+    foraDaMao(temaAl.suspects),
+    foraDaMao(temaAl.weapons),
+    foraDaMao(temaAl.rooms),
+  ];
+  ok(
+    trio.every(Boolean),
+    trio.every(Boolean)
+      ? `o palpite do teste usa três cartas fora da mão dela (${trio.join(", ")})`
+      : "não sobrou carta de algum tipo fora da mão da máquina",
+  );
+
+  /** Grava um registro inteiro e zera o que a máquina já tinha deduzido. */
+  async function comRegistro(linhas) {
+    await db.query(
+      `update matches set public_state = public_state
+          || jsonb_build_object('log', $2::jsonb, 'seq', $3::int)
+        where id = $1`,
+      [palco.id, JSON.stringify(linhas), linhas.length],
+    );
+    await db.query(
+      `update match_private_state set data = data - 'dedu'
+        where match_id = $1 and user_id = $2`,
+      [palco.id, maq.user_id],
+    );
+    return (
+      await db.query("select public.dossie_deduz($1::uuid, $2::smallint) d", [palco.id, maq.seat])
+    ).rows[0].d;
+  }
+
+  const semAli = await comRegistro([
+    { seq: 2, type: "pass", seat: outroAl.seat },
+    { seq: 1, type: "suggest", seat: maq.seat, guess: trio },
+  ]);
+  const naoTemSem = semAli?.naoTem?.[String(outroAl.seat)] ?? [];
+  ok(
+    trio.every((c) => naoTemSem.includes(c)),
+    trio.every((c) => naoTemSem.includes(c))
+      ? "uma passada normal risca as três na coluna de quem passou"
+      : `a passada normal não riscou: ${JSON.stringify(naoTemSem)}`,
+  );
+
+  const comAli = await comRegistro([
+    { seq: 3, type: "pass", seat: outroAl.seat },
+    { seq: 2, type: "alibi", seat: outroAl.seat },
+    { seq: 1, type: "suggest", seat: maq.seat, guess: trio },
+  ]);
+  const naoTemCom = comAli?.naoTem?.[String(outroAl.seat)] ?? [];
+  ok(
+    trio.every((c) => !naoTemCom.includes(c)),
+    trio.every((c) => !naoTemCom.includes(c))
+      ? "e com álibi na frente, a mesma passada não risca nada — ela não prova coisa nenhuma"
+      : `a máquina acreditou no álibi: ${JSON.stringify(naoTemCom)}`,
+  );
+
+  /* O `no_refute` também: prova de todo mundo MENOS de quem usou a carta. */
+  const terceiro = palco.elenco.find((e) => e.seat !== maq.seat && e.seat !== outroAl.seat);
+  if (terceiro) {
+    const ninguem = await comRegistro([
+      { seq: 5, type: "no_refute", guess: trio },
+      { seq: 4, type: "pass", seat: terceiro.seat },
+      { seq: 3, type: "pass", seat: outroAl.seat },
+      { seq: 2, type: "alibi", seat: outroAl.seat },
+      { seq: 1, type: "suggest", seat: maq.seat, guess: trio },
+    ]);
+    const doTerceiro = ninguem?.naoTem?.[String(terceiro.seat)] ?? [];
+    const doAlibi = ninguem?.naoTem?.[String(outroAl.seat)] ?? [];
+    ok(
+      trio.every((c) => doTerceiro.includes(c)),
+      "num 'ninguém refutou', quem passou de verdade continua riscado",
+    );
+    ok(
+      trio.every((c) => !doAlibi.includes(c)),
+      trio.every((c) => !doAlibi.includes(c))
+        ? "e quem alibiou fica de fora — para ele, a rodada não disse nada"
+        : `o 'ninguém refutou' passou por cima do álibi: ${JSON.stringify(doAlibi)}`,
+    );
+  }
+
+  /* E VALE POR UMA REFUTAÇÃO SÓ: um palpite novo zera a lista. */
+  const seguinte = await comRegistro([
+    { seq: 5, type: "pass", seat: outroAl.seat },
+    { seq: 4, type: "suggest", seat: maq.seat, guess: trio },
+    { seq: 3, type: "pass", seat: outroAl.seat },
+    { seq: 2, type: "alibi", seat: outroAl.seat },
+    { seq: 1, type: "suggest", seat: maq.seat, guess: trio },
+  ]);
+  const naoTemDepois = seguinte?.naoTem?.[String(outroAl.seat)] ?? [];
+  ok(
+    trio.every((c) => naoTemDepois.includes(c)),
+    trio.every((c) => naoTemDepois.includes(c))
+      ? "e o álibi vale por UMA refutação: na seguinte, a passada volta a valer"
+      : "o álibi virou imunidade permanente",
+  );
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

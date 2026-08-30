@@ -325,7 +325,111 @@ ok(
   "e não risca a coluna de mais ninguém — a frase é sobre uma pessoa só",
 );
 
-/* ── 8. O CICLO DA MARCA ──────────────────────────────────────────────────
+/* ── 8. O ÁLIBI MENTE, E O CADERNO SABE ────────────────────────────────────
+
+   A carta Álibi existe para uma coisa só: deixar alguém NÃO REFUTAR TENDO A
+   CARTA. É a única mentira legítima do Dossiê.
+
+   O servidor registra o álibi e, logo depois, um `pass` normal. Um caderno que
+   leia só o `pass` conclui "esta pessoa não tem nenhuma das três" — e naquele
+   caso isso é FALSO. Não é perder informação: é fabricar informação falsa, e
+   ela se propaga até riscar carta que está no envelope.
+
+   Custou uma falha rara da suíte para aparecer, e o teste abaixo é o que
+   impede a próxima. */
+
+const acusado = [S[1], O[1], L[1]];
+const semAlibi = apura(
+  caso,
+  [
+    { seq: 1, type: "suggest", seat: 0, guess: acusado },
+    { seq: 2, type: "pass", seat: 1 },
+  ],
+  [],
+  [],
+  JOGADORES,
+  0,
+  "assistido",
+);
+ok(
+  acusado.every((c) => semAlibi.fatos[c]?.["1"] === "x"),
+  "uma passada normal risca as três na coluna de quem passou",
+);
+
+const comAlibi = apura(
+  caso,
+  [
+    { seq: 1, type: "suggest", seat: 0, guess: acusado },
+    { seq: 2, type: "alibi", seat: 1 },
+    { seq: 3, type: "pass", seat: 1 },
+  ],
+  [],
+  [],
+  JOGADORES,
+  0,
+  "assistido",
+);
+ok(
+  acusado.every((c) => comAlibi.fatos[c]?.["1"] !== "x"),
+  acusado.every((c) => comAlibi.fatos[c]?.["1"] !== "x")
+    ? "e com álibi na frente, a mesma passada não risca nada — ela não prova coisa nenhuma"
+    : `o caderno acreditou no álibi: ${JSON.stringify(comAlibi.fatos)}`,
+);
+
+/* O `no_refute` também. "Ninguém refutou" prova que nenhum dos outros tem
+   nenhuma das três — de todo mundo MENOS de quem usou a carta. */
+const ninguemComAlibi = apura(
+  caso,
+  [
+    { seq: 1, type: "suggest", seat: 0, guess: acusado },
+    { seq: 2, type: "alibi", seat: 1 },
+    { seq: 3, type: "pass", seat: 1 },
+    { seq: 4, type: "pass", seat: 2 },
+    { seq: 5, type: "no_refute", guess: acusado },
+  ],
+  [],
+  [],
+  JOGADORES,
+  0,
+  "assistido",
+);
+ok(
+  acusado.every((c) => ninguemComAlibi.fatos[c]?.["2"] === "x"),
+  "num 'ninguém refutou', quem passou de verdade continua riscado",
+);
+ok(
+  acusado.every((c) => ninguemComAlibi.fatos[c]?.["1"] !== "x"),
+  acusado.every((c) => ninguemComAlibi.fatos[c]?.["1"] !== "x")
+    ? "e quem alibiou fica de fora — para ele, a rodada não disse nada"
+    : "o 'ninguém refutou' passou por cima do álibi",
+);
+
+/* E O ÁLIBI VALE POR UMA REFUTAÇÃO SÓ. Um palpite novo zera a lista: quem
+   alibiou na rodada passada volta a ser gente cuja passada significa alguma
+   coisa. */
+const rodadaSeguinte = apura(
+  caso,
+  [
+    { seq: 1, type: "suggest", seat: 0, guess: acusado },
+    { seq: 2, type: "alibi", seat: 1 },
+    { seq: 3, type: "pass", seat: 1 },
+    { seq: 4, type: "suggest", seat: 0, guess: acusado },
+    { seq: 5, type: "pass", seat: 1 },
+  ],
+  [],
+  [],
+  JOGADORES,
+  0,
+  "assistido",
+);
+ok(
+  acusado.every((c) => rodadaSeguinte.fatos[c]?.["1"] === "x"),
+  acusado.every((c) => rodadaSeguinte.fatos[c]?.["1"] === "x")
+    ? "e o álibi vale por UMA refutação: na seguinte, a passada volta a valer"
+    : "o álibi virou imunidade permanente",
+);
+
+/* ── 9. O CICLO DA MARCA ──────────────────────────────────────────────────
 
    Tocar numa célula anda ✗ → ✓ → ? → vazio. É o gesto mais repetido do jogo, e
    ele precisa VOLTAR ao vazio: sem isso, uma marca errada não tem desfazer. */

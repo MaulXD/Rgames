@@ -153,6 +153,9 @@ export function apura(
   // 3. o log, do mais antigo para o mais novo
   const ordenado = [...log].sort((a, b) => a.seq - b.seq);
   let palpite: string[] | null = null;
+  /* Quem apresentou álibi desde o último palpite. Zera a cada palpite novo,
+     porque a carta vale para UMA refutação. */
+  let comAlibi = new Set<number>();
 
   for (const l of ordenado) {
     /* O REGISTRO DA ESTAÇÃO é anúncio, não dedução: NÚBIA disse que aquela carta
@@ -173,14 +176,33 @@ export function apura(
     }
     if (l.type === "suggest") {
       palpite = l.guess ?? null;
+      comAlibi = new Set();
+      continue;
+    }
+
+    /* ── O ÁLIBI ────────────────────────────────────────────────────────────
+       A única mentira legítima do jogo: não refutar TENDO a carta.
+
+       O servidor registra o álibi e, logo depois, um `pass` normal — e o `pass`
+       diz "não tenho nenhuma das três", que naquele caso é falso. Acreditar
+       nele não é perder informação: é FABRICAR informação falsa, e o caderno
+       assistido passaria a riscar coisa errada na cara de quem confia nele.
+
+       A linha é PÚBLICA e o registro a narra, então saber disto não é
+       privilégio: é o que está escrito na mesa. O que a carta protege é O QUE
+       ele tem, e isso continua protegido. */
+    if (l.type === "alibi" && l.seat !== null && l.seat !== undefined) {
+      comAlibi.add(l.seat);
       continue;
     }
     if (l.type === "no_refute") {
-      // ninguém tinha nenhuma das três — em nenhuma mão
+      // ninguém tinha nenhuma das três — em nenhuma mão, MENOS a de quem
+      // apresentou álibi: para essa pessoa, a rodada não disse nada
       for (const c of l.guess ?? []) {
         for (const j of jogadores) {
           // quem palpitou pode ter a carta na própria mão
           if (fatos[c]?.[String(j.seat)] === "check") continue;
+          if (comAlibi.has(j.seat)) continue;
           poe(fatos, c, String(j.seat), "x");
         }
       }
@@ -190,7 +212,9 @@ export function apura(
     if (!palpite) continue;
 
     if (l.type === "pass" && l.seat !== null && l.seat !== undefined) {
-      // não pôde refutar: não tem nenhuma das três
+      // não pôde refutar: não tem nenhuma das três — a não ser que tenha
+      // apresentado álibi, e aí a passada não diz nada
+      if (comAlibi.has(l.seat)) continue;
       for (const c of palpite) poe(fatos, c, String(l.seat), "x");
       continue;
     }

@@ -1970,6 +1970,307 @@ if (iniL.status === 200) {
   );
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   AS CARTAS DE PISTA (PRD 03 §6.8)
+
+   Baralho de 24, seis tipos com quatro cópias. A ação INVESTIGAR custa uma das
+   duas ações do turno e só existe num lugar onde não há mais ninguém — que é o
+   que dá PREÇO à carta: o lugar vazio é longe de onde a mesa está.
+
+   Só em "Modo Avançado", e desligado por padrão.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\nDOSSIÊ: as cartas de pista\n");
+
+/* ── o baralho é 24 cartas, seis tipos, quatro cópias ─────────────────────── */
+
+const baralho = (
+  await db.query("select public.dossie_pistas_baralho(12345::bigint) b")
+).rows[0].b;
+const porTipo = baralho.reduce((a, c) => ({ ...a, [c]: (a[c] ?? 0) + 1 }), {});
+ok(
+  baralho.length === 24 && Object.keys(porTipo).length === 6,
+  `o baralho tem ${baralho.length} cartas de ${Object.keys(porTipo).length} tipos`,
+);
+ok(
+  Object.values(porTipo).every((n) => n === 4),
+  `e quatro cópias de cada: ${Object.entries(porTipo).map(([k, v]) => `${k}=${v}`).join(" ")}` +
+    " — com uma cópia só, a primeira pessoa a investigar saberia que aquele efeito saiu",
+);
+
+/* E ele é DETERMINÍSTICO na semente, e diferente entre sementes. Determinístico
+   porque o baralho não é guardado em lugar nenhum: ele é derivado, e derivar
+   duas vezes tem de dar o mesmo. */
+const mesmoBaralho = (await db.query("select public.dossie_pistas_baralho(12345::bigint) b")).rows[0].b;
+const outroBaralho = (await db.query("select public.dossie_pistas_baralho(999::bigint) b")).rows[0].b;
+ok(
+  JSON.stringify(baralho) === JSON.stringify(mesmoBaralho),
+  "a mesma semente dá o mesmo baralho — ele é derivado, e não guardado",
+);
+ok(
+  JSON.stringify(baralho) !== JSON.stringify(outroBaralho),
+  "e sementes diferentes dão baralhos diferentes",
+);
+
+/* ── a regra da casa ──────────────────────────────────────────────────────── */
+
+const salaPista = (await rpc(P[0].token, "create_room", { p_game: "dossie" })).body;
+for (const p of P.slice(1, 3)) await rpc(p.token, "join_room", { p_code: salaPista.code });
+
+const semAvancado = await rpc(P[0].token, "dossie_start", { p_room: salaPista.id });
+if (semAvancado.status === 200) {
+  const st = (
+    await db.query(
+      "select public_state st from matches where room_id = $1 order by started_at desc limit 1",
+      [salaPista.id],
+    )
+  ).rows[0].st;
+  ok(
+    st.pistas === null || st.pistas === undefined,
+    st.pistas == null
+      ? "sem o Modo Avançado, a partida nasce SEM baralho — e nulo não é zero tirado"
+      : `nasceu com baralho sem ninguém pedir: ${JSON.stringify(st.pistas)}`,
+  );
+
+  const m = (
+    await db.query(
+      "select id from matches where room_id = $1 order by started_at desc limit 1",
+      [salaPista.id],
+    )
+  ).rows[0];
+  const semPistas = await rpc(P[0].token, "dossie_investigar", { p_match: m.id });
+  ok(
+    semPistas.status >= 400 && /SEM_PISTAS/.test(JSON.stringify(semPistas.body)),
+    semPistas.status >= 400
+      ? "e investigar é recusado com SEM_PISTAS — a mesa que jogou sem cartas não recebe uma por chamada solta"
+      : "investigar funcionou numa partida sem baralho",
+  );
+  await db.query("update matches set status = 'finished' where id = $1", [m.id]);
+  await db.query("update rooms set status = 'lobby' where id = $1", [salaPista.id]);
+}
+
+/* ── com o modo ligado ────────────────────────────────────────────────────── */
+
+const cfgAv = await rpc(P[0].token, "set_room_settings", {
+  p_room: salaPista.id,
+  p_settings: { avancado: true, tema: "solar-das-acacias" },
+});
+ok(
+  cfgAv.status === 200 && cfgAv.body?.settings?.avancado === true,
+  cfgAv.status === 200
+    ? "a chave 'avancado' é aceita nas Regras da Casa"
+    : `recusada: ${JSON.stringify(cfgAv.body)}`,
+);
+
+const iniAv = await rpc(P[0].token, "dossie_start", { p_room: salaPista.id });
+ok(iniAv.status === 200, `a partida avançada começou${iniAv.status === 200 ? "" : ": " + JSON.stringify(iniAv.body)}`);
+
+if (iniAv.status === 200) {
+  const mAv = (
+    await db.query(
+      "select id, seed, public_state st from matches where room_id = $1 order by started_at desc limit 1",
+      [salaPista.id],
+    )
+  ).rows[0];
+  ok(
+    Number(mAv.st.pistas?.tirou) === 0,
+    `e o baralho nasce cheio (tirou = ${mAv.st.pistas?.tirou})`,
+  );
+
+  const elencoAv = (
+    await db.query(
+      `select mp.seat, mp.user_id from match_players mp where mp.match_id = $1 order by mp.seat`,
+      [mAv.id],
+    )
+  ).rows;
+  const euAv = elencoAv.find((e) => e.user_id === P[0].id) ?? elencoAv[0];
+  const tokenDe = (uid) => P.find((x) => x.id === uid)?.token;
+
+  const temaAv = (await db.query("select data from game_themes where id = 'solar-das-acacias'"))
+    .rows[0].data;
+  const lugares = temaAv.rooms.map((r) => r.id);
+
+  /* Um lugar VAZIO para o assento da vez, e ninguém mais nele. */
+  async function poeSozinho(seat, lugar) {
+    const pos = {};
+    elencoAv.forEach((e, i) => {
+      pos[String(e.seat)] = Number(e.seat) === Number(seat) ? lugar : lugares[8 - i];
+    });
+    await db.query(
+      `update matches set public_state = public_state
+          || jsonb_build_object('positions', $2::jsonb, 'turnSeat', $3::int,
+                                'phase', 'turn', 'actionsLeft', 2, 'pending', null)
+        where id = $1`,
+      [mAv.id, JSON.stringify(pos), Number(seat)],
+    );
+  }
+
+  /* ── investigar só onde não há mais ninguém ─────────────────────────────── */
+  const acompanhado = {};
+  elencoAv.forEach((e) => (acompanhado[String(e.seat)] = lugares[0]));
+  await db.query(
+    `update matches set public_state = public_state
+        || jsonb_build_object('positions', $2::jsonb, 'turnSeat', $3::int,
+                              'phase', 'turn', 'actionsLeft', 2)
+      where id = $1`,
+    [mAv.id, JSON.stringify(acompanhado), Number(euAv.seat)],
+  );
+  const comGente = await rpc(tokenDe(euAv.user_id), "dossie_investigar", { p_match: mAv.id });
+  ok(
+    comGente.status >= 400 && /LUGAR_COM_GENTE/.test(JSON.stringify(comGente.body)),
+    comGente.status >= 400
+      ? "não se investiga num lugar com gente — é o que dá preço à carta"
+      : "investigou com a mesa toda em volta",
+  );
+
+  await poeSozinho(euAv.seat, lugares[0]);
+  const investiga = await rpc(tokenDe(euAv.user_id), "dossie_investigar", { p_match: mAv.id });
+  ok(
+    investiga.status === 200 && !!investiga.body?.carta,
+    investiga.status === 200
+      ? `sozinho, investigar compra uma carta (${investiga.body.carta})`
+      : `recusou: ${JSON.stringify(investiga.body)}`,
+  );
+
+  if (investiga.status === 200) {
+    const depois = (
+      await db.query("select public_state st from matches where id = $1", [mAv.id])
+    ).rows[0].st;
+    ok(
+      Number(depois.pistas.tirou) === 1 && depois.actionsLeft === 1,
+      `o baralho anda (tirou = ${depois.pistas.tirou}) e a ação foi gasta (${depois.actionsLeft})`,
+    );
+
+    /* O LOG NÃO DIZ QUAL CARTA SAIU. É a mesma linha que separa "mostrou uma
+       carta" de "mostrou a corda". */
+    const linha = (depois.log ?? []).find((l) => l.type === "investiga");
+    ok(
+      !!linha && linha.carta === undefined,
+      linha
+        ? "e o registro diz que alguém investigou, sem dizer o quê"
+        : "não há linha de investigação no registro",
+    );
+
+    const naMao = (
+      await db.query(
+        "select data -> 'pistas' -> 'mao' m from match_private_state where match_id = $1 and user_id = $2",
+        [mAv.id, euAv.user_id],
+      )
+    ).rows[0].m;
+    ok(
+      Array.isArray(naMao) && naMao.length === 1 && naMao[0] === investiga.body.carta,
+      `a carta foi para a mão de quem investigou: ${JSON.stringify(naMao)}`,
+    );
+
+    /* E NINGUÉM MAIS A VÊ. */
+    const outroAv = elencoAv.find((e) => e.user_id !== euAv.user_id);
+    const doOutro = await get(
+      tokenDe(outroAv.user_id) ?? P[1].token,
+      `match_private_state?select=data&match_id=eq.${mAv.id}`,
+    );
+    const vazou = (doOutro.body ?? []).some(
+      (l) => (l.data?.pistas?.mao ?? []).includes(investiga.body.carta),
+    );
+    ok(!vazou, "e ninguém mais lê a carta que ela comprou");
+  }
+
+  /* ── CHAVE-MESTRA: mova-se para qualquer lugar, de graça ────────────────── */
+
+  async function daCarta(userId, carta) {
+    await db.query(
+      `update match_private_state
+          set data = public.jsonb_poe(coalesce(data, '{}'::jsonb), 'pistas', 'mao',
+                coalesce(data -> 'pistas' -> 'mao', '[]'::jsonb) || to_jsonb($3::text))
+        where match_id = $1 and user_id = $2`,
+      [mAv.id, userId, carta],
+    );
+  }
+
+  await poeSozinho(euAv.seat, lugares[0]);
+  await daCarta(euAv.user_id, "chave-mestra");
+
+  /* O destino é o mais LONGE que existe: se a chave-mestra respeitasse
+     adjacência, ela não seria uma chave-mestra. */
+  const longe = lugares.find((l) => !temaAv.adjacency[lugares[0]].includes(l) && l !== lugares[0]);
+  const antesAcoes = (
+    await db.query("select (public_state ->> 'actionsLeft')::int a from matches where id = $1", [
+      mAv.id,
+    ])
+  ).rows[0].a;
+
+  const chave = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "chave-mestra",
+    p_arg: { para: longe },
+  });
+  const depoisChave = (
+    await db.query("select public_state st from matches where id = $1", [mAv.id])
+  ).rows[0].st;
+  ok(
+    chave.status === 200 && depoisChave.positions[String(euAv.seat)] === longe,
+    chave.status === 200
+      ? `a chave-mestra leva para um lugar NÃO vizinho (${lugares[0]} → ${longe})`
+      : `recusou: ${JSON.stringify(chave.body)}`,
+  );
+  ok(
+    depoisChave.actionsLeft === antesAcoes,
+    `e é DE GRAÇA: ${antesAcoes} ações antes, ${depoisChave.actionsLeft} depois` +
+      " — é o que a torna a única forma de estar em dois lugares numa rodada",
+  );
+  const maoDepois = (
+    await db.query(
+      "select data -> 'pistas' -> 'mao' m from match_private_state where match_id = $1 and user_id = $2",
+      [mAv.id, euAv.user_id],
+    )
+  ).rows[0].m;
+  ok(
+    !(maoDepois ?? []).includes("chave-mestra"),
+    "e a carta sai da mão ao ser usada",
+  );
+
+  const semCarta = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "chave-mestra",
+    p_arg: { para: lugares[1] },
+  });
+  ok(
+    semCarta.status >= 400 && /PISTA_NAO_ESTA_NA_MAO/.test(JSON.stringify(semCarta.body)),
+    semCarta.status >= 400
+      ? "e não se usa uma carta que não está na mão"
+      : "usou uma carta que não tinha",
+  );
+
+  /* ── TEMPO É CURTO: o próximo tem uma ação em vez de duas ───────────────── */
+
+  await poeSozinho(euAv.seat, lugares[0]);
+  await daCarta(euAv.user_id, "tempo-curto");
+  const curto = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "tempo-curto",
+  });
+  ok(curto.status === 200, `tempo é curto foi jogada${curto.status === 200 ? "" : ": " + JSON.stringify(curto.body)}`);
+
+  await db.query("select public.dossie_advance($1::uuid)", [mAv.id]);
+  const apertado = (
+    await db.query("select public_state st from matches where id = $1", [mAv.id])
+  ).rows[0].st;
+  ok(
+    apertado.actionsLeft === 1,
+    `e o próximo jogador começa com ${apertado.actionsLeft} ação em vez de 2`,
+  );
+
+  /* E A MARCA É CONSUMIDA AO SER PAGA. Uma penalidade que se cobra toda rodada
+     não é penalidade, é regra nova — a mesma lição da multa de traição. */
+  await db.query("select public.dossie_advance($1::uuid)", [mAv.id]);
+  const normal = (
+    await db.query("select public_state st from matches where id = $1", [mAv.id])
+  ).rows[0].st;
+  ok(
+    normal.actionsLeft === 2 && normal.tempoCurto == null,
+    `e o seguinte volta a ter ${normal.actionsLeft} — a marca é consumida ao ser paga`,
+  );
+}
+
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });
 await db.end();
 

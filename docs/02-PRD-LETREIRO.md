@@ -329,6 +329,23 @@ Letreiro #142   142 pts
 
 Este é o mecanismo de retenção mais barato do projeto inteiro.
 
+> **A GRADE DO DIA É UMA, E FICA ESCRITA** — migração 0110.
+>
+> Ela era sorteada por índice sobre o conjunto de grades sorteáveis, com o dia como semente:
+> `offset (hash(dia) % quantas) order by id`. Determinístico, sim — mas determinístico sobre um
+> conjunto que MUDA: `quantas` muda toda vez que `build-boards` roda, porque ele apaga as grades
+> que ninguém referencia e grava outras.
+>
+> Duas pessoas abrindo o desafio no mesmo dia, com uma regeração de pool entre elas, jogariam
+> tabuleiros diferentes e apareceriam no mesmo placar. Não é hipótese: recalibrar o dicionário
+> trocou 1.801 grades por 2.409, e qualquer dia atravessado por isso teria dois desafios com o
+> mesmo nome.
+>
+> Agora a decisão é uma linha em `letreiro_dia`: o primeiro a abrir decide, todo mundo depois lê.
+> O sorteio continua igual — ele só deixou de ser a FONTE da resposta para virar o jeito de
+> produzi-la na primeira vez. E a chave estrangeira impede que a grade do dia seja apagada por
+> baixo, o que `build-boards` faria sem saber.
+
 ### 6.9 Estatísticas que valem alguma coisa [v1]
 
 Não "partidas jogadas". Coisas que a pessoa quer contar para os amigos:

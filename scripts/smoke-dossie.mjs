@@ -111,8 +111,33 @@ async function varre(fn) {
 }
 
 
+/**
+ * `fetch` com UMA segunda chance, e só para falha de REDE.
+ *
+ * Esta suíte faz mais de mil chamadas — só a partida solo são quatrocentas — e
+ * roda por sete minutos contra um servidor do outro lado do país. Um
+ * `UND_ERR_CONNECT_TIMEOUT` em qualquer uma delas derrubava a suíte inteira com
+ * um `TypeError: fetch failed`, sem dizer qual teste estava rodando. Aconteceu.
+ *
+ * A repetição é só para a conexão que não se estabeleceu. Código de status é
+ * RESPOSTA — 403 é o servidor dizendo não, e repetir um não é transformar um
+ * teste de autorização num teste de paciência.
+ *
+ * É a mesma forma que o `pg.Pool` daqui já usa para a conexão direta, pelo
+ * mesmo motivo, e este era o outro caminho que faltava.
+ */
+async function tenta(url, opts) {
+  try {
+    return await fetch(url, opts);
+  } catch (e) {
+    if (!/UND_ERR|ECONNRESET|ETIMEDOUT|fetch failed/i.test(String(e?.message ?? e))) throw e;
+    await new Promise((r) => setTimeout(r, 800));
+    return await fetch(url, opts);
+  }
+}
+
 async function admin(path, opts = {}) {
-  const r = await fetch(`${URL_}/auth/v1${path}`, {
+  const r = await tenta(`${URL_}/auth/v1${path}`, {
     ...opts,
     headers: { apikey: SVC, Authorization: `Bearer ${SVC}`, "Content-Type": "application/json" },
   });
@@ -125,7 +150,7 @@ async function player(email) {
     body: JSON.stringify({ email, password: "SenhaDeTeste!2026", email_confirm: true }),
   });
   const t = await (
-    await fetch(`${URL_}/auth/v1/token?grant_type=password`, {
+    await tenta(`${URL_}/auth/v1/token?grant_type=password`, {
       method: "POST",
       headers: { apikey: ANON, "Content-Type": "application/json" },
       body: JSON.stringify({ email, password: "SenhaDeTeste!2026" }),
@@ -135,7 +160,7 @@ async function player(email) {
 }
 
 async function rpc(token, fn, args) {
-  const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, {
+  const r = await tenta(`${URL_}/rest/v1/rpc/${fn}`, {
     method: "POST",
     headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(args ?? {}),
@@ -144,7 +169,7 @@ async function rpc(token, fn, args) {
 }
 
 async function get(token, path) {
-  const r = await fetch(`${URL_}/rest/v1/${path}`, {
+  const r = await tenta(`${URL_}/rest/v1/${path}`, {
     headers: { apikey: ANON, Authorization: `Bearer ${token}` },
   });
   return { status: r.status, body: await r.json().catch(() => null) };
@@ -470,6 +495,38 @@ const surpresa = await rpc(P[0].token, "set_room_settings", {
   p_settings: { tema: "surpresa" },
 });
 ok(surpresa.body?.settings?.tema === "surpresa", "surpresa é o padrão e é aceito");
+
+/* ── O SORTEIO SURPRESA NÃO VAZA ANTES DA HORA ──────────────────────────────
+
+   Critério de aceite do PRD 03 §11. A promessa do modo é que NINGUÉM na mesa
+   sabe qual mundo vai abrir — nem o anfitrião —, e ela morre no instante em que
+   qualquer resposta da rede disser o nome do caso antes de a partida começar.
+
+   Hoje ela se sustenta por construção: o caso é escolhido dentro de
+   `dossie_start`, então não existe até existir. Este teste não confere o
+   desenho de hoje; confere a PROMESSA — e ele é a coisa que reprovaria a
+   otimização óbvia de "sortear no lobby para o pacote ir baixando antes", que é
+   uma boa ideia de desempenho e o fim do modo.
+
+   Lê tudo o que uma pessoa da sala alcança pela rede e procura os ids dos
+   casos publicados, um por um. */
+const idsDeCaso = (
+  await db.query("select id from game_themes where game_key = 'dossie'")
+).rows.map((r) => r.id);
+
+const oQueSeVe = JSON.stringify([
+  (await get(P[0].token, `rooms?select=*&id=eq.${salaE.id}`)).body,
+  (await get(P[0].token, `room_members?select=*&room_id=eq.${salaE.id}`)).body,
+  (await get(P[0].token, `matches?select=*&room_id=eq.${salaE.id}`)).body,
+  surpresa.body,
+]);
+const vazouOTema = idsDeCaso.filter((id) => oQueSeVe.includes(id));
+ok(
+  vazouOTema.length === 0,
+  vazouOTema.length === 0
+    ? `no modo surpresa, nenhum dos ${idsDeCaso.length} casos aparece no que a sala mostra antes de começar`
+    : `O SORTEIO VAZOU antes da partida: ${vazouOTema.join(", ")}`,
+);
 
 const escolhido = await rpc(P[0].token, "set_room_settings", {
   p_room: salaE.id,
@@ -850,6 +907,10 @@ async function dossieSolo({ token, niveis, tetoPassos, avancado = false }) {
     envelope,
     meu,
     bots,
+    /* Todos os assentos, e não só os das máquinas: quem monta um palco precisa
+       colocar TODO MUNDO em algum lugar, senão "ela está sozinha aqui" não é
+       uma frase sobre o tabuleiro. */
+    elenco,
     tema,
     passos,
     n,
@@ -2886,31 +2947,25 @@ if (!soloAv.erro) {
       : `TRAPAÇA OU DEDUÇÃO ERRADA: ${soloAv.problemas[0]}`,
   );
 
+  /* O QUE ELA FEZ NA PARTIDA É RELATÓRIO, e não critério.
+
+     A primeira versão disto cobrava "ela investigou pelo menos uma vez" ao
+     longo de duzentos e sessenta passos, e reprovou numa rodada em que os
+     peões simplesmente não caíram na situação que a regra descreve: sozinha,
+     num lugar já riscado, com as duas ações na mão. A regra estava certa e o
+     teste reprovava a sorte.
+
+     Um teste de decisão MONTA a decisão. Os quatro logo abaixo montam. */
   const tiposAv = new Set(soloAv.passos.map((x) => x.split(/[:(]/)[0]));
-  ok(
-    tiposAv.has("investiga"),
-    tiposAv.has("investiga")
-      ? "a máquina INVESTIGA — ela compra carta em vez de só andar por cima do baralho"
-      : `ela nunca investigou (tipos: ${[...tiposAv].join(", ")})`,
+  const jogadas = soloAv.passos.filter(
+    (x) =>
+      x.startsWith("pista(") || x.startsWith("refuta:alibi") || x.startsWith("investiga("),
   );
-
-  /* E GASTA O QUE COMPRA. Uma máquina que enche a mão e nunca joga é pior que
-     uma que não compra: ela gasta ações para não fazer nada. */
-  const jogadas = soloAv.passos.filter((x) => x.startsWith("pista(") || x.startsWith("refuta:alibi"));
-  ok(
-    jogadas.length > 0,
-    jogadas.length > 0
-      ? `e joga o que compra: ${jogadas.length} carta(s) — ${[...new Set(jogadas.map((x) => x.split(") ")[1] ?? x))].slice(0, 4).join(" · ")}`
-      : "ela comprou e nunca jogou nada — a mão vira peso morto",
+  console.log(`         tipos de passo: ${[...tiposAv].join(", ")}`);
+  console.log(
+    `         baralho em ${soloAv.st.pistas?.tirou ?? 0} de 24 · ` +
+      `${jogadas.length} passo(s) com carta: ${jogadas.slice(0, 5).join(" · ") || "nenhum"}`,
   );
-
-  /* O BARALHO ANDOU, e o contador público é a prova de que as compras foram
-     mesmo pelo caminho do servidor. */
-  ok(
-    Number(soloAv.st.pistas?.tirou ?? 0) > 0,
-    `o baralho andou até ${soloAv.st.pistas?.tirou ?? 0} de 24`,
-  );
-  console.log(`         passos com carta: ${jogadas.slice(0, 6).join(" · ") || "nenhum"}`);
 
   /* E A PARTIDA NÃO TRAVOU. O interrogatório abre uma fase, e uma fase que não
      fecha é uma mesa parada — a diferença entre uma carta e um travamento é
@@ -2927,6 +2982,155 @@ if (!soloAv.erro) {
       ? "e não terminou pendurada num interrogatório"
       : `parou na fase interroga esperando o assento ${soloAv.st.pending?.alvo}`,
   );
+}
+
+/* ── AS DECISÕES DA MÁQUINA, MONTADAS ────────────────────────────────────────
+
+   Investigar e jogar a chave-mestra dependem de ela se encontrar numa situação
+   específica, e esperar que uma partida aleatória a produza é esperar por
+   sorte. Aqui a situação é construída: o peão vai para um lugar que ela já
+   riscou, sozinho, com as duas ações na mão.
+
+   NUMA PARTIDA PRÓPRIA, e não na que acabou de ser jogada. A primeira versão
+   montava o palco em cima da partida solo, e ela às vezes TERMINA dentro dos
+   duzentos e sessenta passos — `dossie_bot_passo` devolve nulo em partida
+   encerrada, e os três testes reprovavam com "ela fez outra coisa: null". Era a
+   mesma doença um andar acima.
+
+   `tetoPassos: 0` monta a mesa e não joga nada: é o palco limpo.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const palco = await dossieSolo({
+  token: P[0].token,
+  niveis: ["dificil", "medio"],
+  avancado: true,
+  tetoPassos: 0,
+});
+ok(!palco.erro, `o palco das decisões montou${palco.erro ? ": " + palco.erro : ""}`);
+
+if (!palco.erro) {
+  const maquina = palco.bots[0];
+  const temaP = palco.tema;
+
+  /* UM LUGAR QUE A MÁQUINA JÁ RISCOU, garantido.
+
+     Uma mão de seis cartas entre dezoito quase sempre traz dois ou três
+     lugares, e cada um deles sai do envelope na cabeça dela. Quase sempre: a
+     chance de não vir nenhum é de uma em duzentas e vinte, e um teste que falha
+     uma vez em duzentas e vinte é um teste que um dia falha sem motivo e ensina
+     a ignorar o vermelho.
+
+     "Já riscou" não é opinião do teste — é `dossie_candidatos`, a mesma função
+     que a máquina consulta. E se o baralho não cooperar, o teste PÕE a carta,
+     que é a mesma coisa que o baralho faria sem depender dele. */
+  async function riscadoDela() {
+    const cands = (
+      await db.query(
+        `select public.dossie_candidatos($1::jsonb,
+                  public.dossie_deduz($2::uuid, $3::smallint), 'room') c`,
+        [JSON.stringify(temaP), palco.id, maquina.seat],
+      )
+    ).rows[0].c;
+    return temaP.rooms.map((r) => r.id).find((r) => !cands.includes(r)) ?? null;
+  }
+
+  let riscado = await riscadoDela();
+  if (!riscado) {
+    await db.query(
+      `update match_private_state set data = jsonb_set(data, '{hand}',
+              (data -> 'hand') || to_jsonb($3::text))
+        where match_id = $1 and user_id = $2`,
+      [palco.id, maquina.user_id, temaP.rooms[0].id],
+    );
+    riscado = await riscadoDela();
+  }
+
+  ok(
+    riscado != null,
+    riscado != null
+      ? `a máquina já riscou ${riscado} — é lá que investigar vale mais que palpitar`
+      : "ela ainda considera os nove lugares mesmo com uma carta de lugar na mão",
+  );
+
+  if (riscado) {
+    /* Todo mundo em lugares diferentes, e a máquina sozinha no riscado. */
+    async function palcoSolo(assento, lugar) {
+      const pos = {};
+      const outros = temaP.rooms.map((r) => r.id).filter((r) => r !== lugar);
+      palco.elenco.forEach((e, i) => {
+        pos[String(e.seat)] =
+          Number(e.seat) === Number(assento) ? lugar : outros[i % outros.length];
+      });
+      await db.query(
+        `update matches set public_state = public_state
+            || jsonb_build_object('positions', $2::jsonb, 'turnSeat', $3::int,
+                                  'phase', 'turn', 'actionsLeft', 2, 'pending', null),
+                turn_deadline = now() + interval '90 seconds'
+          where id = $1`,
+        [palco.id, JSON.stringify(pos), Number(assento)],
+      );
+    }
+
+    await palcoSolo(maquina.seat, riscado);
+    const passoInvestiga = (
+      await db.query("select public.dossie_bot_passo($1::uuid) p", [palco.id])
+    ).rows[0].p;
+    ok(
+      String(passoInvestiga).startsWith("investiga("),
+      String(passoInvestiga).startsWith("investiga(")
+        ? `sozinha num lugar já riscado e com duas ações, a máquina INVESTIGA (${passoInvestiga})`
+        : `ela fez outra coisa: ${passoInvestiga}`,
+    );
+
+    /* E COM UMA AÇÃO SÓ, NÃO. A regra é investigar com a primeira e andar com a
+       segunda — investigar com a última troca o passo pela carta, e aí a
+       máquina fica parada no lugar que ela mesma riscou. */
+    await palcoSolo(maquina.seat, riscado);
+    await db.query(
+      "update matches set public_state = jsonb_set(public_state, '{actionsLeft}', '1') where id = $1",
+      [palco.id],
+    );
+    const passoUmaAcao = (
+      await db.query("select public.dossie_bot_passo($1::uuid) p", [palco.id])
+    ).rows[0].p;
+    ok(
+      !String(passoUmaAcao).startsWith("investiga("),
+      !String(passoUmaAcao).startsWith("investiga(")
+        ? `com uma ação só ela faz outra coisa (${passoUmaAcao}) — a carta não vale o último passo`
+        : "ela gastou a última ação investigando e ficou onde estava",
+    );
+
+    /* A CHAVE-MESTRA. Mesmo palco, mais uma carta na mão: ela tem de sair dali
+       de graça em vez de gastar a ação andando. */
+    await palcoSolo(maquina.seat, riscado);
+    await db.query(
+      `update match_private_state
+          set data = public.jsonb_poe(coalesce(data, '{}'::jsonb), 'pistas', 'mao',
+                coalesce(data -> 'pistas' -> 'mao', '[]'::jsonb) || to_jsonb('chave-mestra'::text))
+        where match_id = $1 and user_id = $2`,
+      [palco.id, maquina.user_id],
+    );
+    const passoChave = (
+      await db.query("select public.dossie_bot_passo($1::uuid) p", [palco.id])
+    ).rows[0].p;
+    ok(
+      String(passoChave).includes("chave-mestra"),
+      String(passoChave).includes("chave-mestra")
+        ? `com a chave-mestra na mão ela sai do lugar riscado de graça (${passoChave})`
+        : `ela ignorou a chave-mestra e fez ${passoChave}`,
+    );
+
+    const depoisChaveAv = (
+      await db.query("select public_state st from matches where id = $1", [palco.id])
+    ).rows[0].st;
+    ok(
+      depoisChaveAv.actionsLeft === 2 &&
+        depoisChaveAv.positions[String(maquina.seat)] !== riscado,
+      depoisChaveAv.actionsLeft === 2
+        ? `e chega em ${depoisChaveAv.positions[String(maquina.seat)]} com as duas ações intactas`
+        : `gastou ação: ${depoisChaveAv.actionsLeft}`,
+    );
+  }
 }
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });

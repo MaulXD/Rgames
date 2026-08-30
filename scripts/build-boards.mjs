@@ -245,9 +245,20 @@ function avaliar(grid, size, achadas) {
 }
 
 // ── geração ────────────────────────────────────────────────────────────────
+/* AS GRADES QUE NINGUEM MAIS USA SAEM, e "usar" tem duas formas.
+
+   Uma partida referencia a grade dela — isso o script sempre soube. O DESAFIO
+   DIARIO tambem referencia, e nao e uma partida: ele vive em `letreiro_dia`, e
+   a grade daquele dia tem de continuar existindo enquanto o placar do dia
+   existir.
+
+   A chave estrangeira de 0110 recusaria o apagamento com um erro; excluir aqui
+   evita o erro em vez de tratar. Sao as duas metades da mesma regra, e as duas
+   valem a pena: o banco garante, e o script nao tropeca. */
 await client.query(`
   delete from public.letreiro_boards b
    where not exists (select 1 from public.matches m where m.board_id = b.id)
+     and not exists (select 1 from public.letreiro_dia d where d.board_id = b.id)
 `);
 
 const tamanhos = SO_TAMANHO ? [SO_TAMANHO] : [4, 5];

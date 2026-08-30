@@ -1181,6 +1181,92 @@ ok(
   "e é a MESMA grade para outra pessoa — é o ponto do desafio diário",
 );
 
+/* E CONTINUA A MESMA COM O POOL MUDANDO DEBAIXO.
+
+   O teste acima passava mesmo quando a promessa era falsa. A grade do dia era
+   SORTEADA por índice — `offset (hash(dia) % quantas) order by id` — e
+   `quantas` é a contagem de grades sorteáveis, que muda toda vez que
+   `build-boards` roda. Duas pessoas abrindo o desafio no mesmo dia, com uma
+   regeração de pool entre elas, jogariam tabuleiros diferentes e apareceriam
+   no mesmo placar.
+
+   Não é hipótese: recalibrar o dicionário trocou 1.801 grades por 2.409, e
+   qualquer dia atravessado por isso teria dois desafios com o mesmo nome.
+
+   Este teste simula a mudança do jeito mais direto que existe — tira uma grade
+   do conjunto sorteável — e cobra que a resposta não mude. Ele reprova a
+   versão antiga da função e passa na nova, que guarda a decisão. */
+const antesDoTremor = (
+  await db.query(
+    `select (public.letreiro_grade_do_dia((now() at time zone 'America/Sao_Paulo')::date)).id id`,
+  )
+).rows[0].id;
+
+/* Some com uma grade sorteável QUALQUER que não seja a do dia — é o suficiente
+   para mudar `quantas` e, com ele, o índice do sorteio. Volta no fim. */
+const cobaia = (
+  await db.query(
+    `select id, comuns from public.letreiro_boards
+      where size = 4 and usavel and id <> $1 order by id limit 1`,
+    [antesDoTremor],
+  )
+).rows[0];
+await db.query("update public.letreiro_boards set comuns = '{}' where id = $1", [cobaia.id]);
+
+const depoisDoTremor = (
+  await db.query(
+    `select (public.letreiro_grade_do_dia((now() at time zone 'America/Sao_Paulo')::date)).id id`,
+  )
+).rows[0].id;
+await db.query("update public.letreiro_boards set comuns = $2 where id = $1", [
+  cobaia.id,
+  cobaia.comuns,
+]);
+
+ok(
+  String(depoisDoTremor) === String(antesDoTremor),
+  String(depoisDoTremor) === String(antesDoTremor)
+    ? "e o pool pode mudar debaixo que a grade do dia não muda — ela está escrita, não sorteada de novo"
+    : `a grade do dia mudou de ${antesDoTremor} para ${depoisDoTremor} porque o pool mudou`,
+);
+
+/* E O MECANISMO, porque o teste acima pode passar por sorte.
+
+   Tirar UMA grade muda `quantas` de N para N−1, e `hash % N` quase sempre
+   difere de `hash % (N−1)` — quase. Um teste que depende de "quase" um dia
+   passa com o defeito de volta, e é justamente o tipo de teste que ensina a
+   confiar no verde errado.
+
+   A prova sem sorte é a linha: existe uma decisão escrita para hoje, e é ela
+   que a função devolve. */
+const pinada = (
+  await db.query(
+    "select board_id from public.letreiro_dia where dia = (now() at time zone 'America/Sao_Paulo')::date",
+  )
+).rows[0];
+ok(
+  pinada != null && String(pinada.board_id) === String(antesDoTremor),
+  pinada == null
+    ? "a grade de hoje não foi escrita em lugar nenhum — ela continua sendo recalculada"
+    : `a decisão de hoje está escrita (grade ${pinada.board_id}) e é ela que a função devolve`,
+);
+
+/* E O PLACAR DO DIA COMPARA GENTE NO MESMO TABULEIRO. É a razão de tudo isto:
+   `letreiro_diario_placar` agrupa por dia e ordena por pontos, sem olhar em que
+   grade cada um jogou. */
+const tabuleirosDoDia = (
+  await db.query(
+    `select count(distinct board_id)::int n from public.letreiro_diario
+      where dia = (now() at time zone 'America/Sao_Paulo')::date`,
+  )
+).rows[0].n;
+ok(
+  tabuleirosDoDia <= 1,
+  tabuleirosDoDia <= 1
+    ? "e todo mundo que abriu hoje está no mesmo tabuleiro — o placar do dia compara o comparável"
+    : `há ${tabuleirosDoDia} tabuleiros diferentes no placar de hoje`,
+);
+
 // submeter, com o gabarito lido pelo caminho de serviço
 const gabaritoDia = (
   await db.query(

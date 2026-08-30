@@ -396,6 +396,34 @@
 
 @media (prefers-reduced-motion: reduce) { .carta { transition: none; } }
 
+/* ── Cartas de Pista ───────────────────────────────────────────────────────
+   Nem carta de baralho nem botão: uma FICHA, com o efeito escrito por extenso.
+   O leque lá de cima existe porque as 21 cartas do caso são todas iguais em
+   função e só o nome muda; aqui cada carta faz uma coisa diferente, e uma
+   pessoa que não sabe o que "Álibi" faz não tem como jogá-la. A frase é a
+   metade útil da ficha — esconder o efeito atrás de um nome bonito seria pedir
+   que se decore um manual.
+
+   `min-height` de 44px nos botões: alvo de toque, e este painel é jogado com o
+   polegar. Ver o guarda em `scripts/check-css.mjs`. */
+.dossie-pistas { padding: 1rem 1.1rem; }
+.dossie-pistas-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.dossie-pista { display: flex; align-items: center; justify-content: space-between; gap: 0.9rem; padding: 0.7rem 0.9rem; border: 3px solid var(--ink); border-radius: var(--r-md); background: #f6efdb; color: var(--ink); }
+.dossie-pista .dim { color: rgb(38 34 24 / 0.72); }
+.dossie-pista-nome { font-family: var(--font-archivo), sans-serif; font-size: 0.95rem; font-weight: 700; }
+.dossie-pista-motivo { margin-top: 0.25rem; font-style: italic; }
+.dossie-pista .btn { flex: none; min-height: 44px; }
+
+.dossie-avisos { list-style: none; margin: 0.6rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.dossie-avisos li { padding: 0.5rem 0.7rem; border-left: 4px solid var(--vivo-limao); border-radius: 0 8px 8px 0; background: rgb(196 255 92 / 0.12); font-size: 0.86rem; color: var(--fg-mid); }
+
+/* No celular a ficha vira duas linhas: o botão embaixo, com a largura toda,
+   porque um botão de 44px espremido ao lado de duas linhas de texto some. */
+@media (max-width: 30rem) {
+  .dossie-pista { flex-direction: column; align-items: stretch; }
+  .dossie-pista .btn { width: 100%; }
+}
+
 /* ── bloco de dedução ──────────────────────────────────────────────────── */
 
 .bloco { padding: 1rem 1.1rem; }

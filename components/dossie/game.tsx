@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { Abertura } from "@/components/dossie/abertura";
 import { Mapa, type Peao } from "@/components/dossie/mapa";
 import { Bloco } from "@/components/dossie/bloco";
+import { Escolher } from "@/components/dossie/escolher";
+import { Pistas } from "@/components/dossie/pistas";
+import { TIPOS, tipoDaCarta, type Aviso, type IdPista, type IdTipo } from "@/lib/dossie-pistas";
 import type { Pad } from "@/lib/dossie-bloco";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSession } from "@/components/session";
@@ -11,9 +14,22 @@ import { carregaCaso, nomeDaCarta, type Caso } from "@/lib/dossie";
 import type { LinhaLog } from "@/lib/dossie-bloco";
 import * as sfx from "@/lib/sfx";
 
+/**
+ * A pendência da mesa: alguém esperando por outra pessoa.
+ *
+ * Duas formas, e o `kind` as separa. A refutação tem FILA — pergunta-se a um de
+ * cada vez até alguém mostrar. O interrogatório tem ALVO — pergunta-se a uma
+ * pessoa só. Escrever as duas como um objeto de campos opcionais deixaria o
+ * compilador aceitar `pending.queue[pending.at]` num interrogatório, que é
+ * justamente o erro que a fila ausente causa em tempo de execução.
+ */
+export type Pendencia =
+  | { kind?: never; bySeat: number; guess: [string, string, string]; queue: number[]; at: number }
+  | { kind: "interroga"; bySeat: number; alvo: number; tipo: IdTipo };
+
 export type DossieState = {
   theme: string;
-  phase: "turn" | "refute" | "over";
+  phase: "turn" | "refute" | "interroga" | "over";
   turnSeat: number;
   actionsLeft: number;
   positions: Record<string, string>;
@@ -21,7 +37,11 @@ export type DossieState = {
   players: { seat: number; userId: string; suspect: string; hand: number }[];
   ghosts: number[];
   accused: number[];
-  pending: { bySeat: number; guess: [string, string, string]; queue: number[]; at: number } | null;
+  pending: Pendencia | null;
+  /** o baralho do Modo Avançado, ou nulo quando a mesa jogou sem ele */
+  pistas?: { tirou: number } | null;
+  /** o assento que joga a próxima vez com uma ação só */
+  tempoCurto?: number | null;
   seq: number;
   round?: number;
   log: LinhaLog[];
@@ -54,6 +74,8 @@ type Privado = {
   hand: string[];
   seen: { card: string; from: number | null; seq: number }[];
   pad?: Pad;
+  /** a mão de Cartas de Pista e o que elas já contaram */
+  pistas?: { mao?: string[]; avisos?: Aviso[] };
 };
 
 export function DossieGame({
@@ -85,10 +107,23 @@ export function DossieGame({
   const minhaVez = meuAssento !== null && st.turnSeat === meuAssento && st.phase === "turn";
   const souFantasma = meuAssento !== null && st.ghosts.includes(meuAssento);
   const jaAcusei = meuAssento !== null && st.accused.includes(meuAssento);
+  /* AS DUAS FORMAS DA PENDÊNCIA, cada uma num nome.
+
+     A refutação tem FILA — pergunta-se a um de cada vez. O interrogatório tem
+     ALVO — pergunta-se a uma pessoa só. `st.pending!.queue` compilava com as
+     duas juntas e quebraria em tempo de execução no dia em que a pendência
+     fosse a outra; separar aqui, uma vez, faz o compilador cobrar a distinção
+     em todo lugar que as usa. */
+  const refutacao = st.pending?.kind !== "interroga" ? (st.pending ?? null) : null;
+  const interrogatorio = st.pending?.kind === "interroga" ? st.pending : null;
+
   const devoRefutar =
     st.phase === "refute" &&
-    !!st.pending &&
-    st.pending.queue[st.pending.at] === meuAssento;
+    !!refutacao &&
+    refutacao.queue[refutacao.at] === meuAssento;
+
+  /* Perguntaram A MIM, e a mesa inteira está parada esperando. */
+  const devoResponder = st.phase === "interroga" && interrogatorio?.alvo === meuAssento;
 
   /* ── a máquina joga, um passo por vez ─────────────────────────
 
@@ -110,10 +145,18 @@ export function DossieGame({
   );
   const maquinaRefutando =
     st.phase === "refute" &&
-    !!st.pending &&
+    !!refutacao &&
     st.players.some(
-      (p) => p.seat === st.pending!.queue[st.pending!.at] && idsBot.has(p.userId),
+      (p) => p.seat === refutacao.queue[refutacao.at] && idsBot.has(p.userId),
     );
+
+  /* Interrogaram uma máquina. Sem este ramo o cliente não a cutuca, e a mesa
+     espera os noventa segundos da faxina por uma resposta que a máquina daria
+     na hora — a carta viraria castigo de quem a jogou. */
+  const maquinaRespondendo =
+    st.phase === "interroga" &&
+    !!interrogatorio &&
+    st.players.some((p) => p.seat === interrogatorio.alvo && idsBot.has(p.userId));
 
   const tocando = useRef(false);
   const falhasBot = useRef(0);
@@ -178,9 +221,9 @@ export function DossieGame({
   }, [match.id]);
 
   useEffect(() => {
-    if (minhaVez || devoRefutar) seguidos.current = 0;   // voltou para gente: zera
+    if (minhaVez || devoRefutar || devoResponder) seguidos.current = 0;   // voltou para gente: zera
     if (!temMaquina || st.phase === "over" || maquinaEmpacou) return;
-    if (!maquinaNaVez && !maquinaRefutando) return;
+    if (!maquinaNaVez && !maquinaRefutando && !maquinaRespondendo) return;
     // o setState mora dentro do temporizador
     const id = setTimeout(() => void tocarMaquina(), 1300);
     return () => clearTimeout(id);
@@ -188,6 +231,7 @@ export function DossieGame({
     temMaquina,
     maquinaNaVez,
     maquinaRefutando,
+    maquinaRespondendo,
     maquinaEmpacou,
     tocarMaquina,
     st.phase,
@@ -195,6 +239,7 @@ export function DossieGame({
     st.seq,
     tique,
     minhaVez,
+    devoResponder,
     devoRefutar,
   ]);
 
@@ -224,6 +269,7 @@ export function DossieGame({
           hand: d.hand ?? [],
           seen: d.seen ?? [],
           pad: d.pad?.marks ? d.pad : { marks: {}, assist: d.pad?.assist ?? "assistido" },
+          pistas: d.pistas ?? { mao: [], avisos: [] },
         });
       }
     }
@@ -296,7 +342,7 @@ export function DossieGame({
 
   const euEstouEm = meuAssento !== null ? st.positions[String(meuAssento)] : undefined;
   const daVez = peoes.find((p) => p.seat === st.turnSeat);
-  const focoDoPalpite = st.pending ? st.pending.guess[2] : null;
+  const focoDoPalpite = refutacao ? refutacao.guess[2] : null;
 
   /* ── O QUE A REVIRAVOLTA ESTÁ FAZENDO AGORA ─────────────────────────
 
@@ -362,7 +408,8 @@ export function DossieGame({
               {st.actionsLeft} {st.actionsLeft === 1 ? "ação" : "ações"} nesta rodada
             </p>
           )}
-          {(maquinaNaVez || maquinaRefutando) && !minhaVez && !devoRefutar &&
+          {(maquinaNaVez || maquinaRefutando || maquinaRespondendo) &&
+            !minhaVez && !devoRefutar && !devoResponder &&
             st.phase !== "over" && !maquinaEmpacou && (
             <p className="dossie-acoes dossie-pensando">
               <span className="pensa-pontos" aria-hidden>
@@ -370,7 +417,11 @@ export function DossieGame({
                 <i />
                 <i />
               </span>
-              {maquinaRefutando ? "conferindo a mão" : "pensando"}
+              {maquinaRefutando
+                ? "conferindo a mão"
+                : maquinaRespondendo
+                  ? "procurando na mão"
+                  : "pensando"}
             </p>
           )}
           {maquinaEmpacou && st.phase !== "over" && (
@@ -477,21 +528,79 @@ export function DossieGame({
         nomes={Object.fromEntries(peoes.map((p) => [p.seat, p.nome]))}
         meuAssento={meuAssento}
         pad={priv.pad ?? { marks: {}, assist: "assistido" }}
+        avisos={priv.pistas?.avisos ?? []}
         onPad={(novo) => {
           setPriv((a) => ({ ...a, pad: novo }));
           void supabaseBrowser().rpc("dossie_pad", { p_match: match.id, p_pad: novo });
         }}
       />
 
+      {/* ── responder ao interrogatório ───────────────────────────────────
+           Fica ACIMA da refutação porque as duas nunca acontecem juntas — as
+           fases se excluem — e porque esta é a que trava a mesa inteira num
+           relógio de trinta segundos. */}
+      {devoResponder && interrogatorio && (
+        <div className="panel dossie-refuta">
+          <p className="eyebrow">
+            {peoes.find((x) => x.seat === interrogatorio.bySeat)?.nome ?? "Alguém"} interrogou você
+          </p>
+          {(() => {
+            const doTipo = priv.hand.filter((c) => tipoDaCarta(caso, c) === interrogatorio.tipo);
+            const nome = TIPOS.find((t) => t.id === interrogatorio.tipo)?.nome ?? "uma carta";
+            if (doTipo.length === 0) {
+              return (
+                <>
+                  <p className="mt-2 text-sm dim">
+                    Pediram {nome}, e você não tem nenhum. Diga isso — o servidor confere, e a
+                    mesa inteira fica sabendo.
+                  </p>
+                  <button
+                    className="btn btn-ghost mt-3"
+                    onClick={() =>
+                      void chama("dossie_passa_interroga", { p_match: match.id })
+                    }
+                  >
+                    Não tenho nenhum
+                  </button>
+                </>
+              );
+            }
+            return (
+              <>
+                <p className="mt-2 text-sm dim">
+                  Pediram {nome}. Escolha qual mostrar — só quem perguntou vê a carta.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {doTipo.map((c) => (
+                    <button
+                      key={c}
+                      className="btn btn-brass"
+                      onClick={() =>
+                        void chama("dossie_responde_interroga", {
+                          p_match: match.id,
+                          p_card: c,
+                        })
+                      }
+                    >
+                      {nomeDaCarta(caso, c)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
+
       {/* ── refutação ─────────────────────────────────────────────────── */}
-      {devoRefutar && st.pending && (
+      {devoRefutar && refutacao && (
         <div className="panel dossie-refuta">
           <p className="eyebrow">Alguém acusou</p>
           <p className="refuta-palpite">
-            {st.pending.guess.map((c) => nomeDaCarta(caso, c)).join(" · ")}
+            {refutacao.guess.map((c) => nomeDaCarta(caso, c)).join(" · ")}
           </p>
           {(() => {
-            const posso = priv.hand.filter((c) => st.pending!.guess.includes(c));
+            const posso = priv.hand.filter((c) => refutacao.guess.includes(c));
             if (posso.length === 0) {
               return (
                 <>
@@ -606,6 +715,38 @@ export function DossieGame({
         )}
       </div>
 
+      {/* ── Cartas de Pista ───────────────────────────────────────────────
+           Só quando a mesa ligou o Modo Avançado. `st.pistas` nulo não é zero
+           cartas tiradas: é uma mesa que escolheu jogar sem o baralho, e para
+           ela este painel não existe. */}
+      {st.pistas != null && meuAssento !== null && (
+        <Pistas
+          caso={caso}
+          mao={priv.pistas?.mao ?? []}
+          avisos={priv.pistas?.avisos ?? []}
+          minhaVez={minhaVez && !souFantasma}
+          devoRefutar={devoRefutar}
+          acoesRestantes={st.actionsLeft}
+          sozinhoAqui={
+            !!euEstouEm &&
+            !st.players.some(
+              (o) => o.seat !== meuAssento && st.positions[String(o.seat)] === euEstouEm,
+            )
+          }
+          jogadores={peoes.map((x) => ({ seat: x.seat, nome: x.nome }))}
+          meuAssento={meuAssento}
+          lugares={caso.rooms.map((r) => ({ id: r.id, name: r.name }))}
+          onInvestigar={() => void chama("dossie_investigar", { p_match: match.id })}
+          onUsar={(cartaId: IdPista, arg: Record<string, unknown>) =>
+            void chama("dossie_usar_pista", {
+              p_match: match.id,
+              p_carta: cartaId,
+              p_arg: arg,
+            })
+          }
+        />
+      )}
+
       {/* ── log narrado ───────────────────────────────────────────────── */}
       <div className="panel dossie-log">
         <p className="eyebrow">Investigação</p>
@@ -711,6 +852,56 @@ function narra(l: LinhaLog, caso: Caso, peoes: Peao[]): string {
       return l.right
         ? `${quem(l.seat)} fechou o caso — e acertou.`
         : `${quem(l.seat)} acusou e errou. Virou Fantasma.`;
+
+    /* ── Modo Avançado ────────────────────────────────────────────────────
+       Todas estas frases dizem O QUE ACONTECEU sem dizer o que foi
+       descoberto. É a mesma linha que separa "mostrou uma carta" de "mostrou
+       a corda", e ela vale para as pistas inteiras: a carta comprada é de
+       quem comprou, e a resposta da impressão digital é de quem a jogou. */
+    case "investiga":
+      return `${quem(l.seat)} vasculhou ${nomeDaCarta(caso, l.room ?? "")} e guardou o que achou.`;
+    case "alibi":
+      return `${quem(l.seat)} apresentou um álibi e não precisou mostrar nada.`;
+    case "interroga_ok":
+      return `${quem(l.seat)} mostrou uma carta no interrogatório.`;
+    case "interroga_nada":
+      return `${quem(l.seat)} não tem ${nomeDoTipo(l.tipo)} — nenhum.`;
+    case "pista":
+      return narraPista(l, caso, quem);
+  }
+}
+
+/** O nome de um tipo na frase da mesa. */
+function nomeDoTipo(id?: string): string {
+  return TIPOS.find((t) => t.id === id)?.nome ?? "essa carta";
+}
+
+/**
+ * A frase de uma Carta de Pista jogada.
+ *
+ * Cada uma conta exatamente o que a mesa viu, e nem uma vírgula a mais: a
+ * impressão digital diz QUAIS dois nomes, e nunca a resposta; o recado diz que
+ * saiu, e nunca para quem. É o que dá preço às cartas — quem as joga paga
+ * anunciando onde está procurando.
+ */
+function narraPista(
+  l: LinhaLog,
+  caso: Caso,
+  quem: (s?: number | null) => string,
+): string {
+  switch (l.carta) {
+    case "chave-mestra":
+      return `${quem(l.seat)} abriu uma porta e apareceu em ${nomeDaCarta(caso, l.room ?? "")}.`;
+    case "tempo-curto":
+      return `${quem(l.seat)} apertou o relógio: ${quem(l.alvo)} joga a próxima vez com uma ação só.`;
+    case "impressao":
+      return `${quem(l.seat)} comparou uma impressão com ${nomeDaCarta(caso, l.a ?? "")} e ${nomeDaCarta(caso, l.b ?? "")}. A resposta é só dele.`;
+    case "recado":
+      return `${quem(l.seat)} deixou um recado anônimo. Ninguém viu para quem.`;
+    case "interrogatorio":
+      return `${quem(l.seat)} interrogou ${quem(l.alvo)}: quer ver ${nomeDoTipo(l.tipo)}.`;
+    default:
+      return `${quem(l.seat)} jogou uma carta de pista.`;
   }
 }
 
@@ -724,90 +915,26 @@ function traduz(msg: string): string {
   if (/NOT_IN_GUESS/.test(msg)) return "Essa carta não é uma das três acusadas.";
   if (/ALREADY_ACCUSED/.test(msg)) return "Você já fechou o caso uma vez.";
   if (/NOT_YOUR_REFUTE/.test(msg)) return "Ainda não é a sua vez de responder.";
+
+  /* Modo Avançado */
+  if (/SEM_PISTAS/.test(msg)) return "Esta mesa está jogando sem as Cartas de Pista.";
+  if (/LUGAR_COM_GENTE/.test(msg))
+    return "Só se investiga um lugar onde mais ninguém está.";
+  if (/BARALHO_VAZIO/.test(msg)) return "O baralho de pistas acabou.";
+  if (/PISTA_NAO_ESTA_NA_MAO/.test(msg)) return "Essa carta de pista não está na sua mão.";
+  if (/ROOM_CLOSED/.test(msg)) return "Esse lugar está fechado.";
+  if (/DOIS_NOMES_IGUAIS/.test(msg)) return "Nomeie dois suspeitos diferentes.";
+  if (/SUSPEITO_NAO_EXISTE/.test(msg)) return "Esse suspeito não é do caso.";
+  if (/RECADO_SEM_NOVIDADE/.test(msg))
+    return "Não sobrou nada que essa pessoa ainda não saiba. A carta continua na sua mão.";
+  if (/ALVO_NAO_ESTA_NA_MESA/.test(msg)) return "Essa pessoa não está na mesa.";
+  if (/NAO_SE_INTERROGA_SOZINHO/.test(msg)) return "Escolha outra pessoa.";
+  if (/NAO_PERGUNTARAM_A_VOCE/.test(msg)) return "A pergunta não foi para você.";
+  if (/CARTA_DE_OUTRO_TIPO/.test(msg)) return "Pediram outro tipo de carta.";
+  if (/YOU_MUST_SHOW/.test(msg)) return "Você tem uma carta desse tipo — precisa mostrar.";
+  if (/NADA_PARA_RESPONDER/.test(msg)) return "Não há interrogatório aberto.";
+  if (/NADA_PARA_REFUTAR/.test(msg)) return "Não há nada para refutar agora.";
+  if (/WRONG_PHASE/.test(msg)) return "Agora não dá — a mesa está esperando outra coisa.";
   return msg;
 }
 
-/* ── caixa de escolha ──────────────────────────────────────────────────── */
-
-function Escolher({
-  titulo,
-  nota,
-  grupos,
-  pronto,
-  onConfirmar,
-  onFechar,
-  rotuloBotao,
-  perigo,
-}: {
-  titulo: string;
-  nota: string;
-  grupos: { rotulo: string; itens: { id: string; name: string }[]; sel?: string; set: (v: string) => void }[];
-  pronto: boolean;
-  onConfirmar: () => void;
-  onFechar: () => void;
-  rotuloBotao: string;
-  perigo?: boolean;
-}) {
-  useEffect(() => {
-    sfx.abre();
-  }, []);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
-      style={{ background: "rgb(4 12 18 / 0.85)" }}
-      onClick={() => {
-        sfx.fecha();
-        onFechar();
-      }}
-    >
-      <div
-        className="panel w-full max-w-lg p-5 sm:p-6"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label={titulo}
-      >
-        <h2 className="text-2xl">{titulo}</h2>
-        <p className="mt-2 text-sm dim">{nota}</p>
-
-        {grupos.map((g) => (
-          <div key={g.rotulo} className="mt-5">
-            <p className="eyebrow mb-2">{g.rotulo}</p>
-            <div className="flex flex-wrap gap-2">
-              {g.itens.map((it) => (
-                <button
-                  key={it.id}
-                  type="button"
-                  className="escolha"
-                  data-on={g.sel === it.id}
-                  onClick={() => g.set(it.id)}
-                >
-                  {it.name}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-
-        <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-          <button
-            className={perigo ? "btn btn-lacquer flex-1" : "btn btn-brass flex-1"}
-            disabled={!pronto}
-            onClick={onConfirmar}
-          >
-            {rotuloBotao}
-          </button>
-          <button
-            className="btn btn-ghost flex-1"
-            onClick={() => {
-              sfx.fecha();
-              onFechar();
-            }}
-          >
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

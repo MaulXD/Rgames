@@ -2012,6 +2012,31 @@ ok(
   "e sementes diferentes dão baralhos diferentes",
 );
 
+/* TODA CARTA DO BARALHO É JOGÁVEL.
+
+   Este é o guarda contra a carta decorativa: um tipo que está no baralho e que
+   o `case` não conhece sai da mão de alguém, custa uma ação e uma sala vazia
+   para ser comprado, e devolve `PISTA_DESCONHECIDA` — que é o jeito mais caro
+   possível de descobrir que o jogo mentiu.
+
+   A checagem é contra o CÓDIGO da função, e não contra uma lista escrita aqui,
+   porque uma lista escrita aqui seria a mesma coisa que o baralho: dois lugares
+   dizendo o que existe, e um dia um deles fica para trás. */
+const ramos = (
+  await db.query(
+    `select pg_get_functiondef(p.oid) d from pg_proc p
+       join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'dossie_usar_pista_como'`,
+  )
+).rows[0].d;
+const semRamo = [...new Set(baralho)].filter((c) => !ramos.includes(`when '${c}' then`));
+ok(
+  semRamo.length === 0,
+  semRamo.length === 0
+    ? "e todo tipo do baralho tem um ramo que o resolve — nenhuma carta decorativa"
+    : `estes tipos estão no baralho e ninguém os joga: ${semRamo.join(", ")}`,
+);
+
 /* ── a regra da casa ──────────────────────────────────────────────────────── */
 
 const salaPista = (await rpc(P[0].token, "create_room", { p_game: "dossie" })).body;
@@ -2186,8 +2211,26 @@ if (iniAv.status === 200) {
     );
   }
 
+  async function maoDePistas(userId) {
+    return (
+      (
+        await db.query(
+          "select data -> 'pistas' -> 'mao' m from match_private_state where match_id = $1 and user_id = $2",
+          [mAv.id, userId],
+        )
+      ).rows[0].m ?? []
+    );
+  }
+
   await poeSozinho(euAv.seat, lugares[0]);
   await daCarta(euAv.user_id, "chave-mestra");
+  /* QUANTAS, e não SE. A carta comprada lá em cima pode ter sido uma
+     chave-mestra — e aí a mão tem duas, o que é legítimo: o baralho tem quatro
+     cópias de cada. Medir ausência faz este teste reprovar código correto de
+     vez em quando, que é o pior tipo de teste que existe, e foi o que aconteceu.
+
+     A contagem mede a promessa de verdade: `jsonb_tira_um` tira UMA. */
+  const chavesAntes = (await maoDePistas(euAv.user_id)).filter((c) => c === "chave-mestra").length;
 
   /* O destino é o mais LONGE que existe: se a chave-mestra respeitasse
      adjacência, ela não seria uma chave-mestra. */
@@ -2217,15 +2260,24 @@ if (iniAv.status === 200) {
     `e é DE GRAÇA: ${antesAcoes} ações antes, ${depoisChave.actionsLeft} depois` +
       " — é o que a torna a única forma de estar em dois lugares numa rodada",
   );
-  const maoDepois = (
-    await db.query(
-      "select data -> 'pistas' -> 'mao' m from match_private_state where match_id = $1 and user_id = $2",
-      [mAv.id, euAv.user_id],
-    )
-  ).rows[0].m;
+  const chavesDepois = (await maoDePistas(euAv.user_id)).filter((c) => c === "chave-mestra").length;
   ok(
-    !(maoDepois ?? []).includes("chave-mestra"),
-    "e a carta sai da mão ao ser usada",
+    chavesDepois === chavesAntes - 1,
+    chavesDepois === chavesAntes - 1
+      ? `e sai UMA carta da mão, e só uma (${chavesAntes} → ${chavesDepois})`
+      : `a mão foi de ${chavesAntes} para ${chavesDepois} chave-mestras`,
+  );
+
+  /* Agora a mão fica LIMPA desta carta, senão o teste seguinte mediria o que
+     sobrou do baralho em vez da guarda. */
+  await db.query(
+    `update match_private_state
+        set data = public.jsonb_poe(coalesce(data, '{}'::jsonb), 'pistas', 'mao',
+              (select coalesce(jsonb_agg(c), '[]'::jsonb)
+                 from jsonb_array_elements_text(coalesce(data -> 'pistas' -> 'mao', '[]'::jsonb)) c
+                where c <> 'chave-mestra'))
+      where match_id = $1 and user_id = $2`,
+    [mAv.id, euAv.user_id],
   );
 
   const semCarta = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
@@ -2269,6 +2321,509 @@ if (iniAv.status === 200) {
     normal.actionsLeft === 2 && normal.tempoCurto == null,
     `e o seguinte volta a ter ${normal.actionsLeft} — a marca é consumida ao ser paga`,
   );
+
+  /* ── IMPRESSÃO DIGITAL ──────────────────────────────────────────────────
+     O que se mede aqui não é "a carta funcionou": é a ASSIMETRIA. O NÃO risca
+     dois suspeitos, o SIM risca os outros quatro, e as duas respostas valem a
+     jogada. Uma carta que só serve quando dá sorte é uma carta que ninguém
+     joga — e sem estes dois casos medidos separadamente, o dia em que alguém
+     "simplificar" o SIM para um simples "é um dos dois, anota aí" passa sem
+     ninguém ver. */
+
+  const suspeitos = temaAv.suspects.map((s) => s.id);
+  const envelope = (await db.query("select solution from matches where id = $1", [mAv.id]))
+    .rows[0].solution;
+  const culpado = envelope.suspect;
+  const inocentes = suspeitos.filter((s) => s !== culpado);
+
+  /* Primeiro a função pura, que é onde a assimetria mora de verdade. Medi-la
+     aqui e não só pelo estado final é o que separa "o caderno riscou quatro"
+     de "o caderno riscou os quatro CERTOS". */
+  const ensinaNao = (
+    await db.query("select public.dossie_aviso_ensina($1::jsonb, $2::jsonb) e", [
+      JSON.stringify(temaAv),
+      JSON.stringify({ k: "impressao", a: inocentes[0], b: inocentes[1], sim: false }),
+    ])
+  ).rows[0].e;
+  ok(
+    ensinaNao.length === 2 && ensinaNao.every((c) => [inocentes[0], inocentes[1]].includes(c)),
+    `um NÃO risca exatamente os dois nomeados (${ensinaNao.join(", ")})`,
+  );
+
+  const ensinaSim = (
+    await db.query("select public.dossie_aviso_ensina($1::jsonb, $2::jsonb) e", [
+      JSON.stringify(temaAv),
+      JSON.stringify({ k: "impressao", a: culpado, b: inocentes[0], sim: true }),
+    ])
+  ).rows[0].e;
+  ok(
+    ensinaSim.length === 4 &&
+      !ensinaSim.includes(culpado) &&
+      !ensinaSim.includes(inocentes[0]),
+    `e um SIM risca os OUTROS quatro (${ensinaSim.length}), sem tocar nos dois nomeados`,
+  );
+
+  /* Agora de ponta a ponta. O par nomeado inclui o culpado, então a resposta
+     tem de ser sim — e é a única vez no jogo em que o servidor lê o envelope
+     para responder alguma coisa a alguém. */
+  await poeSozinho(euAv.seat, lugares[0]);
+  await daCarta(euAv.user_id, "impressao");
+  const digital = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "impressao",
+    p_arg: { a: culpado, b: inocentes[0] },
+  });
+  ok(
+    digital.status === 200,
+    `a impressão digital foi jogada${digital.status === 200 ? "" : ": " + JSON.stringify(digital.body)}`,
+  );
+
+  const avisosMeus = (
+    await db.query(
+      "select data -> 'pistas' -> 'avisos' a from match_private_state where match_id = $1 and user_id = $2",
+      [mAv.id, euAv.user_id],
+    )
+  ).rows[0]?.a;
+  const digitalAviso = (avisosMeus ?? []).find((a) => a.k === "impressao");
+  ok(
+    digitalAviso?.sim === true,
+    digitalAviso
+      ? `e o aviso chegou privado, com a resposta certa (sim = ${digitalAviso.sim})`
+      : "nenhum aviso foi gravado",
+  );
+
+  /* O REGISTRO MOSTRA OS DOIS NOMES E NÃO MOSTRA A RESPOSTA.
+     É a carta inteira: quem joga paga anunciando onde procura, e a mesa lê a
+     resposta no que essa pessoa faz depois. Se o `sim` vazasse para o log, a
+     carta viraria um anúncio público de meia solução. */
+  const logDigital = (
+    await db.query("select public_state -> 'log' l from matches where id = $1", [mAv.id])
+  ).rows[0].l.filter((l) => l.carta === "impressao");
+  ok(
+    logDigital.length === 1 &&
+      logDigital[0].a === culpado &&
+      logDigital[0].b === inocentes[0] &&
+      logDigital[0].sim === undefined,
+    logDigital.length === 1
+      ? "o registro conta QUAIS dois foram nomeados e não conta a resposta"
+      : `o registro tem ${logDigital.length} linhas de impressão`,
+  );
+
+  /* E o caderno aprende: os outros quatro saem do envelope, o culpado fica. */
+  const cadernoDigital = (
+    await db.query("select public.dossie_deduz($1::uuid, $2::smallint) d", [mAv.id, euAv.seat])
+  ).rows[0].d;
+  ok(
+    inocentes.slice(1).every((s) => cadernoDigital.fora.includes(s)) &&
+      !cadernoDigital.fora.includes(culpado),
+    inocentes.slice(1).every((s) => cadernoDigital.fora.includes(s))
+      ? "o caderno risca os quatro suspeitos que sobraram e poupa o culpado"
+      : `o caderno não aprendeu: fora = ${JSON.stringify(cadernoDigital.fora)}`,
+  );
+
+  /* Os guardas. Dois nomes iguais transformariam a pergunta em "é este?", que
+     é uma carta diferente e mais forte do que esta. */
+  await poeSozinho(euAv.seat, lugares[0]);
+  await daCarta(euAv.user_id, "impressao");
+  const iguais = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "impressao",
+    p_arg: { a: culpado, b: culpado },
+  });
+  ok(
+    iguais.status >= 400 && JSON.stringify(iguais.body).includes("DOIS_NOMES_IGUAIS"),
+    iguais.status >= 400
+      ? "nomear duas vezes o mesmo suspeito é recusado — seria outra carta, mais forte"
+      : "nomear o mesmo suspeito duas vezes passou",
+  );
+
+  const inventado = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "impressao",
+    p_arg: { a: culpado, b: "quem-nunca-existiu" },
+  });
+  ok(
+    inventado.status >= 400 && JSON.stringify(inventado.body).includes("SUSPEITO_NAO_EXISTE"),
+    inventado.status >= 400
+      ? "e um suspeito inventado também"
+      : "um suspeito que não existe passou",
+  );
+
+  /* ── RECADO ANÔNIMO ─────────────────────────────────────────────────────
+     A escolha da carta é POLÍTICA, não sorteio: nunca uma do envelope, nunca
+     uma que o alvo já sabe. Por isso ela é medida contra o envelope e contra a
+     mão do alvo, e não contra "veio alguma coisa". */
+
+  const outroAv = elencoAv.find((e) => e.seat !== euAv.seat);
+  const maoDoOutro = (
+    await db.query("select data -> 'hand' h from match_private_state where match_id = $1 and user_id = $2",
+      [mAv.id, outroAv.user_id],
+    )
+  ).rows[0].h;
+
+  await poeSozinho(euAv.seat, lugares[0]);
+  await daCarta(euAv.user_id, "recado");
+  const recado = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "recado",
+    p_arg: { alvo: outroAv.seat },
+  });
+  ok(
+    recado.status === 200,
+    `o recado foi enviado${recado.status === 200 ? "" : ": " + JSON.stringify(recado.body)}`,
+  );
+
+  const avisoDele = (
+    await db.query(
+      "select data -> 'pistas' -> 'avisos' a from match_private_state where match_id = $1 and user_id = $2",
+      [mAv.id, outroAv.user_id],
+    )
+  ).rows[0]?.a;
+  const cartaDoRecado = (avisoDele ?? []).find((a) => a.k === "recado")?.card;
+  const noEnvelope = [envelope.suspect, envelope.weapon, envelope.room];
+  ok(
+    cartaDoRecado != null && !noEnvelope.includes(cartaDoRecado),
+    cartaDoRecado == null
+      ? "o alvo não recebeu nada"
+      : noEnvelope.includes(cartaDoRecado)
+        ? `o recado ENTREGOU UMA CARTA DO ENVELOPE (${cartaDoRecado})`
+        : `o alvo recebeu ${cartaDoRecado}, que comprovadamente não está no envelope`,
+  );
+  ok(
+    !(maoDoOutro ?? []).includes(cartaDoRecado),
+    "e não é uma carta que ele já tinha na mão — recado que repete é carta gasta à toa",
+  );
+
+  /* ANÔNIMO quer dizer que a MESA não sabe quem recebeu. Todo mundo vê a carta
+     sair, como vê qualquer outra; o `alvo` é a única coisa que o registro
+     guarda para si. */
+  const logRecado = (
+    await db.query("select public_state -> 'log' l from matches where id = $1", [mAv.id])
+  ).rows[0].l.filter((l) => l.carta === "recado");
+  ok(
+    logRecado.length === 1 &&
+      logRecado[0].alvo === undefined &&
+      logRecado[0].card === undefined,
+    logRecado.length === 1 && logRecado[0].alvo === undefined
+      ? "o registro diz que um recado saiu, e não diz para quem nem qual"
+      : `o registro entregou o recado: ${JSON.stringify(logRecado[0])}`,
+  );
+
+  const cadernoDele = (
+    await db.query("select public.dossie_deduz($1::uuid, $2::smallint) d", [mAv.id, outroAv.seat])
+  ).rows[0].d;
+  ok(
+    cadernoDele.fora.includes(cartaDoRecado),
+    `e o caderno dele já risca ${cartaDoRecado} sem ter visto a carta de ninguém`,
+  );
+
+  /* Mandar para si mesmo é permitido, e é o que faz a carta valer a pena
+     jogar. Sem isso ela seria puro presente, e uma carta que só ajuda o
+     adversário fica na mão até o fim da partida. */
+  await poeSozinho(euAv.seat, lugares[0]);
+  await daCarta(euAv.user_id, "recado");
+  const proMim = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "recado",
+    p_arg: { alvo: euAv.seat },
+  });
+  ok(
+    proMim.status === 200,
+    proMim.status === 200
+      ? "e dá para mandar o recado para si mesmo — senão ninguém jogaria a carta"
+      : `recusou o recado para si mesmo: ${JSON.stringify(proMim.body)}`,
+  );
+
+  /* A carta anterior saiu da mão ao ser usada — sem repor, este teste mediria
+     `PISTA_NAO_ESTA_NA_MAO` achando que media o alvo. */
+  await daCarta(euAv.user_id, "recado");
+  const foraDaMesa = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "recado",
+    p_arg: { alvo: 99 },
+  });
+  ok(
+    foraDaMesa.status >= 400 && JSON.stringify(foraDaMesa.body).includes("ALVO_NAO_ESTA_NA_MESA"),
+    foraDaMesa.status >= 400
+      ? "mas não para um assento que não existe"
+      : "mandou recado para o assento 99",
+  );
+
+  /* A ESCOLHA É DETERMINÍSTICA. Duas chamadas seguidas da política, sem nada
+     mudar no meio, têm de dar a mesma carta — senão o teste acima mediria
+     sorte, e um dia mediria sorte ruim. */
+  const pol1 = (
+    await db.query("select public.dossie_recado_para($1::uuid, $2::smallint) c", [mAv.id, outroAv.seat])
+  ).rows[0].c;
+  const pol2 = (
+    await db.query("select public.dossie_recado_para($1::uuid, $2::smallint) c", [mAv.id, outroAv.seat])
+  ).rows[0].c;
+  ok(
+    pol1 === pol2 && pol1 !== cartaDoRecado,
+    pol1 === pol2
+      ? `a política é determinística e não repete o que já contou (${pol1})`
+      : `duas chamadas deram cartas diferentes: ${pol1} e ${pol2}`,
+  );
+
+  /* ── INTERROGATÓRIO ─────────────────────────────────────────────────────
+     A única carta que abre uma FASE. O que se mede aqui, além de ela
+     funcionar, é a diferença que a separa da refutação: quando a resposta
+     chega, o turno VOLTA para quem perguntou, com as ações que ele tinha.
+     Sem isso a carta é "passar a vez com informação", e ninguém a joga. */
+
+  await poeSozinho(euAv.seat, lugares[0]);
+  await daCarta(euAv.user_id, "interrogatorio");
+
+  const naoSozinho = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "interrogatorio",
+    p_arg: { alvo: euAv.seat, tipo: "weapons" },
+  });
+  ok(
+    naoSozinho.status >= 400 &&
+      JSON.stringify(naoSozinho.body).includes("NAO_SE_INTERROGA_SOZINHO"),
+    naoSozinho.status >= 400
+      ? "não se interroga a si mesmo — seria gastar a carta para ler a própria mão"
+      : "interrogou a si mesmo",
+  );
+
+  const tipoInventado = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "interrogatorio",
+    p_arg: { alvo: outroAv.seat, tipo: "veiculos" },
+  });
+  ok(
+    tipoInventado.status >= 400 &&
+      JSON.stringify(tipoInventado.body).includes("TIPO_DESCONHECIDO"),
+    tipoInventado.status >= 400 ? "nem um tipo que não existe" : "um tipo inventado passou",
+  );
+
+  /* O tipo é escolhido a partir da mão do alvo, para o caminho medido ser o
+     que mostra a carta. O caminho do "não tenho nenhum" tem o seu próprio
+     teste logo abaixo, com o tipo escolhido ao contrário. */
+  const maoAtual = (
+    await db.query("select data -> 'hand' h from match_private_state where match_id = $1 and user_id = $2",
+      [mAv.id, outroAv.user_id],
+    )
+  ).rows[0].h;
+  const tipoDe = (c) =>
+    temaAv.suspects.some((s) => s.id === c)
+      ? "suspects"
+      : temaAv.weapons.some((w) => w.id === c)
+        ? "weapons"
+        : "rooms";
+  const tipoQueEleTem = tipoDe(maoAtual[0]);
+
+  const acoesAntes = (
+    await db.query("select (public_state ->> 'actionsLeft')::int a from matches where id = $1", [mAv.id])
+  ).rows[0].a;
+
+  const pergunta = await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+    p_match: mAv.id,
+    p_carta: "interrogatorio",
+    p_arg: { alvo: outroAv.seat, tipo: tipoQueEleTem },
+  });
+  const emEspera = (
+    await db.query("select public_state st, turn_deadline d from matches where id = $1", [mAv.id])
+  ).rows[0];
+  ok(
+    pergunta.status === 200 &&
+      emEspera.st.phase === "interroga" &&
+      emEspera.st.pending?.alvo === outroAv.seat,
+    pergunta.status === 200
+      ? `a pergunta abriu a fase (phase = ${emEspera.st.phase}, alvo = ${emEspera.st.pending?.alvo})`
+      : `a pergunta falhou: ${JSON.stringify(pergunta.body)}`,
+  );
+
+  /* A PERGUNTA É PÚBLICA — é o preço da carta. Quem interroga anuncia onde
+     está procurando, e a mesa ganha a resposta junto. */
+  const logPergunta = (
+    await db.query("select public_state -> 'log' l from matches where id = $1", [mAv.id])
+  ).rows[0].l.find((l) => l.carta === "interrogatorio");
+  ok(
+    logPergunta?.alvo === outroAv.seat && logPergunta?.tipo === tipoQueEleTem,
+    logPergunta
+      ? "e o registro conta a quem se perguntou e sobre o quê"
+      : "a pergunta não foi registrada",
+  );
+
+  /* ENQUANTO A FASE DURA, QUEM PERGUNTOU FICA TRAVADO — e sem nenhuma guarda
+     nova: mover exige `phase = 'turn'`, e a fase não é essa. É o motivo de o
+     interrogatório ser uma fase e não uma bandeira. */
+  const tentaAndar = await rpc(tokenDe(euAv.user_id), "dossie_move", {
+    p_match: mAv.id,
+    p_room: lugares[1],
+  });
+  ok(
+    tentaAndar.status >= 400,
+    tentaAndar.status >= 400
+      ? "e quem perguntou não anda enquanto espera — a fase antiga segura sozinha"
+      : "andou no meio do interrogatório",
+  );
+
+  /* Nem quem não foi perguntado responde. */
+  const terceiro = elencoAv.find((e) => e.seat !== euAv.seat && e.seat !== outroAv.seat);
+  if (terceiro) {
+    const intruso = await rpc(tokenDe(terceiro.user_id), "dossie_responde_interroga", {
+      p_match: mAv.id,
+      p_card: maoAtual[0],
+    });
+    ok(
+      intruso.status >= 400 && JSON.stringify(intruso.body).includes("NAO_PERGUNTARAM_A_VOCE"),
+      intruso.status >= 400
+        ? "e quem não foi perguntado não responde no lugar de ninguém"
+        : "um terceiro respondeu pelo alvo",
+    );
+  }
+
+  /* Mentir não é uma opção que a interface esconde: é uma chamada que o
+     servidor recusa. */
+  const foraDoTipo = (temaAv.suspects.concat(temaAv.weapons, temaAv.rooms))
+    .map((x) => x.id)
+    .find((c) => maoAtual.includes(c) && tipoDe(c) !== tipoQueEleTem);
+  if (foraDoTipo) {
+    const errada = await rpc(tokenDe(outroAv.user_id), "dossie_responde_interroga", {
+      p_match: mAv.id,
+      p_card: foraDoTipo,
+    });
+    ok(
+      errada.status >= 400 && JSON.stringify(errada.body).includes("CARTA_DE_OUTRO_TIPO"),
+      errada.status >= 400
+        ? "mostrar uma carta de outro tipo é recusado"
+        : "mostrou uma carta de outro tipo",
+    );
+  }
+
+  const cartaCerta = maoAtual.find((c) => tipoDe(c) === tipoQueEleTem);
+  const responde = await rpc(tokenDe(outroAv.user_id), "dossie_responde_interroga", {
+    p_match: mAv.id,
+    p_card: cartaCerta,
+  });
+  const depoisResposta = (
+    await db.query("select public_state st from matches where id = $1", [mAv.id])
+  ).rows[0].st;
+  ok(
+    responde.status === 200 && depoisResposta.phase === "turn",
+    responde.status === 200
+      ? "a resposta fecha a fase"
+      : `a resposta falhou: ${JSON.stringify(responde.body)}`,
+  );
+
+  /* O PARÁGRAFO QUE SEPARA ESTA CARTA DA REFUTAÇÃO. */
+  ok(
+    depoisResposta.turnSeat === euAv.seat && depoisResposta.actionsLeft === acoesAntes,
+    depoisResposta.turnSeat === euAv.seat
+      ? `e o turno VOLTA para quem perguntou, com as ${depoisResposta.actionsLeft} ações que ele tinha`
+      : `o turno passou para o assento ${depoisResposta.turnSeat} — a carta virou "passar a vez"`,
+  );
+
+  const vistas = (
+    await db.query("select data -> 'seen' s from match_private_state where match_id = $1 and user_id = $2",
+      [mAv.id, euAv.user_id],
+    )
+  ).rows[0].s;
+  ok(
+    vistas.some((v) => v.card === cartaCerta && v.from === outroAv.seat),
+    vistas.some((v) => v.card === cartaCerta)
+      ? "e a carta chegou privada, com a origem — o apagão não vale aqui, porque a mesa já viu a quem se perguntou"
+      : `a carta não chegou: ${JSON.stringify(vistas)}`,
+  );
+
+  const logResposta = (
+    await db.query("select public_state -> 'log' l from matches where id = $1", [mAv.id])
+  ).rows[0].l.find((l) => l.type === "interroga_ok");
+  ok(
+    logResposta && logResposta.card === undefined,
+    logResposta
+      ? "o registro diz que ele mostrou algo, e não diz o quê"
+      : "a resposta não foi registrada",
+  );
+
+  /* ── "NÃO TENHO NENHUM" ─────────────────────────────────────────────────
+     A declaração mais forte do jogo: seis cartas de uma vez. O tipo é
+     escolhido justamente por ele NÃO estar na mão do alvo. */
+
+  const tiposTodos = [
+    { id: "suspects", nome: "suspeito" },
+    { id: "weapons", nome: "objeto" },
+    { id: "rooms", nome: "lugar" },
+  ];
+  const tipoQueFalta = tiposTodos.find((t) => !maoAtual.some((c) => tipoDe(c) === t.id))?.id;
+  const nomeQueFalta = tiposTodos.find((t) => t.id === tipoQueFalta)?.nome;
+
+  if (tipoQueFalta) {
+    await poeSozinho(euAv.seat, lugares[0]);
+    await daCarta(euAv.user_id, "interrogatorio");
+    await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+      p_match: mAv.id,
+      p_carta: "interrogatorio",
+      p_arg: { alvo: outroAv.seat, tipo: tipoQueFalta },
+    });
+
+    const mentira = await rpc(tokenDe(outroAv.user_id), "dossie_passa_interroga", { p_match: mAv.id });
+    ok(
+      mentira.status === 200,
+      mentira.status === 200
+        ? `"não tenho nenhum ${nomeQueFalta}" foi aceito, porque é verdade`
+        : `recusou uma passada honesta: ${JSON.stringify(mentira.body)}`,
+    );
+
+    const cadernoMesa = (
+      await db.query("select public.dossie_deduz($1::uuid, $2::smallint) d", [mAv.id, euAv.seat])
+    ).rows[0].d;
+    const seisCartas = temaAv[tipoQueFalta].map((x) => x.id);
+    ok(
+      seisCartas.every((c) => (cadernoMesa.naoTem?.[String(outroAv.seat)] ?? []).includes(c)),
+      seisCartas.every((c) => (cadernoMesa.naoTem?.[String(outroAv.seat)] ?? []).includes(c))
+        ? `e o caderno risca as ${seisCartas.length} cartas do tipo na coluna dele de uma vez`
+        : `o caderno só aprendeu ${(cadernoMesa.naoTem?.[String(outroAv.seat)] ?? []).length} cartas`,
+    );
+
+    /* E QUEM TEM NÃO PASSA. O servidor confere a declaração; mentir não é uma
+       opção escondida pela interface. */
+    await poeSozinho(euAv.seat, lugares[0]);
+    await daCarta(euAv.user_id, "interrogatorio");
+    await rpc(tokenDe(euAv.user_id), "dossie_usar_pista", {
+      p_match: mAv.id,
+      p_carta: "interrogatorio",
+      p_arg: { alvo: outroAv.seat, tipo: tipoQueEleTem },
+    });
+    const mentiraDeVerdade = await rpc(tokenDe(outroAv.user_id), "dossie_passa_interroga", {
+      p_match: mAv.id,
+    });
+    ok(
+      mentiraDeVerdade.status >= 400 &&
+        JSON.stringify(mentiraDeVerdade.body).includes("YOU_MUST_SHOW"),
+      mentiraDeVerdade.status >= 400
+        ? "e quem tem a carta não consegue dizer que não tem"
+        : "escondeu uma carta que tinha",
+    );
+
+    /* A FAXINA DESTRAVA A FASE. Sem o ramo do interrogatório nela, o cálculo
+       da fila daria nulo e `dossie_advance` passaria por cima da pergunta —
+       queimando a carta de quem a jogou. */
+    await db.query("update matches set turn_deadline = now() - interval '1 minute' where id = $1", [mAv.id]);
+    /* A faxina só age em mesa com gente por perto (0071) — o teste diz que há
+       gente, que é a verdade que ele simula. */
+    await rpc(P[0].token, "touch_presence", { p_room: salaPista.id });
+    await varre("dossie_sweep");
+    const destravado = (
+      await db.query("select public_state st from matches where id = $1", [mAv.id])
+    ).rows[0].st;
+    ok(
+      destravado.phase !== "interroga",
+      destravado.phase !== "interroga"
+        ? `a faxina destrava a fase no relógio (phase = ${destravado.phase})`
+        : "a fase ficou pendurada depois do prazo",
+    );
+    const forcado = (destravado.log ?? []).find(
+      (l) => l.type === "interroga_ok" || l.type === "interroga_nada",
+    );
+    ok(
+      forcado != null,
+      forcado ? "e a resposta forçada foi registrada como resposta" : "a faxina pulou a pergunta",
+    );
+  }
 }
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });

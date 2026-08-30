@@ -241,6 +241,8 @@ const PERMITIDAS = [
   "dossie_pass_refute", "dossie_refute", "dossie_start", "dossie_suggest",
   "dossie_tocar",
   "dossie_deducoes",
+  "dossie_investigar", "dossie_usar_pista",
+  "dossie_responde_interroga", "dossie_passa_interroga",
   // Domínio
   "dominio_atacar", "dominio_avancar", "dominio_encerrar_turno",
   "dominio_reforcar", "dominio_remanejar", "dominio_start", "dominio_trocar",

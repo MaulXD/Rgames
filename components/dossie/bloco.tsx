@@ -15,6 +15,7 @@ import {
   type Pad,
   type Vista,
 } from "@/lib/dossie-bloco";
+import type { Aviso } from "@/lib/dossie-pistas";
 import * as sfx from "@/lib/sfx";
 
 const NIVEIS: { id: Nivel; nome: string; nota: string }[] = [
@@ -51,6 +52,7 @@ export function Bloco({
   nomes,
   meuAssento,
   pad,
+  avisos,
   onPad,
 }: {
   caso: Caso;
@@ -61,6 +63,9 @@ export function Bloco({
   nomes: Record<number, string>;
   meuAssento: number | null;
   pad: Pad;
+  /* O que as Cartas de Pista contaram. Ausente na mesa que jogou sem o Modo
+     Avançado — e uma mesa sem baralho não devia precisar saber que ele existe. */
+  avisos?: Aviso[];
   onPad: (p: Pad) => void;
 }) {
   const [aberto, setAberto] = useState(true);
@@ -70,8 +75,8 @@ export function Bloco({
   const meus: Marcas = pad.marks ?? {};
 
   const { fatos, conjuntos } = useMemo(
-    () => apura(caso, log, mao, vistas, jogadores, meuAssento, nivel),
-    [caso, log, mao, vistas, jogadores, meuAssento, nivel],
+    () => apura(caso, log, mao, vistas, jogadores, meuAssento, nivel, avisos),
+    [caso, log, mao, vistas, jogadores, meuAssento, nivel, avisos],
   );
 
   /** Grava com folga: anotar é rápido, e não vale uma ida ao servidor por clique. */

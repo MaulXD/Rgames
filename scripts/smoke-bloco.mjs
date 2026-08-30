@@ -249,7 +249,83 @@ for (const nivel of ["assistido", "dedutivo"]) {
   );
 }
 
-/* ── 7. O CICLO DA MARCA ──────────────────────────────────────────────────
+/* ── 7. O MODO AVANÇADO NO CADERNO DE GENTE ────────────────────────────────
+
+   O caderno da máquina aprende com as Cartas de Pista em `dossie_deduz`. Se o
+   de gente não aprender, quem joga com o bloco assistido fica ABAIXO da
+   máquina — riscando à mão o que ela risca sozinha — e o Modo Avançado vira
+   uma vantagem do adversário.
+
+   Estes quatro testes existem para as duas contas serem a mesma conta. */
+
+for (const nivel of ["assistido", "dedutivo"]) {
+  const comRecado = apura(
+    caso,
+    [],
+    [],
+    [],
+    JOGADORES,
+    0,
+    nivel,
+    [{ k: "recado", card: O[2] }],
+  );
+  ok(
+    comRecado.fatos[O[2]]?.[ENVELOPE] === "x",
+    `${nivel}: o recado anônimo risca a carta do envelope (${O[2]})`,
+  );
+}
+
+/* A ASSIMETRIA DA IMPRESSÃO DIGITAL, medida nos dois resultados.
+
+   O NÃO risca dois. O SIM risca os OUTROS QUATRO — e é essa metade que se
+   perde primeiro quando alguém "simplifica" a carta para um "é um dos dois,
+   anota aí". */
+const digitalNao = apura(caso, [], [], [], JOGADORES, 0, "assistido", [
+  { k: "impressao", a: S[1], b: S[2], sim: false },
+]);
+ok(
+  digitalNao.fatos[S[1]]?.[ENVELOPE] === "x" &&
+    digitalNao.fatos[S[2]]?.[ENVELOPE] === "x" &&
+    digitalNao.fatos[S[3]]?.[ENVELOPE] !== "x",
+  "um NÃO da impressão digital risca os dois nomeados, e só eles",
+);
+
+const digitalSim = apura(caso, [], [], [], JOGADORES, 0, "assistido", [
+  { k: "impressao", a: S[0], b: S[1], sim: true },
+]);
+const outrosQuatro = S.filter((c) => c !== S[0] && c !== S[1]);
+ok(
+  outrosQuatro.every((c) => digitalSim.fatos[c]?.[ENVELOPE] === "x") &&
+    digitalSim.fatos[S[0]]?.[ENVELOPE] !== "x" &&
+    digitalSim.fatos[S[1]]?.[ENVELOPE] !== "x",
+  `e um SIM risca os outros ${outrosQuatro.length}, sem tocar nos dois nomeados — ` +
+    "a resposta fraca é a que rende mais",
+);
+
+/* "NÃO TENHO NENHUM" É PÚBLICO, e vale por seis cartas de uma vez.
+
+   Vale SOZINHO, ao contrário do `pass`, que só significa alguma coisa colado
+   ao palpite anterior — por isso o log aqui não tem palpite nenhum, e ainda
+   assim tem de ensinar. */
+const semNenhum = apura(
+  caso,
+  [{ seq: 1, type: "interroga_nada", seat: 1, tipo: "weapons" }],
+  [],
+  [],
+  JOGADORES,
+  0,
+  "assistido",
+);
+ok(
+  O.every((c) => semNenhum.fatos[c]?.["1"] === "x"),
+  `o "não tenho nenhum objeto" risca as ${O.length} cartas do tipo na coluna dele`,
+);
+ok(
+  semNenhum.fatos[O[0]]?.["2"] !== "x",
+  "e não risca a coluna de mais ninguém — a frase é sobre uma pessoa só",
+);
+
+/* ── 8. O CICLO DA MARCA ──────────────────────────────────────────────────
 
    Tocar numa célula anda ✗ → ✓ → ? → vazio. É o gesto mais repetido do jogo, e
    ele precisa VOLTAR ao vazio: sem isso, uma marca errada não tem desfazer. */

@@ -108,6 +108,7 @@ console.log("\nTELAS — elas montam com o conteúdo que está publicado?\n");
 const { Abertura } = await import("@/components/dossie/abertura");
 const { Mapa } = await import("@/components/dossie/mapa");
 const { Bloco } = await import("@/components/dossie/bloco");
+const { Pistas } = await import("@/components/dossie/pistas");
 
 const casos = (
   await db.query(
@@ -168,6 +169,62 @@ for (const caso of casos) {
     pad: { marks: {}, assist: "dedutivo" },
     onPad: nada,
   }, [caso.suspects[0].name, caso.weapons[0].name]);
+
+  /* ── Modo Avançado ────────────────────────────────────────────────────
+     A mão traz AS SEIS cartas de uma vez. Numa partida de verdade ninguém
+     terá as seis, mas é exatamente por isso que o teste tem: cada uma desenha
+     um pedaço diferente da ficha, e a que ninguém vê é a que quebra calada.
+
+     E o marcador é a frase do ÁLIBI, que só aparece se a lista percorrer a mão
+     inteira — um `slice` acidental em cima dela passaria por qualquer
+     verificação de "montou". */
+  monta(`dossie/${caso.id} · pistas`, Pistas, {
+    caso,
+    mao: ["chave-mestra", "tempo-curto", "alibi", "impressao", "recado", "interrogatorio"],
+    avisos: [
+      { k: "recado", card: caso.weapons[1].id },
+      { k: "impressao", a: caso.suspects[0].id, b: caso.suspects[1].id, sim: true },
+      { k: "impressao", a: caso.suspects[2].id, b: caso.suspects[3].id, sim: false },
+    ],
+    minhaVez: true,
+    devoRefutar: false,
+    acoesRestantes: 2,
+    sozinhoAqui: true,
+    jogadores: peoes.map((p) => ({ seat: p.seat, nome: p.nome })),
+    meuAssento: 0,
+    lugares: caso.rooms.map((r) => ({ id: r.id, name: r.name })),
+    onInvestigar: nada,
+    onUsar: nada,
+  }, [
+    "Deixe de refutar uma vez",
+    /* E os dois avisos falam a MESMA língua: os dois dizem o que sai do
+       envelope. O "sim" é escrito ao contrário de propósito — é assim que ele
+       serve no caderno. */
+    `${caso.weapons[1].name} não está no envelope`,
+    "nenhum dos outros quatro",
+  ]);
+
+  /* A mão VAZIA é um estado que toda partida avançada tem no primeiro turno, e
+     é onde a tela precisa explicar como se compra uma carta. */
+  monta(`dossie/${caso.id} · pistas (mão vazia, longe de todos)`, Pistas, {
+    caso,
+    mao: [],
+    avisos: [],
+    minhaVez: true,
+    devoRefutar: false,
+    acoesRestantes: 2,
+    sozinhoAqui: false,
+    jogadores: peoes.map((p) => ({ seat: p.seat, nome: p.nome })),
+    meuAssento: 0,
+    lugares: caso.rooms.map((r) => ({ id: r.id, name: r.name })),
+    onInvestigar: nada,
+    onUsar: nada,
+  }, [
+    "Sua mão de pistas está vazia",
+    /* O botão apagado DIZ POR QUÊ. Um botão apagado sem motivo é a interface
+       dizendo "não" e virando as costas. */
+    "onde mais ninguém está",
+  ]);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

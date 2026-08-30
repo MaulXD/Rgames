@@ -1,4 +1,5 @@
 import { baralho, type Caso } from "@/lib/dossie";
+import { avisoEnsina, cartasDoTipo, type Aviso } from "@/lib/dossie-pistas";
 
 /**
  * O bloco de dedução — a lógica.
@@ -52,7 +53,15 @@ export type LinhaLog = {
     | "luz"
     | "vento"
     | "tempestade"
-    | "registro";
+    | "registro"
+    /* o Modo Avançado. `investiga` e `pista` dizem que ALGO aconteceu sem dizer
+       o quê — a carta comprada é de quem comprou, e a resposta da impressão
+       digital é de quem a jogou. O que o log conta é o que a mesa viu. */
+    | "investiga"
+    | "pista"
+    | "alibi"
+    | "interroga_ok"
+    | "interroga_nada";
   seat?: number | null;
   room?: string;
   /** os dois lugares que a tempestade fecha, ou vai fechar */
@@ -64,6 +73,15 @@ export type LinhaLog = {
   guess?: string[];
   right?: boolean;
   auto?: boolean;
+  /** qual Carta de Pista foi jogada */
+  carta?: string;
+  /** a quem ela foi dirigida — ausente no recado, que é anônimo */
+  alvo?: number | null;
+  /** o tipo pedido no interrogatório: 'suspects' | 'weapons' | 'rooms' */
+  tipo?: string;
+  /** os dois nomeados na impressão digital. A RESPOSTA nunca vem. */
+  a?: string;
+  b?: string;
 };
 
 export type Vista = { card: string; from: number | null; seq: number };
@@ -97,6 +115,10 @@ export function apura(
   jogadores: Jogador[],
   meuAssento: number | null,
   nivel: Nivel,
+  /* O que as Cartas de Pista contaram, do estado privado. Vem por último e com
+     padrão vazio porque a mesa que jogou sem o Modo Avançado não tem nenhum —
+     e porque uma mesa sem baralho não devia precisar saber que ele existe. */
+  avisos: Aviso[] = [],
 ): { fatos: Marcas; conjuntos: Conjunto[] } {
   const fatos: Marcas = {};
   const conjuntos: Conjunto[] = [];
@@ -118,6 +140,16 @@ export function apura(
     }
   }
 
+  /* 2b. O QUE AS CARTAS DE PISTA CONTARAM.
+
+     Aviso não é dedução: é um fato que o servidor entregou pronto, lendo o
+     envelope. Por isso vale já no nível assistido, junto com a própria mão e o
+     Registro da Estação — e por isso o caderno de gente não pode ficar mais
+     fraco que o da máquina, que aprende as mesmas coisas em `dossie_deduz`. */
+  for (const a of avisos) {
+    for (const c of avisoEnsina(caso, a)) poe(fatos, c, ENVELOPE, "x");
+  }
+
   // 3. o log, do mais antigo para o mais novo
   const ordenado = [...log].sort((a, b) => a.seq - b.seq);
   let palpite: string[] | null = null;
@@ -130,6 +162,13 @@ export function apura(
        Por isso vale até no nível assistido, que não encadeia nada. */
     if (l.type === "registro") {
       if (l.card) poe(fatos, l.card, ENVELOPE, "x");
+      continue;
+    }
+    /* "NÃO TENHO NENHUM" vale por seis cartas de uma vez, e vale SOZINHO —
+       ao contrário do `pass`, que só significa alguma coisa colado ao palpite
+       anterior. Por isso ele vem antes da guarda do `palpite` lá embaixo. */
+    if (l.type === "interroga_nada" && l.seat !== null && l.seat !== undefined) {
+      for (const c of cartasDoTipo(caso, l.tipo)) poe(fatos, c, String(l.seat), "x");
       continue;
     }
     if (l.type === "suggest") {

@@ -452,6 +452,37 @@ Cada caso reescreve os nomes e a arte, mantendo os efeitos: na Aurora, "Interrog
 
 Só entra em "Regras da casa → Modo Avançado".
 
+> **Feito** — migrações 0103 a 0106. O baralho é DERIVADO da semente da partida e não guardado
+> em lugar nenhum: derivar duas vezes dá o mesmo, e não há linha para vazar. `pistas` fica nulo
+> quando a mesa jogou sem o modo, e nulo não é zero tirado — `dossie_investigar` recusa com
+> `SEM_PISTAS`, então uma chamada solta não injeta carta numa mesa que escolheu jogar sem elas.
+>
+> **O Modo Avançado é DESLIGADO por padrão, e a reviravolta é ligada.** Parece incoerente e não
+> é: a reviravolta é a mecânica que o *caso* entrega, e sem ela a Boate Aurora é o Solar com
+> outra roupa. As Cartas de Pista são uma sétima coisa para aprender numa mesa que já tem seis
+> suspeitos, nove lugares, um caderno de dedução e uma regra própria.
+>
+> **Cinco das seis resolvem no servidor; o Interrogatório abre uma fase.** E o que separa essa
+> fase da refutação é o que acontece depois: a refutação ENCERRA o turno de quem palpitou, o
+> interrogatório o DEVOLVE. Sem isso a carta seria "passar a vez com informação", e ninguém a
+> jogaria no começo do turno — que é justamente quando ela serve.
+>
+> **A impressão digital vale a pena nos dois resultados.** O NÃO risca os dois nomeados; o SIM
+> risca os outros quatro. Uma carta que só serve quando dá sorte é uma carta que ninguém joga, e
+> aqui a decisão é *quais dois nomear*, não *será que dá certo*.
+>
+> **O preço de toda carta é exposição.** A impressão digital anuncia quais dois nomes foram
+> comparados e nunca a resposta; o interrogatório anuncia a quem se perguntou e sobre o quê; o
+> recado anuncia que saiu e nunca para quem. É o que o Dossiê cobra por tudo.
+>
+> **O caderno de gente aprende as mesmas coisas que o da máquina.** `apura` no cliente e
+> `dossie_deduz` no servidor leem os mesmos avisos e o mesmo `interroga_nada` — sem isso, quem
+> joga com o bloco assistido ficaria abaixo da máquina, riscando à mão o que ela risca sozinha.
+>
+> **Falta:** os nomes por caso (hoje as seis cartas têm o mesmo nome em todos os temas), e a
+> máquina ainda não INVESTIGA — ela responde a interrogatório, mas não compra nem joga cartas.
+> Numa mesa mista isso é uma vantagem para quem é gente.
+
 ### 6.9 Modo Assassino [v1.1]
 
 Variante um-contra-todos, e a que a mesa mais vai pedir depois de conhecer.

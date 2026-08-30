@@ -65,6 +65,8 @@ type LinhaLog = {
   com?: number;
   /** até que rodada a trégua vale */
   ate?: number;
+  /** as rolagens de um ataque, uma por assalto (migração 0113) */
+  rodadas?: Assalto[];
 };
 
 export type DominioMatch = {
@@ -218,6 +220,20 @@ export function DominioGame({
   // durante a rolagem o mapa mostra o estado ANTERIOR: se ele já mudasse, o
   // dado estaria contando uma história cujo fim já está na tela
   const visto = briga ? briga.congelado : st;
+  /* E QUEM NÃO ATACOU TAMBÉM PRECISA DESSE "ANTERIOR".
+
+     Quem ataca congela o estado ANTES de chamar o servidor. Quem assiste
+     recebe o estado já mudado junto com a linha do registro, então o congelado
+     dele é o último estado que esteve na tela — guardado durante a
+     renderização, do mesmo jeito que `visto_ex` guarda os exércitos.
+
+     É uma aproximação e ela é honesta: pode haver mais de uma mudança entre
+     dois quadros, e aí o mapa de fundo já mostra parte do resultado. O que
+     importa é o dado, e o dado é exato. */
+  const anterior = useRef<DominioState>(st);
+  useEffect(() => {
+    if (!briga) anterior.current = st;
+  }, [st, briga]);
   const destino = origem ? destinoBruto : null;
 
   /**
@@ -364,13 +380,41 @@ export function DominioGame({
     const chave = JSON.stringify(nova);
     if (chave === ultimoLog.current) return;
     ultimoLog.current = chave;
+    /* A ROLAGEM DE QUEM ASSISTE.
+
+       Quem atacou já está animando com o que a chamada devolveu; para todo o
+       resto da mesa, esta linha é a única forma de ver o dado cair. Sem o
+       guarda de assento, quem atacou veria a mesma briga duas vezes.
+
+       DUAS LINHAS PODEM TRAZÊ-LA, e é de propósito: o registro é capado em 80
+       linhas, então um ataque custa UMA. Quando conquista, as rolagens viajam
+       dentro da própria linha da conquista; quando não, vêm numa linha
+       `assalto` — que antes não existia, e é o ataque que sangra sem tomar
+       nada.
+
+       Fica antes dos sons porque ela RETORNA: enquanto a rolagem toca, quem
+       faz som é a rolagem, e é o mesmo motivo do `if (briga) return` acima. */
+    if (
+      (nova.k === "assalto" || nova.k === "conquista") &&
+      nova.rodadas?.length &&
+      nova.seat !== meuAssento
+    ) {
+      setBriga({
+        assaltos: nova.rodadas,
+        de: nova.de ?? "",
+        para: nova.para ?? "",
+        congelado: anterior.current,
+      });
+      return;
+    }
+
     if (nova.k === "conquista") sfx.conquista();
     else if (nova.k === "eliminado") sfx.eliminado();
     else if (nova.k === "vez") sfx.vez();
     else if (nova.k === "troca") sfx.troca();
     else if (nova.k === "reforco") sfx.planta();
     else if (nova.k === "vitoria") sfx.venceu();
-  }, [st.log, briga]);
+  }, [st.log, briga, meuAssento]);
 
   /* ── territórios que mudaram de exército: piscam ──────────────────────
      O cálculo do que mudou é feito DURANTE a renderização, comparando com o
@@ -1306,6 +1350,26 @@ function Registro({
         return `${quem(l.seat)} reforçou ${onde(l.ter)} com ${l.n}`;
       case "reforco-automatico":
         return `o tempo acabou: o reforço de ${quem(l.seat)} caiu em ${onde(l.ter)}`;
+      case "assalto": {
+        /* A LINHA QUE CONTA O ATAQUE QUE NÃO DEU EM NADA.
+
+           A conquista sempre teve linha; o ataque que sangra e não toma era
+           invisível — e ele é metade do jogo, porque é o que explica por que
+           alguém ficou fraco. As perdas somadas dizem o que a rolagem custou
+           aos dois lados.
+
+           Só o ataque SEM conquista chega aqui: quando há conquista, as
+           rolagens viajam dentro da linha dela, para um ataque custar uma linha
+           só do teto de 80. */
+        const rodadas = l.rodadas ?? [];
+        const perdeuAtac = rodadas.reduce((a, r) => a + r.perdeAtac, 0);
+        const perdeuDefe = rodadas.reduce((a, r) => a + r.perdeDefe, 0);
+        return (
+          `${quem(l.seat)} atacou ${onde(l.para)} de ${onde(l.de)}` +
+          ` — ${rodadas.length} assalto${rodadas.length === 1 ? "" : "s"},` +
+          ` ${perdeuAtac} perdido${perdeuAtac === 1 ? "" : "s"} contra ${perdeuDefe}`
+        );
+      }
       case "conquista":
         return `${quem(l.seat)} tomou ${onde(l.para)} de ${quem(l.vitima)}`;
       case "avanco":

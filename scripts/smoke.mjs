@@ -13,6 +13,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
+import { tenta } from "./rede.mjs";
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), "..");
 config({ path: join(raiz, ".env.local"), quiet: true });
@@ -28,7 +29,7 @@ const ok = (c, m) => {
 };
 
 async function admin(path, opts = {}) {
-  const r = await fetch(`${URL_}/auth/v1${path}`, {
+  const r = await tenta(`${URL_}/auth/v1${path}`, {
     ...opts,
     headers: { apikey: SVC, Authorization: `Bearer ${SVC}`, "Content-Type": "application/json" },
   });
@@ -40,7 +41,7 @@ async function makeUser(email) {
     method: "POST",
     body: JSON.stringify({ email, password: "SenhaDeTeste!2026", email_confirm: true }),
   });
-  const r = await fetch(`${URL_}/auth/v1/token?grant_type=password`, {
+  const r = await tenta(`${URL_}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: { apikey: ANON, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password: "SenhaDeTeste!2026" }),
@@ -50,7 +51,7 @@ async function makeUser(email) {
 }
 
 async function rpc(token, fn, args) {
-  const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, {
+  const r = await tenta(`${URL_}/rest/v1/rpc/${fn}`, {
     method: "POST",
     headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(args ?? {}),
@@ -59,7 +60,7 @@ async function rpc(token, fn, args) {
 }
 
 async function get(token, path) {
-  const r = await fetch(`${URL_}/rest/v1/${path}`, {
+  const r = await tenta(`${URL_}/rest/v1/${path}`, {
     headers: { apikey: ANON, Authorization: `Bearer ${token}` },
   });
   return { status: r.status, body: await r.json().catch(() => null) };
@@ -187,7 +188,7 @@ const notMember = await rpc(C.token, "set_ready", { p_room: room.id, p_ready: tr
 ok(notMember.status >= 400 && /NOT_A_MEMBER/.test(JSON.stringify(notMember.body)), "quem nao e membro nao marca pronto");
 
 // escrita direta e bloqueada
-const direct = await fetch(`${URL_}/rest/v1/room_members?room_id=eq.${room.id}&user_id=eq.${B.id}`, {
+const direct = await tenta(`${URL_}/rest/v1/room_members?room_id=eq.${room.id}&user_id=eq.${B.id}`, {
   method: "PATCH",
   headers: { apikey: ANON, Authorization: `Bearer ${B.token}`, "Content-Type": "application/json", Prefer: "return=representation" },
   body: JSON.stringify({ is_ready: true, seat: 0 }),
@@ -205,7 +206,7 @@ ok(roleNow.body?.[0]?.role === "host", "papel do novo anfitriao atualizado");
 
 // ultimo sai -> sala apaga
 ok((await rpc(B.token, "leave_room", { p_room: room.id })).status < 300, "ultimo membro sai");
-const gone = await fetch(`${URL_}/rest/v1/rooms?select=id&id=eq.${room.id}`, {
+const gone = await tenta(`${URL_}/rest/v1/rooms?select=id&id=eq.${room.id}`, {
   headers: { apikey: SVC, Authorization: `Bearer ${SVC}` },
 });
 ok((await gone.json()).length === 0, "sala vazia foi apagada");

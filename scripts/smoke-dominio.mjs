@@ -14,6 +14,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
+import { tenta } from "./rede.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 config({ path: join(root, ".env.local"), quiet: true });
@@ -275,7 +276,7 @@ ok(con[0].sem_ponte === false, "remanejar sem ponte própria é recusado");
 /* ── 7. começar a partida ────────────────────────────────────────────────── */
 
 async function admin(path, opts = {}) {
-  const r = await fetch(`${URL_}/auth/v1${path}`, {
+  const r = await tenta(`${URL_}/auth/v1${path}`, {
     ...opts,
     headers: { apikey: SVC, Authorization: `Bearer ${SVC}`, "Content-Type": "application/json" },
   });
@@ -288,7 +289,7 @@ async function player(email) {
     body: JSON.stringify({ email, password: "SenhaDeTeste!2026", email_confirm: true }),
   });
   const t = await (
-    await fetch(`${URL_}/auth/v1/token?grant_type=password`, {
+    await tenta(`${URL_}/auth/v1/token?grant_type=password`, {
       method: "POST",
       headers: { apikey: ANON, "Content-Type": "application/json" },
       body: JSON.stringify({ email, password: "SenhaDeTeste!2026" }),
@@ -298,7 +299,7 @@ async function player(email) {
 }
 
 async function rpc(token, fn, args) {
-  const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, {
+  const r = await tenta(`${URL_}/rest/v1/rpc/${fn}`, {
     method: "POST",
     headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(args ?? {}),
@@ -307,7 +308,7 @@ async function rpc(token, fn, args) {
 }
 
 async function get(token, path) {
-  const r = await fetch(`${URL_}/rest/v1/${path}`, {
+  const r = await tenta(`${URL_}/rest/v1/${path}`, {
     headers: { apikey: ANON, Authorization: `Bearer ${token}` },
   });
   return { status: r.status, body: await r.json().catch(() => null) };
@@ -486,6 +487,10 @@ if (partida?.public_state) {
 
   const antesA = est.exercitos[de];
   const antesD = est.exercitos[para];
+  /* O ponto do registro ANTES deste ataque: o que vier com `seq` maior é
+     desta briga, e só dela. Contar o log inteiro pegaria os ataques
+     anteriores da suíte. */
+  const seqAntes = Number(est.seq ?? 0);
   const briga = await rpc(jogador.token, "dominio_atacar", {
     p_match: partida.id,
     p_de: de,
@@ -519,6 +524,61 @@ if (partida?.public_state) {
   ok(
     Object.keys(est.donos).length === 42 && Object.keys(est.exercitos).length === 42,
     "o mapa continua com 42 territórios e 42 guarnições",
+  );
+
+  /* ── O DADO CAI PARA A MESA INTEIRA ────────────────────────────────────────
+
+     O array de assaltos era DEVOLVIDO a quem atacou e morria ali: os outros
+     cinco viam um território mudar de cor e nunca viam o dado. No WAR, ver o
+     dado cair é a única coisa que a mesa faz junta — e quem se reconectasse
+     perdia a rolagem inteira, inclusive quem atacou, porque a resposta de uma
+     chamada não se repete.
+
+     Agora o assalto vai para o registro, que é público. O teste compara as
+     duas fontes rolagem por rolagem: se elas divergirem, metade da mesa está
+     vendo uma briga diferente da que aconteceu. */
+  /* UMA linha por ataque, nunca duas: quando conquista, as rolagens viajam
+     dentro da linha da conquista. O registro é capado em 80 linhas, e uma linha
+     a mais por ataque cortava pela metade a história que cabe ali — o primeiro
+     desenho fazia isso, e o teste das conquistas do registro, mais abaixo,
+     parou de achar conquista nenhuma. */
+  const linhaAssalto = (est.log ?? []).find(
+    (l) => (l.k === "assalto" || l.k === "conquista") && l.rodadas,
+  );
+  ok(
+    linhaAssalto != null,
+    linhaAssalto
+      ? `o ataque entrou no registro público (${linhaAssalto.k}) com ${linhaAssalto.rodadas?.length ?? 0} rolagem(ns)`
+      : "o ataque não deixou linha no registro — só quem atacou viu o dado",
+  );
+  const linhasDesteAtaque = (est.log ?? []).filter(
+    (l) => Number(l.seq) > seqAntes && (l.k === "assalto" || l.k === "conquista"),
+  );
+  ok(
+    linhasDesteAtaque.length === 1,
+    linhasDesteAtaque.length === 1
+      ? `e custou UMA linha do teto de 80, não duas (${linhasDesteAtaque[0].k})`
+      : `custou ${linhasDesteAtaque.length} linhas: ${linhasDesteAtaque.map((l) => l.k).join(", ")}`,
+  );
+  ok(
+    JSON.stringify(linhaAssalto?.rodadas ?? null) === JSON.stringify(rodadas),
+    JSON.stringify(linhaAssalto?.rodadas ?? null) === JSON.stringify(rodadas)
+      ? "e é rolagem por rolagem a MESMA que a chamada devolveu — a mesa vê a briga que aconteceu"
+      : "o registro conta uma briga diferente da que a chamada devolveu",
+  );
+  ok(
+    linhaAssalto?.seat === est.turnSeat && linhaAssalto?.de === de && linhaAssalto?.para === para,
+    "e diz quem atacou, de onde e para onde",
+  );
+
+  /* E O ATAQUE QUE NÃO CONQUISTA DEIXA DE SER INVISÍVEL. A conquista sempre
+     teve linha; sangrar sem tomar nada não tinha — e é o que explica por que
+     alguém ficou fraco. */
+  const somaAtac = (linhaAssalto?.rodadas ?? []).reduce((n, a) => n + a.perdeAtac, 0);
+  const somaDefe = (linhaAssalto?.rodadas ?? []).reduce((n, a) => n + a.perdeDefe, 0);
+  ok(
+    somaAtac === perdidoA && somaDefe === perdidoD,
+    `as baixas do registro batem com as da chamada (${somaAtac} × ${somaDefe})`,
   );
 
   /* avanço */

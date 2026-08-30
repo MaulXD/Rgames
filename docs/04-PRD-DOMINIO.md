@@ -501,12 +501,30 @@ som de papel rasgando quando é quebrada.
       território vazio, que é a mesma regra do outro lado
 - [x] "Até conquistar, parando em N" para exatamente em N — o avanço tem teto de três no total,
       e o servidor devolve a lista de assaltos para a tela animar
-- [ ] Cada assalto individual está no `match_events` e é auditável no log — **a tabela
-      `match_events` nunca foi construída.** O registro vive em `public_state.log`, e a decisão
-      tem razão: uma tabela de eventos separada precisa de RLS própria, de faxina própria e de
-      uma política de retenção, e o log no estado já é lido pela tela e pelo bloco de dedução. O
-      que se PERDE é auditoria depois que a partida sai do banco — e é o que trava o critério do
-      placar recalculado, logo abaixo
+- [x] Cada assalto individual está no registro e é auditável — **em `public_state.log`, e não
+      numa tabela `match_events`, que nunca foi construída.** A decisão tem razão: uma tabela de
+      eventos separada precisa de RLS própria, de faxina própria e de uma política de retenção, e
+      o log no estado já é lido pela tela.
+
+  > **E até a migração 0113 o assalto NÃO estava lá.** `dominio_atacar_como` montava o array com
+  > cada rolagem — os dados dos dois lados, as baixas, como ficaram os territórios — e o DEVOLVIA
+  > a quem atacou. Morria ali.
+  >
+  > O efeito não era de auditoria, era de mesa: **só o atacante via o dado cair.** Para os outros
+  > cinco, um território mudava de cor e pronto — o mapa contava o resultado sem nunca contar a
+  > história, que é a única coisa que a mesa de WAR faz junta. E quem se reconectasse no meio
+  > perdia a rolagem inteira, inclusive quem atacou, porque a resposta de uma chamada não se
+  > repete.
+  >
+  > O cliente já sabia encenar (`components/dominio/dados.tsx` existe desde o começo); o que
+  > faltava era o dado chegar. Agora o ataque deixa uma linha `assalto` no registro público, e
+  > quem não atacou anima a partir dela.
+  >
+  > **De quebra, o ataque que não conquista deixou de ser invisível.** A conquista sempre teve
+  > linha; sangrar sem tomar nada não tinha — e é o que explica por que alguém ficou fraco.
+  >
+  > O que continua se perdendo é auditoria depois que a partida sai do banco, e depois das 80
+  > linhas do teto do registro. É o que trava o critério do placar recalculado, logo abaixo
 - [x] Nenhum cliente consegue influenciar um resultado de dado — a semente é do servidor e a
       coluna `seed` de `matches` não tem grant de SELECT para papel de cliente nenhum. O dado é
       determinístico na semente e no contador, e as faces são uniformes em 60.000 rolagens

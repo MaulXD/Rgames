@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import { config } from "dotenv";
 import pg from "pg";
+import { tenta } from "./rede.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 config({ path: join(root, ".env.local"), quiet: true });
@@ -406,7 +407,7 @@ ok(r0.rows[0].v.devedores.includes(1), "mas ele entra na lista de devedores");
    ══════════════════════════════════════════════════════════════════════════ */
 
 async function admin(path, opts = {}) {
-  const r = await fetch(`${URL_}/auth/v1${path}`, {
+  const r = await tenta(`${URL_}/auth/v1${path}`, {
     ...opts,
     headers: { apikey: SVC, Authorization: `Bearer ${SVC}`, "Content-Type": "application/json" },
   });
@@ -419,7 +420,7 @@ async function player(email) {
     body: JSON.stringify({ email, password: "SenhaDeTeste!2026", email_confirm: true }),
   });
   const t = await (
-    await fetch(`${URL_}/auth/v1/token?grant_type=password`, {
+    await tenta(`${URL_}/auth/v1/token?grant_type=password`, {
       method: "POST",
       headers: { apikey: ANON, "Content-Type": "application/json" },
       body: JSON.stringify({ email, password: "SenhaDeTeste!2026" }),
@@ -429,7 +430,7 @@ async function player(email) {
 }
 
 async function rpc(token, fn, args) {
-  const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, {
+  const r = await tenta(`${URL_}/rest/v1/rpc/${fn}`, {
     method: "POST",
     headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify(args ?? {}),

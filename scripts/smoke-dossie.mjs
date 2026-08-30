@@ -12,6 +12,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { config } from "dotenv";
 import pg from "pg";
+import { tenta } from "./rede.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 config({ path: join(root, ".env.local"), quiet: true });
@@ -111,30 +112,6 @@ async function varre(fn) {
 }
 
 
-/**
- * `fetch` com UMA segunda chance, e só para falha de REDE.
- *
- * Esta suíte faz mais de mil chamadas — só a partida solo são quatrocentas — e
- * roda por sete minutos contra um servidor do outro lado do país. Um
- * `UND_ERR_CONNECT_TIMEOUT` em qualquer uma delas derrubava a suíte inteira com
- * um `TypeError: fetch failed`, sem dizer qual teste estava rodando. Aconteceu.
- *
- * A repetição é só para a conexão que não se estabeleceu. Código de status é
- * RESPOSTA — 403 é o servidor dizendo não, e repetir um não é transformar um
- * teste de autorização num teste de paciência.
- *
- * É a mesma forma que o `pg.Pool` daqui já usa para a conexão direta, pelo
- * mesmo motivo, e este era o outro caminho que faltava.
- */
-async function tenta(url, opts) {
-  try {
-    return await fetch(url, opts);
-  } catch (e) {
-    if (!/UND_ERR|ECONNRESET|ETIMEDOUT|fetch failed/i.test(String(e?.message ?? e))) throw e;
-    await new Promise((r) => setTimeout(r, 800));
-    return await fetch(url, opts);
-  }
-}
 
 async function admin(path, opts = {}) {
   const r = await tenta(`${URL_}/auth/v1${path}`, {

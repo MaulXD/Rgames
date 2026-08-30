@@ -626,11 +626,18 @@ console.log("\n  ── o cérebro da máquina ──");
  * A cada passo, o `dedu` de cada máquina é conferido contra o envelope de
  * verdade (que o teste conhece pela conexão direta, e a máquina não).
  */
-async function dossieSolo({ token, niveis, tetoPassos }) {
+async function dossieSolo({ token, niveis, tetoPassos, avancado = false }) {
   const salaS = (await rpc(token, "create_room", { p_game: "dossie" })).body;
   for (const n of niveis) {
     const r = await rpc(token, "adicionar_bot", { p_room: salaS.id, p_nivel: n });
     if (r.status !== 200) return { erro: `adicionar_bot(${n}): ${JSON.stringify(r.body)}` };
+  }
+  if (avancado) {
+    const r = await rpc(token, "set_room_settings", {
+      p_room: salaS.id,
+      p_settings: { avancado: true },
+    });
+    if (r.status !== 200) return { erro: `set_room_settings: ${JSON.stringify(r.body)}` };
   }
   const ini = await rpc(token, "dossie_start", { p_room: salaS.id });
   if (ini.status !== 200) return { erro: `dossie_start: ${JSON.stringify(ini.body)}` };
@@ -686,12 +693,11 @@ async function dossieSolo({ token, niveis, tetoPassos }) {
         );
         return false;
       }
-      // e o estado privado dela não pode conter o envelope de nenhuma forma
-      if (priv && JSON.stringify(priv).includes(idP.solution.room) && !fora.length) {
-        // a sala pode aparecer legitimamente em `mostrei`/`hand`? não: se está no
-        // envelope, ninguém tem a carta. Mas pode aparecer em posições do mapa,
-        // que é outra coisa — por isso a checagem forte é a de `fora` acima.
-      }
+      /* Varrer o estado privado inteiro atrás dos ids do envelope daria falso
+         positivo: eles aparecem legitimamente em `positions` do mapa e nos dois
+         nomes da impressão digital, que é a carta cujo desenho é justamente
+         nomear o culpado sem saber que ele é o culpado. A checagem que vale é a
+         de `fora` acima — a lista do que ela RISCOU. */
       if (priv?.solution !== undefined) {
         problemas.push(`${b.display_name} tem 'solution' no estado privado`);
         return false;
@@ -740,6 +746,30 @@ async function dossieSolo({ token, niveis, tetoPassos }) {
         `ninguém tem o que fazer na fase ${st.phase} (vez do assento ${st.turnSeat})`,
       );
       break;
+    }
+
+    /* INTERROGARAM O HUMANO. A mesa inteira para até ele responder, e o humano
+       passivo desta suíte responde a primeira carta do tipo que tiver — ou diz
+       que não tem nenhuma. Sem este ramo, uma partida avançada trava aqui e o
+       teto de passos vira o resultado. */
+    if (st.phase === "interroga" && st.pending?.kind === "interroga") {
+      if (Number(st.pending.alvo) !== meu) {
+        problemas.push(`interrogatório parado no assento ${st.pending.alvo}, que não é meu`);
+        break;
+      }
+      const priv = (
+        await db.query(
+          "select data from match_private_state where match_id = $1 and user_id = $2",
+          [idP.id, elenco.find((e) => !e.is_bot).user_id],
+        )
+      ).rows[0].data;
+      const doTipo = (tema[st.pending.tipo] ?? []).map((x) => x.id);
+      const tem = (priv.hand ?? []).find((c) => doTipo.includes(c));
+      if (tem) await rpc(token, "dossie_responde_interroga", { p_match: idP.id, p_card: tem });
+      else await rpc(token, "dossie_passa_interroga", { p_match: idP.id });
+      semNada = 0;
+      n++;
+      continue;
     }
 
     // é a vez do humano passivo, ou ele tem de refutar
@@ -2824,6 +2854,79 @@ if (iniAv.status === 200) {
       forcado ? "e a resposta forçada foi registrada como resposta" : "a faxina pulou a pergunta",
     );
   }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UMA PARTIDA SOLO COM O MODO AVANÇADO LIGADO
+
+   Até 0107, a máquina só sabia RESPONDER a interrogatório: nunca investigava e
+   nunca jogava carta. Numa mesa mista isso era vantagem de quem é gente, e numa
+   partida solo era o modo inteiro funcionando de um lado só da mesa.
+
+   O que se mede aqui não é "ela jogou uma carta": é que ela COMPRA, que ela
+   GASTA o que compra, e que nada disso a fez riscar carta do envelope. Uma
+   máquina que joga cartas e deduz errado é pior que uma que não joga.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+console.log("\nDOSSIÊ: a máquina no Modo Avançado\n");
+
+const soloAv = await dossieSolo({
+  token: P[0].token,
+  niveis: ["dificil", "medio"],
+  avancado: true,
+  tetoPassos: 260,
+});
+ok(!soloAv.erro, `a partida avançada solo montou${soloAv.erro ? ": " + soloAv.erro : ""}`);
+
+if (!soloAv.erro) {
+  ok(
+    soloAv.problemas.length === 0,
+    soloAv.problemas.length === 0
+      ? `${soloAv.n} passos com o baralho na mesa, e nenhuma máquina riscou carta do envelope`
+      : `TRAPAÇA OU DEDUÇÃO ERRADA: ${soloAv.problemas[0]}`,
+  );
+
+  const tiposAv = new Set(soloAv.passos.map((x) => x.split(/[:(]/)[0]));
+  ok(
+    tiposAv.has("investiga"),
+    tiposAv.has("investiga")
+      ? "a máquina INVESTIGA — ela compra carta em vez de só andar por cima do baralho"
+      : `ela nunca investigou (tipos: ${[...tiposAv].join(", ")})`,
+  );
+
+  /* E GASTA O QUE COMPRA. Uma máquina que enche a mão e nunca joga é pior que
+     uma que não compra: ela gasta ações para não fazer nada. */
+  const jogadas = soloAv.passos.filter((x) => x.startsWith("pista(") || x.startsWith("refuta:alibi"));
+  ok(
+    jogadas.length > 0,
+    jogadas.length > 0
+      ? `e joga o que compra: ${jogadas.length} carta(s) — ${[...new Set(jogadas.map((x) => x.split(") ")[1] ?? x))].slice(0, 4).join(" · ")}`
+      : "ela comprou e nunca jogou nada — a mão vira peso morto",
+  );
+
+  /* O BARALHO ANDOU, e o contador público é a prova de que as compras foram
+     mesmo pelo caminho do servidor. */
+  ok(
+    Number(soloAv.st.pistas?.tirou ?? 0) > 0,
+    `o baralho andou até ${soloAv.st.pistas?.tirou ?? 0} de 24`,
+  );
+  console.log(`         passos com carta: ${jogadas.slice(0, 6).join(" · ") || "nenhum"}`);
+
+  /* E A PARTIDA NÃO TRAVOU. O interrogatório abre uma fase, e uma fase que não
+     fecha é uma mesa parada — a diferença entre uma carta e um travamento é
+     exatamente esta linha. */
+  ok(
+    soloAv.acabou || soloAv.n >= 200,
+    soloAv.acabou
+      ? `a partida acabou (vencedor ${soloAv.st.winner ?? "nenhum"})`
+      : `a partida rodou ${soloAv.n} passos sem travar numa fase`,
+  );
+  ok(
+    soloAv.st.phase !== "interroga",
+    soloAv.st.phase !== "interroga"
+      ? "e não terminou pendurada num interrogatório"
+      : `parou na fase interroga esperando o assento ${soloAv.st.pending?.alvo}`,
+  );
 }
 
 for (const p of P) await admin(`/admin/users/${p.id}`, { method: "DELETE" });

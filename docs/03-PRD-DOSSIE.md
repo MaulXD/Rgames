@@ -479,9 +479,20 @@ Só entra em "Regras da casa → Modo Avançado".
 > `dossie_deduz` no servidor leem os mesmos avisos e o mesmo `interroga_nada` — sem isso, quem
 > joga com o bloco assistido ficaria abaixo da máquina, riscando à mão o que ela risca sozinha.
 >
-> **Falta:** os nomes por caso (hoje as seis cartas têm o mesmo nome em todos os temas), e a
-> máquina ainda não INVESTIGA — ela responde a interrogatório, mas não compra nem joga cartas.
-> Numa mesa mista isso é uma vantagem para quem é gente.
+> **A máquina joga o modo inteiro** — migração 0107. Ela investiga com a primeira ação num lugar
+> que já riscou e onde não há mais ninguém, e anda com a segunda; e joga o que compra, por regras
+> que dá para conferir de olho, sem fórmula com peso. O álibi é o único difícil: ela o gasta quando
+> tem UMA carta para mostrar e nunca mostrou aquela carta àquela pessoa — que é exatamente quando
+> refutar entrega informação nova.
+>
+> **Cada caso dá o seu nome às seis cartas** — `copy["pista.<id>"]`, migração 0108 para o Solar e
+> `seed-dossie.mjs` para os outros três. A mesma carta é *Chave do caseiro* no Solar, *Passe de
+> camarim* na Aurora e *Acesso de manutenção* no Meridiano-9. O validador cobra as seis ou nenhuma.
+>
+> **E a regra da casa tem onde ser ligada.** Isto quase não aconteceu: `set_room_settings` aceitava
+> `avancado` desde 0104 e o lobby não tinha o botão — o modo inteiro era inalcançável pelo
+> navegador, sem nada quebrar. Agora há uma auditoria em `scripts/smoke.mjs` que lê as chaves que o
+> servidor aceita e cobra que cada uma apareça no lobby.
 
 ### 6.9 Modo Assassino [v1.1]
 

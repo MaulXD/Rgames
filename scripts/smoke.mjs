@@ -508,6 +508,71 @@ for (const arq of suitesComSql) {
   }
 }
 
+/* ── toda regra da casa tem onde ser ligada ──────────────────────────
+
+   O MESMO DEFEITO DA CARTA DECORATIVA, um andar acima.
+
+   `set_room_settings` aceitou `avancado` na migração 0104 e o lobby não tinha
+   como marcá-lo: o Modo Avançado inteiro — vinte e quatro cartas, seis efeitos,
+   quatro migrações — era inalcançável pelo navegador. Nada quebrava. Nenhum
+   teste reprovava. A partida simplesmente nunca acontecia.
+
+   Uma regra que o servidor aceita e a tela não oferece é código morto com
+   aparência de funcionalidade, e a única diferença entre isso e um `twist`
+   decorativo é de que lado da rede o silêncio mora.
+
+   A auditoria lê a chave DO CÓDIGO da função, e não de uma lista escrita aqui:
+   uma lista aqui seria um segundo lugar dizendo o que existe, e um dia um dos
+   dois ficaria para trás. */
+
+{
+  const def = (
+    await db.query(
+      `select pg_get_functiondef(p.oid) d from pg_proc p
+         join pg_namespace n on n.oid = p.pronamespace
+        where n.nspname = 'public' and p.proname = 'set_room_settings'`,
+    )
+  ).rows[0].d.replace(/\r\n/g, "\n");
+
+  /* O `case p_game` aceita as chaves em arrays que podem quebrar em várias
+     linhas — a Metrópole tem sete. Fatiar do `when` até o `]` pega o array
+     inteiro sem depender de onde o autor quebrou a linha. */
+  const chaves = new Set();
+  for (const m of def.matchAll(/when '(\w+)'\s+then array\[([^\]]*)\]/g)) {
+    for (const k of m[2].matchAll(/'([^']+)'/g)) chaves.add(k[1]);
+  }
+
+  /* A PROVA TEM DE SER MAIS FORTE QUE "a palavra aparece no arquivo".
+
+     `modo` é substring de meia dúzia de coisas, e um teste que passa por
+     coincidência é pior que teste nenhum: ele dá a sensação de estar guardado.
+     O que vale como prova é a chave escrita como CHAVE — `settings?.modo`,
+     `salvar({ modo:` ou `id: "modo"` numa tabela de regras. As três formas
+     existem hoje no lobby, e as três dizem a mesma coisa: alguém pode mexer
+     nisso pela tela. */
+  const tela = readFileSync("components/house-rules.tsx", "utf8");
+  const oferecida = (k) =>
+    tela.includes(`settings?.${k}`) || tela.includes(`${k}:`) || tela.includes(`"${k}"`);
+  const semTela = [...chaves].filter((k) => !oferecida(k)).sort();
+  ok(
+    chaves.size > 0,
+    `set_room_settings aceita ${chaves.size} chaves de regra da casa`,
+  );
+  ok(
+    semTela.length === 0,
+    semTela.length === 0
+      ? "e todas têm onde ser ligadas no lobby — nenhuma regra inalcançável"
+      : `o servidor aceita mas o lobby não oferece: ${semTela.join(", ")}`,
+  );
+
+  /* E O TESTE TEM DENTES. Uma chave inventada tem de reprovar — senão a
+     auditoria acima passaria por qualquer motivo, inclusive o errado. */
+  ok(
+    !oferecida("regraQueNaoExiste"),
+    "e a auditoria tem dentes: uma chave que o lobby não oferece é reprovada",
+  );
+}
+
 /* ── e o cliente não ESCREVE em tabela nenhuma ───────────────────────
 
    A arquitetura inteira deste projeto é "o servidor é a fonte da verdade": todo

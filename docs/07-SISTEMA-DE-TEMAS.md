@@ -87,6 +87,17 @@ Regras do contrato:
   O validador garante que continue balanceado (§5).
 - **`copy` cobre toda a interface do jogo.** O log do Dossiê é narrado; no Solar ele diz
   *"Otávio acusou Marisa"*, na Aurora diz *"Ivan botou a culpa na Bete"*.
+- **As Cartas de Pista entram em `copy` com a chave `pista.<id>`.** O efeito é do motor, o nome é
+  do pacote: a mesma carta é *Chave do caseiro* no Solar, *Passe de camarim* na Aurora e *Acesso de
+  manutenção* no Meridiano-9. Não há campo novo — é exatamente o que `accuse` e `ghost` já faziam,
+  e uma casa só para as palavras que o caso troca.
+
+  > **Ou as seis, ou nenhuma.** O validador reprova um pacote que reescreva metade: uma mão em que
+  > duas cartas falam a língua do caso e quatro falam a do motor é pior que as seis genéricas.
+  >
+  > E ele reprova uma chave que o motor não conheça — `pista.chavemestra`, sem o hífen, não quebra
+  > nada: simplesmente nunca é lida, e a carta aparece na mesa com o nome genérico enquanto o pacote
+  > jura ter reescrito. É o mesmo veneno do `twist` decorativo, e o mesmo remédio.
 
 ---
 

@@ -60,6 +60,28 @@ const COPY_PADRAO = {
   ghost: "Fantasma",
 };
 
+/* AS SEIS CARTAS DE PISTA, com o nome que cada caso lhes dá.
+
+   O efeito é do motor; o nome é do pacote. Uma "chave-mestra" numa estação
+   orbital é um acesso de manutenção, e numa boate é um passe de camarim — o
+   servidor não sabe nem precisa saber disso.
+
+   Mora em `copy` e não num campo novo porque é exatamente a mesma coisa que
+   `accuse` e `ghost` já fazem: uma casa só para as palavras que o caso troca.
+   A chave é `pista.<id>`, e `PISTAS_DO_MOTOR` abaixo é o guarda — um pacote que
+   escreva `pista.chavemestra` seria decoração silenciosa, e o `seed` reprova. */
+const PISTAS_DO_MOTOR = [
+  "chave-mestra",
+  "tempo-curto",
+  "alibi",
+  "impressao",
+  "recado",
+  "interrogatorio",
+];
+
+const nomesDePista = (m) =>
+  Object.fromEntries(Object.entries(m).map(([k, v]) => [`pista.${k}`, v]));
+
 /* ══════════════════════════════════════════════════════════════════════════
    BOATE AURORA — 1987
 
@@ -76,7 +98,19 @@ const AURORA = {
   era: "1987",
   tagline: "O disco ainda estava girando quando alguém desligou a mesa.",
   clima: "neon",
-  copy: { ...COPY_PADRAO, ghost: "Encostado", accuse: "Fechar a noite" },
+  copy: {
+    ...COPY_PADRAO,
+    ghost: "Encostado",
+    accuse: "Fechar a noite",
+    ...nomesDePista({
+      "chave-mestra": "Passe de camarim",
+      "tempo-curto": "Última música",
+      alibi: "Eu tava no camarim",
+      impressao: "Copo com digital",
+      recado: "Bilhete no espelho",
+      interrogatorio: "Conversinha no banheiro",
+    }),
+  },
   victim: { name: "Nelson Braga", role: "Dono da casa, 51 anos" },
   suspects: [
     { id: "marcao", name: "DJ Marcão", role: "Residente da casa há seis anos", color: "vinho", crest: "fone" },
@@ -164,7 +198,19 @@ const RAS_ZAMIR = {
   era: "1928",
   tagline: "Abriram a câmara à meia-noite. Ao amanhecer, quem pagou pela escavação estava morto.",
   clima: "areia",
-  copy: { ...COPY_PADRAO, ghost: "Insolado", accuse: "Fechar o relatório" },
+  copy: {
+    ...COPY_PADRAO,
+    ghost: "Insolado",
+    accuse: "Fechar o relatório",
+    ...nomesDePista({
+      "chave-mestra": "Atalho pelas galerias",
+      "tempo-curto": "O sol está caindo",
+      alibi: "Eu estava catalogando",
+      impressao: "Digital no lacre",
+      recado: "Bilhete no caderno de campo",
+      interrogatorio: "Conversa sob o toldo",
+    }),
+  },
   victim: { name: "Sir Alistair Crewe", role: "Financiador da expedição, 58 anos" },
   suspects: [
     { id: "helena", name: "Prof.ª Helena Vasari", role: "Epigrafista — decifrou a inscrição", color: "prussia", crest: "estilete" },
@@ -261,7 +307,19 @@ const MERIDIANO = {
   era: "2189",
   tagline: "A comandante morreu na câmara de vácuo, e o registro biométrico dela foi apagado.",
   clima: "orbita",
-  copy: { ...COPY_PADRAO, ghost: "Desligado", accuse: "Fechar o ciclo" },
+  copy: {
+    ...COPY_PADRAO,
+    ghost: "Desligado",
+    accuse: "Fechar o ciclo",
+    ...nomesDePista({
+      "chave-mestra": "Acesso de manutenção",
+      "tempo-curto": "Ciclo encurtado",
+      alibi: "Meu turno está registrado",
+      impressao: "Cotejo biométrico",
+      recado: "Mensagem sem remetente",
+      interrogatorio: "Chamada no canal privado",
+    }),
+  },
   victim: { name: "Comandante Ilse Navarro", role: "Comando da estação, 47 anos" },
   suspects: [
     { id: "kell", name: "Auditor Kell Ramos", role: "Enviado da corporação — chegou há nove dias", color: "ocre", crest: "selo" },
@@ -592,6 +650,37 @@ function valida(t) {
     ok(
       !!t.twist.name && typeof t.twist.rule === "string" && t.twist.rule.length > 20,
       "e ela tem nome e uma regra escrita numa frase — é o que a mesa lê antes de começar",
+    );
+  }
+
+  /* OS NOMES DAS CARTAS DE PISTA.
+
+     Mesmo remédio da reviravolta, mesmo veneno: uma chave `pista.chavemestra`
+     — sem o hífen, ou com o id de uma sétima carta que ninguém escreveu — não
+     quebra nada. Ela simplesmente nunca é lida, e a carta aparece na mesa com o
+     nome genérico enquanto o pacote jura ter reescrito.
+
+     E ou o caso reescreve AS SEIS ou não reescreve nenhuma: metade reescrita é
+     uma mão em que duas cartas falam a língua do caso e quatro falam a do
+     motor, o que é pior que as seis genéricas. */
+  const dePista = Object.keys(t.copy ?? {}).filter((k) => k.startsWith("pista."));
+  if (dePista.length) {
+    const forasteiras = dePista.filter((k) => !PISTAS_DO_MOTOR.includes(k.slice(6)));
+    ok(
+      forasteiras.length === 0,
+      forasteiras.length === 0
+        ? `as ${dePista.length} cartas de pista têm nome deste caso`
+        : `nome de pista que o motor não conhece: ${forasteiras.join(", ")}`,
+    );
+    ok(
+      dePista.length === PISTAS_DO_MOTOR.length,
+      dePista.length === PISTAS_DO_MOTOR.length
+        ? "e são as seis — meia mão reescrita fala duas línguas"
+        : `só ${dePista.length} das ${PISTAS_DO_MOTOR.length} foram reescritas`,
+    );
+    ok(
+      dePista.every((k) => typeof t.copy[k] === "string" && t.copy[k].length >= 3),
+      "e todo nome é uma frase de verdade",
     );
   }
 }

@@ -152,3 +152,20 @@ export function avisoEnsina(caso: Caso, a: Aviso): string[] {
     ? caso.suspects.map((s) => s.id).filter((id) => id !== a.a && id !== a.b)
     : [a.a, a.b];
 }
+
+/**
+ * O nome desta carta NESTE caso.
+ *
+ * O efeito é do motor e o nome é do pacote: na Aurora o interrogatório é uma
+ * "conversinha no banheiro"; no Meridiano-9 a chave-mestra é um "acesso de
+ * manutenção". É a mesma divisão que já vale para `accuse` e `ghost` — por isso
+ * o nome mora em `copy`, e não num campo novo. Uma casa só para as palavras que
+ * o caso troca.
+ *
+ * A chave é `pista.<id>`, e o padrão é o nome genérico: um caso que não
+ * reescreve nada continua jogável, e um que reescreve três das seis fica com
+ * três reescritas — não com três buracos.
+ */
+export function nomeDaPista(caso: Caso, id: string): string {
+  return caso.copy?.[`pista.${id}`] ?? pistaDe(id)?.nome ?? id;
+}

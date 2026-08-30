@@ -13,7 +13,7 @@
 import { useState } from "react";
 import { Escolher } from "@/components/dossie/escolher";
 import { nomeDaCarta, type Caso } from "@/lib/dossie";
-import { pistaDe, TIPOS, type Aviso, type IdPista } from "@/lib/dossie-pistas";
+import { nomeDaPista, pistaDe, TIPOS, type Aviso, type IdPista } from "@/lib/dossie-pistas";
 import * as sfx from "@/lib/sfx";
 
 type Jogador = { seat: number; nome: string };
@@ -109,7 +109,7 @@ export function Pistas({
               return (
                 <li key={`${id}-${i}`} className="dossie-pista">
                   <div>
-                    <p className="dossie-pista-nome">{p.nome}</p>
+                    <p className="dossie-pista-nome">{nomeDaPista(caso, p.id)}</p>
                     <p className="text-sm dim">{p.frase}</p>
                     {motivo && <p className="text-sm dim dossie-pista-motivo">{motivo}</p>}
                   </div>
@@ -147,7 +147,7 @@ export function Pistas({
 
       {carta && carta.pede === "lugar" && (
         <Escolher
-          titulo={carta.nome}
+          titulo={nomeDaPista(caso, carta.id)}
           nota={carta.frase}
           grupos={[{ rotulo: "Para onde", itens: lugares, sel: um, set: setUm }]}
           pronto={!!um}
@@ -162,7 +162,7 @@ export function Pistas({
 
       {carta && carta.pede === "dois-suspeitos" && (
         <Escolher
-          titulo={carta.nome}
+          titulo={nomeDaPista(caso, carta.id)}
           nota="Se o culpado for um dos dois, você risca os outros quatro. Se não for, risca estes dois. A mesa vê quais você nomeou — não a resposta."
           grupos={[
             {
@@ -190,7 +190,7 @@ export function Pistas({
 
       {carta && carta.pede === "jogador" && (
         <Escolher
-          titulo={carta.nome}
+          titulo={nomeDaPista(caso, carta.id)}
           nota="A mesa vê que um recado saiu, e não vê para quem. Você pode mandar para si mesmo."
           grupos={[
             {
@@ -215,7 +215,7 @@ export function Pistas({
 
       {carta && carta.pede === "jogador-e-tipo" && (
         <Escolher
-          titulo={carta.nome}
+          titulo={nomeDaPista(caso, carta.id)}
           nota="A mesa inteira vê a quem você perguntou e sobre o quê. Só você vê a carta."
           grupos={[
             {

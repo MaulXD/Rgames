@@ -6,7 +6,14 @@ import { Mapa, type Peao } from "@/components/dossie/mapa";
 import { Bloco } from "@/components/dossie/bloco";
 import { Escolher } from "@/components/dossie/escolher";
 import { Pistas } from "@/components/dossie/pistas";
-import { TIPOS, tipoDaCarta, type Aviso, type IdPista, type IdTipo } from "@/lib/dossie-pistas";
+import {
+  nomeDaPista,
+  TIPOS,
+  tipoDaCarta,
+  type Aviso,
+  type IdPista,
+  type IdTipo,
+} from "@/lib/dossie-pistas";
 import type { Pad } from "@/lib/dossie-bloco";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { useSession } from "@/components/session";
@@ -904,6 +911,10 @@ function narraPista(
       return `${quem(l.seat)} jogou uma carta de pista.`;
   }
 }
+
+/* Nas frases acima o nome genérico basta, porque cada uma já descreve o efeito
+   por extenso. Onde o nome do caso importa é na FICHA, que a pessoa lê antes de
+   decidir — e é lá que `nomeDaPista` entra. */
 
 function traduz(msg: string): string {
   if (/NOT_YOUR_TURN/.test(msg)) return "Não é a sua vez.";

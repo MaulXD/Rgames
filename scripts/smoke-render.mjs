@@ -196,6 +196,10 @@ for (const caso of casos) {
     onInvestigar: nada,
     onUsar: nada,
   }, [
+    /* O NOME DESTE CASO, e não o genérico: é o que prova que `copy` chegou até
+       a ficha. "Álibi" apareceria de qualquer jeito, inclusive com o pacote
+       ignorado — o marcador tem de ser a palavra que só este caso usa. */
+    caso.copy["pista.alibi"],
     "Deixe de refutar uma vez",
     /* E os dois avisos falam a MESMA língua: os dois dizem o que sai do
        envelope. O "sim" é escrito ao contrário de propósito — é assim que ele
@@ -580,14 +584,21 @@ const AS_TELAS = [
     propNome: "seats",
     extra: { onLeaveMatch: nada, onRematch: nada },
     /* A rodada do Letreiro dura três minutos e acaba sozinha, então quase nunca
-       há uma "rodando" no banco. A que existe está em REVELAÇÃO, e ela serve
-       melhor: é a fase com mais coisa na tela. */
+       há uma "rodando" no banco — e a busca aceita as duas fases para achar
+       ALGUMA coisa para montar. */
     ondeMais: "m.public_state ->> 'phase' in ('round', 'reveal')",
-    /* Na revelação o LetreiroGame delega para o Reveal, cuja raiz é a classe
-       .reveal e não .letreiro — pedir a classe do contêiner reprovava uma
-       tela que estava certa. "Conferência" é o título do primeiro ato, e prova
-       que a delegação aconteceu. */
-    contem: "Conferência",
+    /* E POR ISSO O MARCADOR É POR FASE, e não um texto fixo.
+
+       Ele era "Conferência", que é o título do primeiro ato da revelação — e
+       reprovava no dia em que a partida encontrada estava em `round`, porque
+       aí a tela é outra e está certa. Um teste cujo resultado depende de que
+       linha o banco tinha naquela hora não mede o código: mede a sorte, e
+       ensina a ignorar a saída vermelha.
+
+       Na revelação o LetreiroGame delega para o Reveal, cuja raiz é `.reveal`
+       e não `.letreiro`; na rodada, quem está na tela é a lista das palavras
+       de quem joga. Cada fase tem a sua prova. */
+    contem: (st) => (st.phase === "reveal" ? "Conferência" : "Suas palavras"),
   },
 ];
 
@@ -607,7 +618,7 @@ for (const t of AS_TELAS) {
         ...t.extra,
       }),
     },
-    t.contem,
+    typeof t.contem === "function" ? t.contem(dados.match.public_state) : t.contem,
   );
 }
 

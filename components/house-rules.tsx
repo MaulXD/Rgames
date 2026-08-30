@@ -290,6 +290,11 @@ function RegrasDossie({
      antes desta regra existir. O servidor faz o mesmo `coalesce`; se um lado
      mudar, a tela passa a prometer o que a partida não entrega. */
   const reviravolta = (room.settings?.reviravolta as boolean | undefined) ?? true;
+  /* DESLIGADO por padrão, ao contrário da reviravolta — e o servidor faz o
+     mesmo `coalesce`. A reviravolta é a mecânica que o CASO entrega; as Cartas
+     de Pista são uma sétima coisa para aprender numa mesa que já tem seis
+     suspeitos, nove lugares, um caderno de dedução e uma regra própria. */
+  const avancado = (room.settings?.avancado as boolean | undefined) ?? false;
 
   useEffect(() => {
     let vivo = true;
@@ -332,7 +337,12 @@ function RegrasDossie({
   }
 
   const escolhido = casos.find((c) => c.id === tema);
-  const resumo = escolhido ? `${escolhido.name} · ${escolhido.era}` : "Caso surpresa";
+  /* O resumo fechado precisa dizer o que MUDA a partida, e não só qual caso é.
+     Alguém que entra na sala e lê "Boate Aurora · 1987" não tem como saber que
+     vai jogar com um baralho a mais. */
+  const resumo =
+    (escolhido ? `${escolhido.name} · ${escolhido.era}` : "Caso surpresa") +
+    (avancado ? " · com Cartas de Pista" : "");
 
   return (
     <div className="panel mt-4 p-5 sm:p-6">
@@ -413,6 +423,34 @@ function RegrasDossie({
               </div>
             </fieldset>
           )}
+
+          {/* AS CARTAS DE PISTA.
+
+              Desligadas por padrão, e a nota diz por quê sem pedir desculpa:
+              não é um modo pior, é um modo a mais para aprender. A mesa que
+              conhece o jogo liga; a que está na primeira partida não tropeça
+              nele.
+
+              Fica FORA do bloco da reviravolta de propósito — vale em todos os
+              casos, inclusive no Solar das Acácias, que joga limpo. */}
+          <fieldset disabled={!isHost || busy} style={{ border: 0, padding: 0, margin: 0 }}>
+            <legend className="eyebrow mb-3">Cartas de pista</legend>
+            <div className="flex flex-col gap-2">
+              <Opcao
+                ativo={!avancado}
+                nome="Sem o baralho"
+                nota="O Dossiê como ele é: andar, acusar, refutar e deduzir. É o jogo que se aprende numa partida."
+                onClick={() => void salvar({ avancado: false })}
+              />
+              <Opcao
+                ativo={avancado}
+                nome="Modo Avançado"
+                nota="Investigar um lugar vazio compra uma carta: chave-mestra, álibi, interrogatório, impressão digital, recado anônimo e tempo é curto. Cada uma custa exposição — a mesa vê o que você jogou."
+                previa={<span className="regra-tempo">24 cartas</span>}
+                onClick={() => void salvar({ avancado: true })}
+              />
+            </div>
+          </fieldset>
 
           {casos.length === 0 && (
             <p className="text-sm dim">Carregando os casos publicados…</p>
